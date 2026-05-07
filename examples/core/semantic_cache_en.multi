@@ -1,0 +1,94 @@
+# Core 1.0 Inference Caching Pattern — English
+# Demonstrates: using memory to cache inference results,
+#               cost tracking for cache effectiveness,
+#               hit/miss patterns, avoiding redundant inferences
+
+fn analyze_with_cache(query: str) -> str uses ai:
+    # Check persistent cache first
+    let result_cache = memory("analysis_results", scope="persistent")
+
+    if query in result_cache:
+        # Cache hit! Return immediately without inference
+        print("Cache hit for query:", query)
+        return result_cache[query]
+
+    # Cache miss: perform inference
+    print("Cache miss for query:", query)
+    let result = prompt @llama3: "Analyze this query:\n" + query
+
+    # Store result for future use
+    result_cache[query] = result
+    return result
+
+fn analyze_with_cost_tracking(queries: list) -> str uses ai:
+    let cache = memory("cached_analyses", scope="session")
+    let total_cost_info = cost(prompt @llama3: "Placeholder")
+    let cost_saved = 0
+
+    var results = []
+
+    for query in queries:
+        if query in cache:
+            # Cache hit
+            results.append(cache[query])
+            # Estimate: ~50 tokens saved per cache hit (rough average)
+            cost_saved = cost_saved + 50
+        else:
+            # Cache miss: do the work
+            let result_with_cost = cost(prompt @llama3: query)
+            let result, spend = result_with_cost
+
+            results.append(result)
+            cache[query] = result
+
+    print("Cost analysis:")
+    print("Cached results:", cost_saved, "tokens saved")
+    print("Total inferences:", len(queries))
+
+    return "Batch processing complete"
+
+fn batch_inference_with_dedup(data_batch: list) -> str uses ai:
+    # Process a batch, caching intermediate results
+    let cache = memory("batch_cache", scope="session")
+    var unique_queries = []
+    var processed = []
+
+    # Deduplicate: identify unique items
+    for item in data_batch:
+        if item not in unique_queries:
+            unique_queries.append(item)
+
+    # Process unique items
+    for query in unique_queries:
+        if query in cache:
+            processed.append(cache[query])
+        else:
+            let analysis = prompt @llama3: "Process: " + query
+            cache[query] = analysis
+            processed.append(analysis)
+
+    print("Batch size:", len(data_batch))
+    print("Unique items:", len(unique_queries))
+    print("Cache efficiency:", 100.0 * (len(data_batch) - len(unique_queries)) / len(data_batch), "%")
+
+    return "Processed " + str(len(processed)) + " items"
+
+fn main() uses ai:
+    # Demonstrate single-query caching
+    let query1 = "What is machine learning?"
+    let result1 = analyze_with_cache(query1)
+    print("Result 1:", result1)
+
+    # Same query again: should hit cache
+    let result2 = analyze_with_cache(query1)
+    print("Result 2 (from cache):", result2)
+
+    # Different query: cache miss
+    let query3 = "Explain neural networks"
+    let result3 = analyze_with_cache(query3)
+    print("Result 3:", result3)
+
+    # Batch processing with cost tracking
+    let batch = ["Q1", "Q2", "Q1", "Q3", "Q2"]
+    let batch_result = analyze_with_cost_tracking(batch)
+    print("Batch result:", batch_result)

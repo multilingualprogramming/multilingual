@@ -1,0 +1,113 @@
+# Core 1.0 Calcul en Bordure Multimodal — Français
+# Démontre: analyse d'images au bord avec @local,
+#           requêtes multimodales avec des modèles de vision,
+#           pipelines de traitement de documents,
+#           mise en cache de l'inférence pour résultats visuels
+
+# ── Analyse d'images au bord ─────────────────────────────────────────────────
+@local
+def analyser_image(photo) -> str utilise ai:
+    soit analyse = requête @llama3: "Analyser cette image:\n" + photo
+    retour analyse
+
+@local
+def classifier_scene(photo) -> str utilise ai:
+    soit scene = requête @mistral: "Type de scène:\n" + photo
+    retour scene
+
+@local
+def detecter_objets(photo) -> str utilise ai:
+    soit objets = requête @llama3: "Objets visibles:\n" + photo
+    retour objets
+
+# ── Traitement de documents ──────────────────────────────────────────────────
+@local
+def extraire_document(doc) -> str utilise ai:
+    soit texte = generer @phi3: "Extraire texte:\n" + doc
+    retour texte
+
+@local
+def extraire_articles_facture(facture_doc) -> str utilise ai:
+    soit articles = generer @mistral: "Articles:\n" + facture_doc
+    retour articles
+
+# ── Analyse multimodale parallèle ────────────────────────────────────────────
+def analyse_multi(photo) -> str utilise ai:
+    soit analyse, scene, objets = parallele [
+        requête @llama3: "Décrire:\n" + photo,
+        requête @mistral: "Type scène:\n" + photo,
+        requête @llama3: "Objets:\n" + photo
+    ]
+    soit synthese = requête @llama3:
+        "Synthétiser:\n"
+        + "Description: " + analyse + "\n"
+        + "Scène: " + scene + "\n"
+        + "Objets: " + objets
+    retour synthese
+
+# ── Mise en cache de résultats multimodaux ───────────────────────────────────
+def analyse_en_cache(photo) -> str utilise ai:
+    soit cache = memoire("cache_analyse_images", scope="session")
+    soit cle_photo = cout(photo)
+    si cle_photo dans cache:
+        retour cache[cle_photo]
+
+    soit resultat = requête @llama3: "Analyser:\n" + photo
+    cache[cle_photo] = resultat
+    retour resultat
+
+# ── Inférence multimodale consciente des coûts ───────────────────────────────
+def analyse_avec_cout(photo) -> str utilise ai:
+    soit avec_cout = cout(requête @llama3: "Analyser:\n" + photo)
+    soit resultat, depense = avec_cout
+    imprimer("Coût (tokens):", depense)
+    retour resultat
+
+# ── Essaim multimodal: agents spécialisés ─────────────────────────────────────
+@local
+@agent(model=@llama3)
+def analyste_image(photo) -> str utilise ai:
+    retour requête @llama3: "Analyser:\n" + photo
+
+@local
+@agent(model=@mistral)
+def classifieur_scene(photo) -> str utilise ai:
+    retour requête @mistral: "Type scène:\n" + photo
+
+@local
+@agent(model=@phi3)
+def extracteur_document(doc) -> str utilise ai:
+    retour generer @phi3: "Extraire:\n" + doc
+
+@essaim(agents=[analyste_image, classifieur_scene, extracteur_document])
+def equipe_analyse_media(entree_media) -> str utilise ai:
+    soit cache = memoire("resultats_equipe_media", scope="session")
+    soit cle_media = cout(entree_media)
+    si cle_media dans cache:
+        retour cache[cle_media]
+
+    soit analyse_image = deleguer(analyste_image, entree_media)
+    soit scene = deleguer(classifieur_scene, entree_media)
+    soit extraite = deleguer(extracteur_document, entree_media)
+
+    soit final = requête @llama3:
+        "Intégrer:\n"
+        + "Image: " + analyse_image + "\n"
+        + "Scène: " + scene + "\n"
+        + "Extraite: " + extraite
+
+    cache[cle_media] = final
+    retour final
+
+# ── Principal ────────────────────────────────────────────────────────────────
+def principal() utilise ai:
+    soit donnees_photo = "exemple_image.jpg"
+    soit analysee = analyser_image(donnees_photo)
+    imprimer("Analyse:", analysee)
+
+    soit donnees_doc = "document.pdf"
+    soit extraite = extraire_document(donnees_doc)
+    imprimer("Extraction:", extraite)
+
+    soit combinee = analyse_multi(donnees_photo)
+    imprimer("Analyse multimodale:", combinee)

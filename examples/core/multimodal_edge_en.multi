@@ -1,0 +1,113 @@
+# Core 1.0 Multimodal Edge Computing — English
+# Demonstrates: image analysis at the edge with @local placement,
+#               multimodal prompts with vision models,
+#               document processing pipelines,
+#               inference caching for visual results
+
+# ── Image analysis at the edge ────────────────────────────────────────────────
+@local
+fn analyze_image(photo) -> str uses ai:
+    let analysis = prompt @llama3: "Analyze this image and describe what you see:\n" + photo
+    return analysis
+
+@local
+fn classify_scene(photo) -> str uses ai:
+    let scene = generate @mistral: "What type of scene is this? Classify as: outdoor, indoor, nature, urban, other\n" + photo -> SceneType
+    return scene
+
+@local
+fn detect_objects(photo) -> str uses ai:
+    let objects = generate @llama3: "List all visible objects in this image:\n" + photo -> ObjectList
+    return objects
+
+# ── Document processing: OCR + extraction at the edge ────────────────────────
+@local
+fn extract_from_document(doc) -> str uses ai:
+    let text = generate @phi3: "Extract all text from this document:\n" + doc -> ExtractedText
+    return text
+
+@local
+fn extract_invoice_items(invoice_doc) -> str uses ai:
+    let items = generate @mistral: "Extract line items, quantities, and prices from this invoice:\n" + invoice_doc -> InvoiceItems
+    return items
+
+# ── Parallel multimodal analysis ─────────────────────────────────────────────
+fn multi_analysis(photo) -> str uses ai:
+    let analysis, scene, objects = par [
+        prompt @llama3: "Describe this image:\n" + photo,
+        generate @mistral: "Scene classification:\n" + photo -> SceneType,
+        generate @llama3: "Objects in image:\n" + photo -> ObjectList
+    ]
+    let summary = prompt @llama3:
+        "Synthesize these analyses:\n"
+        + "Description: " + analysis + "\n"
+        + "Scene: " + scene + "\n"
+        + "Objects: " + objects
+    return summary
+
+# ── Caching multimodal results for repeated queries ──────────────────────────
+fn cached_analysis(photo) -> str uses ai:
+    let cache = memory("image_analysis_cache", scope="session")
+    let photo_key = cost(photo)
+    if photo_key in cache:
+        return cache[photo_key]
+
+    let result = prompt @llama3: "Provide detailed analysis of this image:\n" + photo
+    cache[photo_key] = result
+    return result
+
+# ── Cost-aware multimodal inference ──────────────────────────────────────────
+fn cost_tracked_analysis(photo) -> str uses ai:
+    let with_cost = cost(prompt @llama3: "Analyze image:\n" + photo)
+    let result, expense = with_cost
+    print("Inference cost (tokens):", expense)
+    return result
+
+# ── Multi-modal swarm: specialized agents for different modalities ────────────
+@local
+@agent(model=@llama3)
+fn image_analyst(photo) -> str uses ai:
+    return prompt @llama3: "Detailed image analysis:\n" + photo
+
+@local
+@agent(model=@mistral)
+fn scene_classifier(photo) -> str uses ai:
+    return generate @mistral: "Scene type:\n" + photo -> SceneType
+
+@local
+@agent(model=@phi3)
+fn document_extractor(doc) -> str uses ai:
+    return generate @phi3: "Extract text:\n" + doc -> Text
+
+@swarm(agents=[image_analyst, scene_classifier, document_extractor])
+fn media_analysis_team(media_input) -> str uses ai:
+    let cache = memory("media_team_results", scope="session")
+    let media_key = cost(media_input)
+    if media_key in cache:
+        return cache[media_key]
+
+    let image_analysis = delegate(image_analyst, media_input)
+    let scene = delegate(scene_classifier, media_input)
+    let extracted = delegate(document_extractor, media_input)
+
+    let final = prompt @llama3:
+        "Integrate these results:\n"
+        + "Image: " + image_analysis + "\n"
+        + "Scene: " + scene + "\n"
+        + "Extracted: " + extracted
+
+    cache[media_key] = final
+    return final
+
+# ── Main: demonstrate multimodal edge patterns ──────────────────────────────
+fn main() uses ai:
+    let photo_data = "sample_image.jpg"
+    let analyzed = analyze_image(photo_data)
+    print("Image analysis:", analyzed)
+
+    let doc_data = "document.pdf"
+    let extracted = extract_from_document(doc_data)
+    print("Document extraction:", extracted)
+
+    let combined = multi_analysis(photo_data)
+    print("Multi-modal analysis:", combined)

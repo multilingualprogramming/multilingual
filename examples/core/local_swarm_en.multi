@@ -1,0 +1,88 @@
+# Core 1.0 Multi-Agent Local Swarm with Ollama — English
+# Demonstrates: @swarm with three specialized local agents,
+#               each using a different small Ollama model,
+#               delegation, shared memory, coordinated inference
+
+@local
+@agent(model=@llama3)
+fn content_analyzer(input: str) -> str uses ai:
+    let analysis = think @llama3:
+        Break down this content into key elements and their relationships.
+        Content: input
+    return analysis.conclusion
+
+@local
+@agent(model=@mistral)
+fn content_classifier(input: str) -> str uses ai:
+    let classification = classify @mistral: input -> ContentType
+    return classification
+
+@local
+@agent(model=@phi3)
+fn content_summarizer(text: str) -> str uses ai:
+    let summary = prompt @phi3: "Concise summary (max 50 words):\n" + text
+    return summary
+
+# The coordinator delegates work to specialized agents
+@swarm(agents=[content_analyzer, content_classifier, content_summarizer])
+fn editorial_review_team(submission: str) -> str uses ai:
+    # Check shared team memory
+    let team_memory = memory("editorial_cache", scope="shared")
+
+    if submission in team_memory:
+        return team_memory[submission]
+
+    # Delegate to specialists in parallel via par + delegate
+    let analysis, classification = par [
+        delegate(content_analyzer, submission),
+        delegate(content_classifier, submission)
+    ]
+
+    # Use classifier result to guide next analysis
+    let context = "Type: " + classification + "\n" + analysis
+    let summary = delegate(content_summarizer, context)
+
+    # Synthesize team findings
+    let editorial_verdict = prompt @llama3:
+        "Given this submission analysis:\n"
+        + "Type: " + classification + "\n"
+        + "Analysis: " + analysis + "\n"
+        + "Summary: " + summary + "\n"
+        + "Provide editorial recommendations."
+
+    team_memory[submission] = editorial_verdict
+    return editorial_verdict
+
+# Multi-swarm: coordinator of coordinators (hierarchical)
+@local
+@agent(model=@mistral)
+fn domain_expert(question: str) -> str uses ai:
+    return prompt @mistral: "As a domain expert, answer:\n" + question
+
+@swarm(agents=[editorial_review_team, domain_expert])
+fn publishing_director(manuscript: str) -> str uses ai:
+    let session_context = memory("publishing_session", scope="session")
+
+    # Get editorial team review
+    let editorial_review = delegate(editorial_review_team, manuscript)
+
+    # Get expert opinion
+    let expert_view = delegate(domain_expert, manuscript)
+
+    # Final decision by director
+    let decision = prompt @llama3:
+        "Publishing decision based on:\n"
+        + "Editorial: " + editorial_review + "\n"
+        + "Expert: " + expert_view
+
+    session_context["last_decision"] = decision
+    return decision
+
+fn main() uses ai:
+    let manuscript = "The future of decentralized learning systems and their impact on privacy-preserving AI."
+
+    let review = editorial_review_team(manuscript)
+    print("Editorial review:", review)
+
+    let decision = publishing_director(manuscript)
+    print("Publishing director decision:", decision)

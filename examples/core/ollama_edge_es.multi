@@ -1,0 +1,104 @@
+# Core 1.0 Computación en el Borde con Modelos Locales Ollama — Español
+# Demuestra: placement @local, referencias de modelos @llama3/@mistral/@phi3,
+#            inferencia paralela paralelo[...], caché memoria(...),
+#            observabilidad trazar/costo, @enjambre con agentes locales
+
+# ── Placement: @local significa que el cálculo se mantiene en el dispositivo ──
+@local
+def analizar_sensor(datos: str) -> str uses ai:
+    sea analisis = preguntar @llama3:
+        "Analizar estos datos del sensor y marcar anomalías:\n" + datos
+    retorno analisis
+
+@local
+def clasificar_estado(datos: str) -> str uses ai:
+    sea estado = clasificar @mistral: datos -> EstadoDispositivo
+    retorno estado
+
+@local
+def generar_alerta(problema: str) -> str uses ai:
+    sea alerta = generar @phi3: "Crear una alerta para: " + problema
+    retorno alerta
+
+# ── Inferencia paralela: múltiples modelos en paralelo ──────────────────────
+def analisis_multi_modelo(datos: str) -> str uses ai:
+    sea analisis, clasificacion, alerta = paralelo [
+        preguntar @llama3: "Analizar: " + datos,
+        clasificar @mistral: datos -> EstadoDispositivo,
+        generar @phi3: "Alerta para: " + datos
+    ]
+    sea resumen = preguntar @llama3:
+        "Sintetizar estos resultados:\n"
+        + "Análisis: " + analisis + "\n"
+        + "Estado: " + clasificacion + "\n"
+        + "Alerta: " + alerta
+    retorno resumen
+
+# ── Caché: memoria local para resultados de inferencia ───────────────────────
+def analisis_en_cache(consulta: str) -> str uses ai:
+    sea cache = memoria("cache_analisis", scope="session")
+
+    si consulta en cache:
+        retorno cache[consulta]
+
+    sea resultado = preguntar @llama3: "Analizar: " + consulta
+    cache[consulta] = resultado
+    retorno resultado
+
+# ── Seguimiento de costos con modelos locales ────────────────────────────────
+def inferencia_trazada(consulta: str) -> str uses ai:
+    sea resultado_con_costo = costo(preguntar @llama3: consulta)
+    sea resultado, gastos = resultado_con_costo
+
+    imprimir("Costo de inferencia local (tokens estimados):", gastos)
+    retorno resultado
+
+# ── Enjambre: múltiples agentes locales con memoria compartida ──────────────
+@local
+@agent(model=@llama3)
+def analizador_local(datos: str) -> str uses ai:
+    retorno preguntar @llama3: "Analizar estos datos:\n" + datos
+
+@local
+@agent(model=@mistral)
+def clasificador_local(datos: str) -> str uses ai:
+    retorno clasificar @mistral: datos -> Categoria
+
+@local
+@agent(model=@phi3)
+def resumidor_local(texto: str) -> str uses ai:
+    retorno preguntar @phi3: "Resumir en una oración:\n" + texto
+
+@enjambre(agents=[analizador_local, clasificador_local, resumidor_local])
+def equipo_analitica_borde(datos_entrada: str) -> str uses ai:
+    sea cache = memoria("resultados_equipo", scope="session")
+
+    si datos_entrada en cache:
+        retorno cache[datos_entrada]
+
+    sea analisis = delegar(analizador_local, datos_entrada)
+    sea clasificacion = delegar(clasificador_local, datos_entrada)
+    sea resumen = delegar(resumidor_local, analisis)
+
+    sea final = preguntar @llama3:
+        "Combinar estos resultados:\n"
+        + "Análisis: " + analisis + "\n"
+        + "Clase: " + clasificacion + "\n"
+        + "Resumen: " + resumen
+
+    cache[datos_entrada] = final
+    retorno final
+
+# ── Principal: demostrar patrones de computación en el borde ───────────────
+def principal() uses ai:
+    sea datos = "Temperatura: 72C, Humedad: 65%, Presión: 1013mb"
+    sea analisis = analizar_sensor(datos)
+    imprimir("Análisis del sensor:", analisis)
+
+    sea consulta = "Explicar los beneficios de la computación en el borde"
+    sea en_cache = analisis_en_cache(consulta)
+    imprimir("Resultado en caché:", en_cache)
+
+    sea entrada = "Sistema bajo carga pesada, verificar diagnósticos"
+    sea resultado_equipo = equipo_analitica_borde(entrada)
+    imprimir("Análisis del equipo:", resultado_equipo)

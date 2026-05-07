@@ -1,0 +1,64 @@
+# Core 1.0 Real-Time Inference Pipeline — English
+# Demonstrates: par[...] parallel inference fan-out,
+#               multiple models working on the same data,
+#               cost observation, stream integration
+
+fn document_analysis_pipeline(text: str) -> str uses ai:
+    # Parallel fan-out: run three inference operations at once
+    let summary, keywords, sentiment = par [
+        prompt @mistral: "Summarize in 2-3 sentences:\n" + text,
+        extract @llama3: "Extract key topics from:\n" + text -> list,
+        classify @phi3: text -> SentimentCategory
+    ]
+
+    # Synthesize the parallel results
+    let synthesis = prompt @llama3:
+        "Given these analyses of the same document:\n"
+        + "Summary: " + summary + "\n"
+        + "Topics: " + keywords + "\n"
+        + "Sentiment: " + sentiment + "\n"
+        + "Provide an integrated analysis."
+    return synthesis
+
+fn streaming_analysis(document_chunk: str) -> str uses ai:
+    # Stream tokens while also extracting structure
+    let token_stream = stream @llama3:
+        "Analyze and explain this content:\n" + document_chunk
+
+    # For demonstration: return the streamed content
+    # In real usage, this would update a reactive view
+    return token_stream
+
+fn cost_aware_analysis(text: str, budget_tokens: int) -> str uses ai:
+    # Run analysis with cost tracking
+    let result_with_cost = cost(
+        prompt @mistral: "Analyze (be concise):\n" + text
+    )
+    let result, cost_info = result_with_cost
+
+    # Could check cost_info against budget
+    print("Tokens used:", cost_info.total_tokens)
+    print("Model:", cost_info.model)
+
+    return result
+
+fn pipeline_with_fallback(document: str) -> str uses ai:
+    # Try primary model, but can be extended with fallback logic
+    # This demonstrates cascading through multiple local models
+    let fast_summary = prompt @phi3: "Summarize: " + document
+    let detailed = prompt @llama3: "Expand on this: " + fast_summary
+    let polished = prompt @mistral: "Refine and improve: " + detailed
+
+    return polished
+
+fn main() uses ai:
+    let doc = "Artificial intelligence is transforming industries by enabling machines to learn from data and make intelligent decisions without explicit programming."
+
+    let integrated = document_analysis_pipeline(doc)
+    print("Integrated analysis:", integrated)
+
+    let aware = cost_aware_analysis(doc, 100)
+    print("Cost-aware result:", aware)
+
+    let cascaded = pipeline_with_fallback(doc)
+    print("Cascaded result:", cascaded)

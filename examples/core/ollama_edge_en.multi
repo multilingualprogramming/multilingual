@@ -1,0 +1,104 @@
+# Core 1.0 Edge Computing with Local Ollama Models — English
+# Demonstrates: @local placement, @llama3/@mistral/@phi3 model refs,
+#               par[...] parallel inference, memory(...) caching,
+#               trace/cost observability, @swarm with local agents
+
+# ── Placement: @local signals compute stays on-device ────────────────────────
+@local
+fn analyze_sensor_reading(reading: str) -> str uses ai:
+    let analysis = prompt @llama3:
+        "Analyze this sensor reading and flag any anomalies:\n" + reading
+    return analysis
+
+@local
+fn classify_device_status(data: str) -> str uses ai:
+    let status = classify @mistral: data -> DeviceStatus
+    return status
+
+@local
+fn generate_alert(issue: str) -> str uses ai:
+    let alert = generate @phi3: "Create an alert for: " + issue
+    return alert
+
+# ── Parallel inference: multiple models in parallel ──────────────────────────
+fn multi_model_analysis(sensor_data: str) -> str uses ai:
+    let analysis, classification, alert = par [
+        prompt @llama3: "Analyze: " + sensor_data,
+        classify @mistral: sensor_data -> DeviceStatus,
+        generate @phi3: "Alert for: " + sensor_data
+    ]
+    let summary = prompt @llama3:
+        "Synthesise these results:\n"
+        + "Analysis: " + analysis + "\n"
+        + "Status: " + classification + "\n"
+        + "Alert: " + alert
+    return summary
+
+# ── Caching: local memory for inference results ──────────────────────────────
+fn cached_analysis(query: str) -> str uses ai:
+    let cache = memory("analysis_cache", scope="session")
+
+    if query in cache:
+        return cache[query]
+
+    let result = prompt @llama3: "Analyze: " + query
+    cache[query] = result
+    return result
+
+# ── Cost tracking with local models ──────────────────────────────────────────
+fn traced_inference(query: str) -> str uses ai:
+    let result_with_cost = cost(prompt @llama3: query)
+    let result, spend = result_with_cost
+
+    print("Local inference cost (estimated tokens):", spend)
+    return result
+
+# ── Swarm: multiple local agents with shared memory ───────────────────────────
+@local
+@agent(model=@llama3)
+fn local_analyzer(data: str) -> str uses ai:
+    return prompt @llama3: "Analyze this data:\n" + data
+
+@local
+@agent(model=@mistral)
+fn local_classifier(data: str) -> str uses ai:
+    return classify @mistral: data -> Category
+
+@local
+@agent(model=@phi3)
+fn local_summarizer(text: str) -> str uses ai:
+    return prompt @phi3: "Summarize in one sentence:\n" + text
+
+@swarm(agents=[local_analyzer, local_classifier, local_summarizer])
+fn edge_analytics_team(input_data: str) -> str uses ai:
+    let cache = memory("team_results", scope="session")
+
+    if input_data in cache:
+        return cache[input_data]
+
+    let analysis = delegate(local_analyzer, input_data)
+    let classification = delegate(local_classifier, input_data)
+    let summary = delegate(local_summarizer, analysis)
+
+    let final = prompt @llama3:
+        "Combine these results:\n"
+        + "Analysis: " + analysis + "\n"
+        + "Class: " + classification + "\n"
+        + "Summary: " + summary
+
+    cache[input_data] = final
+    return final
+
+# ── Main: demonstrate edge computing patterns ────────────────────────────────
+fn main() uses ai:
+    let reading = "Temperature: 72C, Humidity: 65%, Pressure: 1013mb"
+    let analysis = analyze_sensor_reading(reading)
+    print("Sensor analysis:", analysis)
+
+    let query = "Explain edge computing benefits"
+    let cached = cached_analysis(query)
+    print("Cached result:", cached)
+
+    let input = "System under heavy load, check diagnostics"
+    let team_result = edge_analytics_team(input)
+    print("Team analysis:", team_result)

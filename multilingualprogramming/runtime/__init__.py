@@ -14,6 +14,13 @@ AI execution
     OllamaProvider              — local Ollama backend
     OpenAIProvider              — OpenAI Chat Completions backend
 
+Inference optimization
+    InferenceCache              — TTL-based semantic cache for inference
+    ml_cached_prompt            — drop-in cached version of prompt()
+    ModelRegistry, ModelSpec    — model versioning, registration, routing
+    ml_model                    — runtime helper for model resolution
+    PromptTemplate, PromptOptimizer — multilingual prompt templates
+
 Reactive / UI
     ReactiveEngine, Signal      — observable state and reactive bindings
     CanvasNode, stream_to_view  — UI canvas and stream binding helpers
@@ -48,7 +55,18 @@ from multilingualprogramming.runtime.ai_types import (
     StreamChunk,
 )
 from multilingualprogramming.runtime.channel import Channel
+from multilingualprogramming.runtime.inference_cache import (
+    CacheStats,
+    InferenceCache,
+    ml_cached_prompt,
+)
 from multilingualprogramming.runtime.memory_store import MemoryStore, ml_memory
+from multilingualprogramming.runtime.model_registry import (
+    ModelRegistry,
+    ModelSpec,
+    get_registry,
+    ml_model,
+)
 from multilingualprogramming.runtime.observability import (
     CostInfo,
     TraceEvent,
@@ -61,6 +79,11 @@ from multilingualprogramming.runtime.placement import (
     edge,
     get_placement,
     local,
+)
+from multilingualprogramming.runtime.prompt_optimizer import (
+    CostBudget,
+    PromptOptimizer,
+    PromptTemplate,
 )
 from multilingualprogramming.runtime.reactive import (
     CanvasNode,
@@ -86,6 +109,17 @@ __all__ = [
     "PromptResult",
     "Reasoning",
     "StreamChunk",
+    # Inference optimization
+    "CacheStats",
+    "InferenceCache",
+    "ml_cached_prompt",
+    "ModelRegistry",
+    "ModelSpec",
+    "get_registry",
+    "ml_model",
+    "CostBudget",
+    "PromptOptimizer",
+    "PromptTemplate",
     # Reactive
     "CanvasNode",
     "ReactiveEngine",

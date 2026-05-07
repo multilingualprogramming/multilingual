@@ -1,0 +1,104 @@
+# Core 1.0 Informatique d'extrémité avec modèles locaux Ollama — Français
+# Démontre: placement @local, références de modèles @llama3/@mistral/@phi3,
+#           inférence parallèle par[...], mise en cache memoire(...),
+#           observabilité tracer/cout, @essaim avec agents locaux
+
+# ── Placement: @local signifie que le calcul reste sur l'appareil ──────────────
+@local
+def analyser_capteur(donnees: str) -> str utilise ai:
+    soit analyse = requête @llama3:
+        "Analyser ces données de capteur et signaler les anomalies:\n" + donnees
+    retour analyse
+
+@local
+def classer_statut(donnees: str) -> str utilise ai:
+    soit statut = classer @mistral: donnees -> StatutDevice
+    retour statut
+
+@local
+def generer_alerte(probleme: str) -> str utilise ai:
+    soit alerte = générer @phi3: "Créer une alerte pour: " + probleme
+    retour alerte
+
+# ── Inférence parallèle: plusieurs modèles en parallèle ─────────────────────
+def analyse_multi_modeles(donnees: str) -> str utilise ai:
+    soit analyse, classification, alerte = parallèle [
+        requête @llama3: "Analyser: " + donnees,
+        classer @mistral: donnees -> StatutDevice,
+        générer @phi3: "Alerte pour: " + donnees
+    ]
+    soit resume = requête @llama3:
+        "Synthétiser ces résultats:\n"
+        + "Analyse: " + analyse + "\n"
+        + "Statut: " + classification + "\n"
+        + "Alerte: " + alerte
+    retour resume
+
+# ── Mise en cache: mémoire locale pour les résultats d'inférence ─────────────
+def analyse_cachee(requete: str) -> str utilise ai:
+    soit cache = memoire("analyse_cache", scope="session")
+
+    si requete dans cache:
+        retour cache[requete]
+
+    soit resultat = requête @llama3: "Analyser: " + requete
+    cache[requete] = resultat
+    retour resultat
+
+# ── Suivi des coûts avec modèles locaux ──────────────────────────────────────
+def inference_tracee(requete: str) -> str utilise ai:
+    soit resultat_avec_cout = cout(requête @llama3: requete)
+    soit resultat, depenses = resultat_avec_cout
+
+    afficher("Coût d'inférence local (tokens estimés):", depenses)
+    retour resultat
+
+# ── Essaim: plusieurs agents locaux avec mémoire partagée ──────────────────
+@local
+@agent(model=@llama3)
+def analyseur_local(donnees: str) -> str utilise ai:
+    retour requête @llama3: "Analyser ces données:\n" + donnees
+
+@local
+@agent(model=@mistral)
+def classificateur_local(donnees: str) -> str utilise ai:
+    retour classer @mistral: donnees -> Categorie
+
+@local
+@agent(model=@phi3)
+def resumeur_local(texte: str) -> str utilise ai:
+    retour requête @phi3: "Résumer en une phrase:\n" + texte
+
+@essaim(agents=[analyseur_local, classificateur_local, resumeur_local])
+def equipe_analytique_perimetrale(donnees_entree: str) -> str utilise ai:
+    soit cache = memoire("resultats_equipe", scope="session")
+
+    si donnees_entree dans cache:
+        retour cache[donnees_entree]
+
+    soit analyse = deleguer(analyseur_local, donnees_entree)
+    soit classification = deleguer(classificateur_local, donnees_entree)
+    soit resume = deleguer(resumeur_local, analyse)
+
+    soit final = requête @llama3:
+        "Combiner ces résultats:\n"
+        + "Analyse: " + analyse + "\n"
+        + "Classe: " + classification + "\n"
+        + "Résumé: " + resume
+
+    cache[donnees_entree] = final
+    retour final
+
+# ── Principal: démontrer les modèles d'informatique d'extrémité ──────────────
+def principal() utilise ai:
+    soit donnees = "Température: 72C, Humidité: 65%, Pression: 1013mb"
+    soit analyse = analyser_capteur(donnees)
+    afficher("Analyse du capteur:", analyse)
+
+    soit requete = "Expliquer les avantages du calcul d'extrémité"
+    soit en_cache = analyse_cachee(requete)
+    afficher("Résultat en cache:", en_cache)
+
+    soit entree = "Système sous charge importante, vérifier diagnostics"
+    soit resultat_equipe = equipe_analytique_perimetrale(entree)
+    afficher("Analyse d'équipe:", resultat_equipe)
