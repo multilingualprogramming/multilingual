@@ -69,8 +69,10 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         self.indent_str = indent_str
         self._depth = 0
         self._lines = []
+        self._async_function_depth = 0
         self._reactive_engine_emitted = False
         self._asyncio_emitted = False
+        self._async_bridge_emitted = False
         self._observability_emitted = False
         self._placement_emitted = False
         self._memory_emitted = False
@@ -144,7 +146,57 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
 
     def _expr_ir(self, node):
         """Generate the expression string for an IR expression node."""
-        return _IRExpressionGenerator().render(node)
+        if self._ir_requires_asyncio(node):
+            self._ensure_asyncio()
+        if self._async_function_depth == 0 and self._ir_requires_sync_bridge(node):
+            self._ensure_async_bridge()
+        return _IRExpressionGenerator(
+            async_context=self._async_function_depth > 0
+        ).render(node)
+
+    def _ir_requires_asyncio(self, node):
+        """Return True when an IR subtree needs asyncio imported."""
+        async_types = (
+            ir.IRAwaitExpr,
+            ir.IRParExpr,
+            ir.IRSpawnExpr,
+            ir.IRSendExpr,
+            ir.IRReceiveExpr,
+            ir.IRDelegateExpr,
+        )
+        return self._ir_contains_type(node, async_types)
+
+    def _ir_requires_sync_bridge(self, node):
+        """Return True when an IR subtree awaits from sync Python code."""
+        bridge_types = (
+            ir.IRAwaitExpr,
+            ir.IRParExpr,
+            ir.IRSendExpr,
+            ir.IRReceiveExpr,
+            ir.IRDelegateExpr,
+        )
+        return self._ir_contains_type(node, bridge_types)
+
+    def _ir_contains_type(self, node, target_types):
+        """Recursively scan an IR subtree for nodes of the given types."""
+        if node is None:
+            return False
+        if isinstance(node, target_types):
+            return True
+        if isinstance(node, (list, tuple)):
+            return any(self._ir_contains_type(item, target_types) for item in node)
+        if isinstance(node, dict):
+            return any(
+                self._ir_contains_type(key, target_types)
+                or self._ir_contains_type(value, target_types)
+                for key, value in node.items()
+            )
+        if hasattr(node, "__dict__"):
+            return any(
+                self._ir_contains_type(value, target_types)
+                for value in vars(node).values()
+            )
+        return False
 
     def _error(self, message, node):
         """Raise a CodeGenerationError with source location."""
@@ -405,6 +457,26 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         self._asyncio_emitted = True
         self._lines.insert(0, "import asyncio")
 
+    def _ensure_async_bridge(self):
+        """Emit a helper that drives awaitables from synchronous code."""
+        if self._async_bridge_emitted:
+            return
+        self._ensure_asyncio()
+        self._async_bridge_emitted = True
+        self._lines.insert(
+            1,
+            "\n".join([
+                "def _ml_await(awaitable):",
+                "    try:",
+                "        asyncio.get_running_loop()",
+                "    except RuntimeError:",
+                "        return asyncio.run(awaitable)",
+                "    raise RuntimeError(",
+                "        'Cannot use async-only construct from sync code while an event loop is running'",
+                "    )",
+            ]),
+        )
+
     def _ensure_reactive_engine(self):
         """Emit the ReactiveEngine import and singleton the first time it is
         needed, so that purely non-reactive programs pay no overhead."""
@@ -618,7 +690,13 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         if node.return_type is not None:
             ret_ann = f" -> {_format_ir_type(node.return_type)}"
         self._emit(f"{prefix}def {node.name}({params}){ret_ann}:")
-        self._emit_ir_body(node.body)
+        if node.is_async:
+            self._async_function_depth += 1
+        try:
+            self._emit_ir_body(node.body)
+        finally:
+            if node.is_async:
+                self._async_function_depth -= 1
 
     def _emit_IRAgentDecl(self, node):
         self._emit(f"@agent(model={self._expr_ir(node.model)})")
@@ -778,7 +856,11 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         """
         self._ensure_asyncio()
         branches = ", ".join(self._expr_ir(b) for b in node.branches)
-        self._emit(f"await asyncio.gather({branches})")
+        if self._async_function_depth > 0:
+            self._emit(f"await asyncio.gather({branches})")
+        else:
+            self._ensure_async_bridge()
+            self._emit(f"_ml_await(asyncio.gather({branches}))")
 
     def _emit_IRSpawnExpr(self, node):
         """spawn expr → asyncio.create_task(expr)
@@ -799,14 +881,24 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
 
     def _emit_IRSendExpr(self, node):
         """channel.send(v) → await channel.put(v)"""
+        self._ensure_asyncio()
         channel = self._expr_ir(node.channel) if node.channel is not None else "_ch"
         value = self._expr_ir(node.value) if node.value is not None else "None"
-        self._emit(f"await {channel}.send({value})")
+        if self._async_function_depth > 0:
+            self._emit(f"await {channel}.send({value})")
+        else:
+            self._ensure_async_bridge()
+            self._emit(f"_ml_await({channel}.send({value}))")
 
     def _emit_IRReceiveExpr(self, node):
         """channel.receive() → await channel.get()"""
+        self._ensure_asyncio()
         channel = self._expr_ir(node.channel) if node.channel is not None else "_ch"
-        self._emit(f"await {channel}.receive()")
+        if self._async_function_depth > 0:
+            self._emit(f"await {channel}.receive()")
+        else:
+            self._ensure_async_bridge()
+            self._emit(f"_ml_await({channel}.receive())")
 
     # ------------------------------------------------------------------
     # Observability constructs
@@ -921,7 +1013,11 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         self._ensure_asyncio()
         agent = self._expr_ir(node.agent) if node.agent is not None else "None"
         message = self._expr_ir(node.message) if node.message is not None else "None"
-        self._emit(f"await _ml_delegate({agent}, {message})")
+        if self._async_function_depth > 0:
+            self._emit(f"await _ml_delegate({agent}, {message})")
+        else:
+            self._ensure_async_bridge()
+            self._emit(f"_ml_await(_ml_delegate({agent}, {message}))")
 
     def _ensure_channel(self):
         if self._channel_emitted:
@@ -1450,6 +1546,9 @@ class _ExpressionGenerator:
 class _IRExpressionGenerator:
     """Render semantic IR expressions directly as Python source."""
 
+    def __init__(self, async_context=False):
+        self.async_context = async_context
+
     def render(self, node):
         """Render an IR expression node."""
         if node is None:
@@ -1611,7 +1710,10 @@ class _IRExpressionGenerator:
         return f"__ml_result_propagate({self.render(node.operand)})"
 
     def _render_IRAwaitExpr(self, node):
-        return f"(await {self.render(node.value)})"
+        value = self.render(node.value)
+        if self.async_context:
+            return f"(await {value})"
+        return f"_ml_await({value})"
 
     def _render_IRYieldExpr(self, node):
         keyword = "yield from" if node.is_from else "yield"
@@ -1734,7 +1836,9 @@ class _IRExpressionGenerator:
     def _render_IRParExpr(self, node):
         """par [ b1, b2 ] as an expression → await asyncio.gather(b1, b2)"""
         branches = ", ".join(self.render(b) for b in node.branches)
-        return f"await asyncio.gather({branches})"
+        if self.async_context:
+            return f"await asyncio.gather({branches})"
+        return f"_ml_await(asyncio.gather({branches}))"
 
     def _render_IRSpawnExpr(self, node):
         """spawn expr as an expression → asyncio.create_task(expr)"""
@@ -1749,11 +1853,15 @@ class _IRExpressionGenerator:
     def _render_IRSendExpr(self, node):
         ch = self.render(node.channel) if node.channel is not None else "_ch"
         val = self.render(node.value) if node.value is not None else "None"
-        return f"await {ch}.send({val})"
+        if self.async_context:
+            return f"await {ch}.send({val})"
+        return f"_ml_await({ch}.send({val}))"
 
     def _render_IRReceiveExpr(self, node):
         ch = self.render(node.channel) if node.channel is not None else "_ch"
-        return f"await {ch}.receive()"
+        if self.async_context:
+            return f"await {ch}.receive()"
+        return f"_ml_await({ch}.receive())"
 
     def _render_IRTraceExpr(self, node):
         value = self.render(node.value) if node.value is not None else "None"
@@ -1779,4 +1887,6 @@ class _IRExpressionGenerator:
     def _render_IRDelegateExpr(self, node):
         agent = self.render(node.agent) if node.agent is not None else "None"
         message = self.render(node.message) if node.message is not None else "None"
-        return f"await _ml_delegate({agent}, {message})"
+        if self.async_context:
+            return f"await _ml_delegate({agent}, {message})"
+        return f"_ml_await(_ml_delegate({agent}, {message}))"

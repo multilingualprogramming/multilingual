@@ -12,7 +12,9 @@ import pathlib
 
 import pytest
 
+from multilingualprogramming.codegen.runtime_builtins import RuntimeBuiltins
 from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
+from multilingualprogramming.core.semantic_analyzer import SemanticAnalyzer, Scope, Symbol
 from multilingualprogramming.core.validators import validate_semantic_ir
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
@@ -94,6 +96,24 @@ def test_ollama_example_language_detected(path: pathlib.Path):
     assert lang, f"Could not detect language for {path.name}"
     ir = _lower(path)
     assert ir.source_language == lang
+
+
+def test_ollama_edge_en_semantic_analysis_accepts_local_decorated_functions():
+    """Placement-decorated functions should still define callable names."""
+    path = _EXAMPLES_DIR / "ollama_edge_en.multi"
+    ir = _lower(path)
+
+    analyzer = SemanticAnalyzer(source_language="en")
+    builtins_ns = RuntimeBuiltins("en").namespace()
+    builtins_scope = Scope("builtins", "global")
+    for name in builtins_ns:
+        builtins_scope.define(Symbol(name, "variable"))
+    analyzer.symbol_table.global_scope.parent = builtins_scope
+
+    errors = analyzer.analyze(ir)
+    messages = [str(err) for err in errors]
+    assert not any("analyze_sensor_reading" in msg for msg in messages), messages
+    assert not any("edge_analytics_team" in msg for msg in messages), messages
 
 
 class TestOllamaExampleSpecific:

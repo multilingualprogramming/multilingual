@@ -735,6 +735,37 @@ class SemanticAnalyzer:
     def visit_IRToolDecl(self, node):
         self.visit_FunctionDef(node)
 
+    def visit_IRPlacementDecl(self, node):
+        """Placement annotations are transparent for semantic analysis."""
+        self._visit(node.target)
+
+    def visit_IRSwarmDecl(self, node):
+        """Swarm declarations define a callable coordinator function."""
+        for dec in getattr(node, "decorators", []):
+            self._visit(dec)
+        for agent in getattr(node, "agents", []):
+            self._visit(agent)
+        self.symbol_table.define(
+            node.name, "function", line=node.line, column=node.column
+        )
+        self.symbol_table.enter_scope(node.name, "function")
+        self._in_function += 1
+        self._validate_parameters(node.parameters)
+        for param in node.parameters:
+            if getattr(param, "annotation", None):
+                self._visit(param.annotation)
+            if param.default:
+                self._visit(param.default)
+            self.symbol_table.define(
+                param.name, "parameter",
+                line=param.line, column=param.column
+            )
+        if getattr(node, "return_type", None):
+            self._visit(node.return_type)
+        self._visit_all(node.body)
+        self._in_function -= 1
+        self.symbol_table.exit_scope()
+
     def visit_ClassDef(self, node):
         # Visit decorators
         for dec in getattr(node, 'decorators', []):

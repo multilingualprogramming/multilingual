@@ -1226,7 +1226,9 @@ class _LoweringContext:
     def _lower_FunctionDef(
         self, node: ast.FunctionDef
     ) -> IRFunction | IRAgentDecl | IRToolDecl | IRSwarmDecl | IRPlacementDecl:
-        decorators = self.lower_list(node.decorators)
+        decorators = self.lower_list(
+            [dec for dec in node.decorators if not _is_structural_decorator(dec)]
+        )
         # Detect @agent, @tool, @swarm, and placement decorators.
         agent_model = _detect_agent_decorator(node.decorators)
         tool_desc = _detect_tool_decorator(node.decorators)
@@ -1637,6 +1639,23 @@ def _detect_placement_decorator(decorators: list) -> str | None:
         if name and _PLACEMENT_CANONICAL.get(name) in ("local", "edge", "cloud"):
             return _PLACEMENT_CANONICAL[name]
     return None
+
+
+def _is_structural_decorator(dec) -> bool:
+    """Return True for decorators lowered into dedicated IR structure."""
+    name = None
+    if isinstance(dec, ast.Identifier):
+        name = dec.name
+    elif isinstance(dec, ast.CallExpr):
+        name = _call_name(dec.func)
+    if not name:
+        return False
+    return (
+        name in _PLACEMENT_CANONICAL
+        or name == _AGENT_DECORATOR
+        or name == _TOOL_DECORATOR
+        or _AGENT_CANONICAL.get(name, "") == "swarm"
+    )
 
 
 def _parse_effects_annotation(node: ast.FunctionDef) -> EffectSet:

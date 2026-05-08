@@ -116,6 +116,42 @@ def _result_propagate(value):
     return value
 
 
+def _agent_decorator(**kwargs):
+    """Decorator for marking functions as agents in swarms.
+
+    Accepts optional metadata like model. Returns a decorator that marks
+    the function with agent metadata and returns it unchanged for execution.
+    """
+    def decorator(func):
+        # Store agent metadata on the function
+        func.__agent_metadata__ = kwargs
+        return func
+    return decorator
+
+
+def _swarm_decorator(**kwargs):
+    """Decorator for marking functions as swarm coordinators.
+
+    Accepts optional metadata like agents list. Returns a decorator that marks
+    the function with swarm metadata and returns it unchanged for execution.
+    """
+    def decorator(func):
+        # Store swarm metadata on the function
+        func.__swarm_metadata__ = kwargs
+        return func
+    return decorator
+
+
+def _delegate(agent_func, *args, **kwargs):
+    """Call an agent function with the given arguments.
+
+    This is a runtime helper for swarm coordination that invokes an agent
+    function with delegation semantics. In the current implementation, it
+    simply calls the function directly.
+    """
+    return agent_func(*args, **kwargs)
+
+
 class RuntimeBuiltins:
     """
     Builds a dict of built-in names that should be available at runtime.
@@ -325,6 +361,10 @@ class RuntimeBuiltins:
         "MultimodalPrompt": MultimodalPrompt,
         "AgentLoop": AgentLoop,
         "tool": tool,
+        "agent": _agent_decorator,
+        "swarm": _swarm_decorator,
+        "delegate": _delegate,
+        "deleguer": _delegate,
         "get_tool_registry": get_registry,
     }
 
