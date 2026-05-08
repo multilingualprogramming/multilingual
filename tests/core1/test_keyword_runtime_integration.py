@@ -1,3 +1,4 @@
+# pylint: disable=trailing-newlines,mixed-line-endings
 #
 
 # SPDX-FileCopyrightText: 2026 John Samuel <johnsamuelwrites@gmail.com>
@@ -224,7 +225,11 @@ print(len(vec))
 
         """PLAN keyword should create a multi-step plan."""
 
-        self.mock.add_response("Step 1: Understand the goal\nStep 2: Create a plan\nStep 3: Execute")
+        self.mock.add_response(
+            "Step 1: Understand the goal\n"
+            "Step 2: Create a plan\n"
+            "Step 3: Execute"
+        )
 
         source = """
 

@@ -1,3 +1,4 @@
+# pylint: disable=trailing-newlines
 #
 
 # SPDX-FileCopyrightText: 2024 John Samuel <johnsamuelwrites@gmail.com>
