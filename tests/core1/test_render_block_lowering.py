@@ -1,10 +1,9 @@
 """Test semantic IR lowering for RenderBlock and UIElement."""
 
-import pytest
+# pylint: disable=protected-access
+
 from multilingualprogramming.core import ir_nodes as ir
 from multilingualprogramming.core.semantic_lowering import SemanticLowering
-from multilingualprogramming.parser.parser import Parser
-from multilingualprogramming.parser.lexer import Lexer
 
 
 def test_render_block_lowering_exists():
@@ -26,8 +25,8 @@ def test_ir_ui_element_node_exists():
     assert hasattr(ir, "IRUIElement")
     elem = ir.IRUIElement(tag="div")
     assert elem.tag == "div"
-    assert elem.children == []
-    assert elem.attributes == []
+    assert not elem.children
+    assert not elem.attributes
 
 
 def test_ir_ui_attribute_node_exists():

@@ -151,8 +151,8 @@ class Parser:
     Dispatches on token.concept for language-agnostic parsing.
     """
 
-    def __init__(self, tokens, source_language=None, max_depth=None):
-        self.source_language = source_language or "en"
+    def __init__(self, tokens, source_language=None, max_depth=None, lang=None):
+        self.source_language = source_language or lang or "en"
         self.tokens = normalize_surface_tokens(tokens, self.source_language)
         self.pos = 0
         self._error_registry = ErrorMessageRegistry()

@@ -1,12 +1,25 @@
 """End-to-end test of memory game compilation pipeline."""
 
-import pytest
 from pathlib import Path
 from multilingualprogramming.parser.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
 from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
 from multilingualprogramming.codegen.ui_lowering import lower_to_ui
 from multilingualprogramming.core import ir_nodes as ir
+
+
+def _walk_ir(node):
+    """Yield a node and all nested IR nodes reachable from it."""
+    if not isinstance(node, ir.IRNode):
+        return
+    yield node
+    for value in vars(node).values():
+        if isinstance(value, ir.IRNode):
+            yield from _walk_ir(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, ir.IRNode):
+                    yield from _walk_ir(item)
 
 
 def test_memory_game_file_exists():
@@ -65,15 +78,26 @@ def test_memory_game_has_observe_bindings():
     ir_program = lower_to_semantic_ir(program, lang="en")
 
     # Find observe bindings
-    observe_names = set()
-    for node in ir_program.body:
-        if isinstance(node, ir.IRObserveBinding):
-            observe_names.add(node.name)
+    observe_names = {
+        node.name
+        for top_level in ir_program.body
+        for node in _walk_ir(top_level)
+        if isinstance(node, ir.IRObserveBinding)
+    }
 
     # Memory game should have several observe vars
     assert len(observe_names) > 0
     # These are the known observe vars from memory_game_en.multi
-    expected = {"cards", "revealed", "matched", "first_pick", "second_pick", "matches_found", "game_won", "is_checking"}
+    expected = {
+        "cards",
+        "revealed",
+        "matched",
+        "first_pick",
+        "second_pick",
+        "matches_found",
+        "game_won",
+        "is_checking",
+    }
     assert expected.issubset(observe_names)
 
 
@@ -88,10 +112,12 @@ def test_memory_game_has_async_functions():
     ir_program = lower_to_semantic_ir(program, lang="en")
 
     # Find async functions
-    async_funcs = set()
-    for node in ir_program.body:
-        if isinstance(node, ir.IRFunction) and node.is_async:
-            async_funcs.add(node.name)
+    async_funcs = {
+        node.name
+        for top_level in ir_program.body
+        for node in _walk_ir(top_level)
+        if isinstance(node, ir.IRFunction) and node.is_async
+    }
 
     assert len(async_funcs) > 0
     # Memory game has handle_card_click and reset_game

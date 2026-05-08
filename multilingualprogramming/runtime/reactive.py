@@ -101,6 +101,7 @@ class ReactiveList:
 
     @property
     def name(self) -> str:
+        """Return the declared list signal name."""
         return self._name
 
     def get(self) -> list:
@@ -118,9 +119,11 @@ class ReactiveList:
         self._notify()
 
     def __getitem__(self, index: int) -> Any:
+        """Return the element at *index* from the current list value."""
         return self._value[index]
 
     def __setitem__(self, index: int, value: Any) -> None:
+        """Update the element at *index* and notify handlers."""
         self.set_index(index, value)
 
     def on_change(self, handler: Callable[[list], None]) -> Callable[[list], None]:
@@ -135,7 +138,7 @@ class ReactiveList:
     def _notify(self) -> None:
         """Notify all handlers of the change."""
         for h in self._handlers:
-            h(self._value)
+            h(self._value[:])
 
     def __repr__(self) -> str:
         return f"ReactiveList({self._name!r}, value={self._value!r})"

@@ -1,7 +1,10 @@
 """Test ReactiveList signal implementation."""
 
-import pytest
-from multilingualprogramming.runtime.reactive import ReactiveList, ReactiveEngine
+from multilingualprogramming.runtime.reactive import (
+    ReactiveEngine,
+    ReactiveList,
+    Signal,
+)
 
 
 def test_reactive_list_get():
@@ -69,8 +72,6 @@ def test_reactive_engine_declare_list():
 
 def test_reactive_engine_declare_scalar():
     """ReactiveEngine.declare() returns Signal for scalar initial."""
-    from multilingualprogramming.runtime.reactive import Signal
-
     engine = ReactiveEngine()
     sig = engine.declare("count", 42)
     assert isinstance(sig, Signal)
@@ -92,8 +93,14 @@ def test_reactive_list_multiple_handlers():
     calls1 = []
     calls2 = []
 
-    rl.on_change(lambda v: calls1.append(v))
-    rl.on_change(lambda v: calls2.append(v))
+    def handler_one(value):
+        calls1.append(value)
+
+    def handler_two(value):
+        calls2.append(value)
+
+    rl.on_change(handler_one)
+    rl.on_change(handler_two)
 
     rl.set([2, 3])
 

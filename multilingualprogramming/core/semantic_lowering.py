@@ -647,12 +647,14 @@ _SWARM_DECORATOR_NAMES = frozenset(
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def lower_to_semantic_ir(program_ast: ast.Program, source_language: str) -> IRProgram:
+def lower_to_semantic_ir(
+    program_ast: ast.Program, source_language: str | None = None, lang: str | None = None
+) -> IRProgram:
     """Lower a parser Program AST into a Core 1.0 IRProgram."""
     if not isinstance(program_ast, ast.Program):
         raise TypeError("lower_to_semantic_ir expects a Program AST root")
 
-    ctx = _LoweringContext(source_language=source_language or "en")
+    ctx = _LoweringContext(source_language=source_language or lang or "en")
     body = [ctx.lower(node) for node in program_ast.body]
     return IRProgram(
         body=body,
@@ -1258,8 +1260,9 @@ class _LoweringContext:
 
         cond = self.lower(node.condition) if node.condition else None
         text_content = None
-        if node.text_content:
-            text_content = self.lower(node.text_content)
+        raw_text_content = getattr(node, "text_content", None)
+        if raw_text_content:
+            text_content = self.lower(raw_text_content)
 
         return IRUIElement(
             tag=node.tag, attributes=attrs, children=children, condition=cond,
@@ -1556,6 +1559,13 @@ class _LoweringContext:
                 column=getattr(pattern, "column", 0),
             )
         return node
+
+
+class SemanticLowering(_LoweringContext):
+    """Compatibility wrapper exposing the lowering helpers as a public class."""
+
+    def __init__(self, source_language: str = "en") -> None:
+        super().__init__(source_language=source_language)
 
 
 # ---------------------------------------------------------------------------

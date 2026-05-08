@@ -879,12 +879,12 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         target = self._expr_ir(node.target)
         self._emit(f"_ml_stream_to_view({signal}, {target})")
 
-    def _emit_IRRenderBlock(self, node):
+    def _emit_IRRenderBlock(self, _node):
         # Render blocks are compiled to JS in the browser path.
         # In Python, emit a comment noting that the render block exists but is not executed.
         self._emit("# render block (compiled to reactive JavaScript for browser)")
 
-    def _emit_IRUIElement(self, node):
+    def _emit_IRUIElement(self, _node):
         # UI elements are compiled to JS. In Python, this is a no-op stub.
         pass
 

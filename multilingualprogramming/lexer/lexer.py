@@ -149,7 +149,7 @@ class Lexer:
     """
     _MAX_KEYWORD_WORDS = 3
 
-    def __init__(self, source, language=None):
+    def __init__(self, source, language=None, lang=None):
         """
         Initialize the lexer.
         Parameters:
@@ -158,7 +158,7 @@ class Lexer:
                 are recognized. If None, auto-detect.
         """
         self.reader = SourceReader(source)
-        self.language = language
+        self.language = language if language is not None else lang
         self.registry = KeywordRegistry()
         self.tokens = []
         self._indent_stack = [0]

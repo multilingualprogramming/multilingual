@@ -284,11 +284,6 @@ def cmd_build_wasm_bundle(args):
 
 def cmd_build_ui_bundle(args):
     """Build a self-contained reactive UI bundle (HTML + JS)."""
-    import os
-    from pathlib import Path
-    from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
-    from multilingualprogramming.codegen.ui_lowering import lower_to_ui
-
     program = _parse_program_from_file(args.file, args.lang)
     ir = lower_to_semantic_ir(program, args.lang or "en")
     result = lower_to_ui(ir)
