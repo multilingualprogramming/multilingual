@@ -1983,7 +1983,15 @@ class Parser:
         return node
 
     def _parse_native_ai_template(self, tok):
-        """Parse the template section of a native AI expression."""
+        """Parse the template section of a native AI expression.
+
+        Handles both:
+        1. Single-line templates: prompt @model: expression
+        2. Multi-line templates: prompt @model:\\n    expression with operators
+
+        Multi-line templates are parsed as full expressions to support
+        string concatenation: "prefix" + variable + "suffix"
+        """
         if not self._match_type(TokenType.NEWLINE):
             return self._parse_expression()
 
@@ -1993,30 +2001,52 @@ class Parser:
             return StringLiteral("", line=tok.line, column=tok.column)
 
         self._advance()
-        lines = []
-        current_line = []
+        saved_position = self.pos
 
-        while not self._at_end() and not self._match_type(TokenType.DEDENT):
-            cur = self._current()
-            if cur.type == TokenType.NEWLINE:
-                if current_line:
-                    lines.append(" ".join(current_line).strip())
-                    current_line = []
+        peek_tokens = []
+        while (not self._at_end() and
+               not self._match_type(TokenType.DEDENT) and
+               not self._match_type(TokenType.NEWLINE)):
+            peek_tokens.append(self._current())
+            self._advance()
+
+        self.pos = saved_position
+
+        has_expression_op = any(t.value in {'+', '-', '*', '/', '%'}
+                               for t in peek_tokens
+                               if t.type == TokenType.OPERATOR)
+
+        if has_expression_op:
+            expr = self._parse_expression()
+            self._skip_newlines()
+            if self._match_type(TokenType.DEDENT):
                 self._advance()
-                continue
-            current_line.append(str(cur.value))
-            self._advance()
+            return expr
+        else:
+            lines = []
+            current_line = []
 
-        if current_line:
-            lines.append(" ".join(current_line).strip())
-        if self._match_type(TokenType.DEDENT):
-            self._advance()
+            while not self._at_end() and not self._match_type(TokenType.DEDENT):
+                cur = self._current()
+                if cur.type == TokenType.NEWLINE:
+                    if current_line:
+                        lines.append(" ".join(current_line).strip())
+                        current_line = []
+                    self._advance()
+                    continue
+                current_line.append(str(cur.value))
+                self._advance()
 
-        return StringLiteral(
-            "\n".join(line for line in lines if line),
-            line=tok.line,
-            column=tok.column,
-        )
+            if current_line:
+                lines.append(" ".join(current_line).strip())
+            if self._match_type(TokenType.DEDENT):
+                self._advance()
+
+            return StringLiteral(
+                "\n".join(line for line in lines if line),
+                line=tok.line,
+                column=tok.column,
+            )
 
     def _parse_model_ref_literal(self):
         """Parse a model reference literal starting with `@`."""
