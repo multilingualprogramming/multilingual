@@ -305,6 +305,7 @@ _AI_CANONICAL: dict[str, str] = {
     "pianifica":   "plan",     # it
     "planejar":    "plan",     # pt
     "planuj":      "plan",     # pl
+    "plannen":     "plan",     # nl
     "planera":     "plan",     # sv
     "planlæg":     "plan",     # da
     "suunnittele": "plan",     # fi
