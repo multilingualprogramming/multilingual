@@ -449,6 +449,21 @@ async دالة spawn_test_async():
 ليكن spawn_result = asyncio.run(spawn_test_async())
 طباعة("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+دالة test_reactive_ui() يستخدم ui:
+    راقب var counter_value = 0
+    راقب var status_text = "ready"
+
+    عند_التغيير counter_value.change:
+        اطبع("Counter value changed")
+
+    عند_التغيير status_text.change:
+        اطبع("Status changed")
+
+    اطبع("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # عدة استدعاءات ذكاء اصطناعي بالتسلسل
 ليكن seq_1 = استفسر @default: "السؤال 1"
 ليكن seq_2 = استفسر @default: "السؤال 2"

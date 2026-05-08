@@ -449,6 +449,21 @@ asincrono definisci spawn_test_async():
 sia spawn_result = asyncio.run(spawn_test_async())
 stampa("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+definisci test_reactive_ui() utilizza ui:
+    osserva var counter_value = 0
+    osserva var status_text = "ready"
+
+    al_cambio counter_value.change:
+        stampa("Counter value changed")
+
+    al_cambio status_text.change:
+        stampa("Status changed")
+
+    stampa("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # Molteplici chiamate IA in sequenza
 sia seq_1 = chiedi @default: "Domanda 1"
 sia seq_2 = chiedi @default: "Domanda 2"

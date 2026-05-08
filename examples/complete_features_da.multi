@@ -449,6 +449,21 @@ async definer spawn_test_async():
 lad spawn_result = asyncio.run(spawn_test_async())
 skriv("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+definer test_reactive_ui() bruger ui:
+    observer var counter_value = 0
+    observer var status_text = "ready"
+
+    ved_aendring counter_value.change:
+        skriv("Counter value changed")
+
+    ved_aendring status_text.change:
+        skriv("Status changed")
+
+    skriv("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # Flere AI-kald i sekvens
 lad seq_1 = sporg @default: "Spoergsmal 1"
 lad seq_2 = sporg @default: "Spoergsmal 2"

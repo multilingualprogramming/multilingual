@@ -449,6 +449,21 @@ async 函数 spawn_test_async():
 令 spawn_result = asyncio.run(spawn_test_async())
 打印("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+函数 test_reactive_ui() 使用能力 ui:
+    观察 var counter_value = 0
+    观察 var status_text = "ready"
+
+    变化时 counter_value.change:
+        打印("Counter value changed")
+
+    变化时 status_text.change:
+        打印("Status changed")
+
+    打印("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # 按顺序的多个 AI 调用
 令 seq_1 = 提示 @default: "问题 1"
 令 seq_2 = 提示 @default: "问题 2"

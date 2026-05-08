@@ -449,6 +449,21 @@ async funkcja spawn_test_async():
 niech spawn_result = asyncio.run(spawn_test_async())
 drukuj("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+funkcja test_reactive_ui() uzywa ui:
+    obserwuj var counter_value = 0
+    obserwuj var status_text = "ready"
+
+    przy_zmianie counter_value.change:
+        drukuj("Counter value changed")
+
+    przy_zmianie status_text.change:
+        drukuj("Status changed")
+
+    drukuj("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # Wielokrotne wywołania sztucznej inteligencji w sekwencji
 niech seq_1 = prompt @default: "Pytanie 1"
 niech seq_2 = prompt @default: "Pytanie 2"

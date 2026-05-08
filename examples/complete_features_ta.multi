@@ -449,6 +449,21 @@ async வரையறு spawn_test_async():
 இருக்கட்டும் spawn_result = asyncio.run(spawn_test_async())
 அச்சிடு("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+வரையறு test_reactive_ui() பயன்படுத்து ui:
+    கவனி var counter_value = 0
+    கவனி var status_text = "ready"
+
+    மாற்றத்தில் counter_value.change:
+        அச்சிடு("Counter value changed")
+
+    மாற்றத்தில் status_text.change:
+        அச்சிடு("Status changed")
+
+    அச்சிடு("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # வரிசையாக பல செயற்கை நுண்ணறிவு அழைப்புகள்
 இருக்கட்டும் seq_1 = கேள் @default: "கேள்வி 1"
 இருக்கட்டும் seq_2 = கேள் @default: "கேள்வி 2"

@@ -449,6 +449,21 @@ async maarittele spawn_test_async():
 olkoon spawn_result = asyncio.run(spawn_test_async())
 tulosta("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+maarittele test_reactive_ui() kayttaa ui:
+    havainnoi var counter_value = 0
+    havainnoi var status_text = "ready"
+
+    muutoksessa counter_value.change:
+        tulosta("Counter value changed")
+
+    muutoksessa status_text.change:
+        tulosta("Status changed")
+
+    tulosta("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # Useita tekoäly-puheluita peräkkäin
 olkoon seq_1 = kysy @default: "Kysymys 1"
 olkoon seq_2 = kysy @default: "Kysymys 2"

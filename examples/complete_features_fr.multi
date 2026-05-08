@@ -449,6 +449,21 @@ asynchrone déf spawn_test_async():
 soit spawn_result = asyncio.run(spawn_test_async())
 afficher("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+déf test_reactive_ui() utilise ui:
+    observer var counter_value = 0
+    observer var status_text = "ready"
+
+    au_changement counter_value.change:
+        afficher("Counter value changed")
+
+    au_changement status_text.change:
+        afficher("Status changed")
+
+    afficher("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # Appels IA multiples en séquence
 soit seq_1 = requête @default: "Question 1"
 soit seq_2 = requête @default: "Question 2"

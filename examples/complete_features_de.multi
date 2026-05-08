@@ -449,6 +449,21 @@ asynchron def spawn_test_async():
 sei spawn_result = asyncio.run(spawn_test_async())
 ausgeben("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+def test_reactive_ui() verwendet ui:
+    beobachten var counter_value = 0
+    beobachten var status_text = "ready"
+
+    bei_aenderung counter_value.change:
+        ausgeben("Counter value changed")
+
+    bei_aenderung status_text.change:
+        ausgeben("Status changed")
+
+    ausgeben("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # Mehrere KI-Aufrufe in Folge
 sei seq_1 = abfragen @default: "Frage 1"
 sei seq_2 = abfragen @default: "Frage 2"

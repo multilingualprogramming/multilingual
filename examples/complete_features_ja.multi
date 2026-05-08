@@ -449,6 +449,21 @@ async 関数 spawn_test_async():
 変数 spawn_result = asyncio.run(spawn_test_async())
 表示("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+関数 test_reactive_ui() 使う ui:
+    観測 var counter_value = 0
+    観測 var status_text = "ready"
+
+    変更時 counter_value.change:
+        表示("Counter value changed")
+
+    変更時 status_text.change:
+        表示("Status changed")
+
+    表示("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # 連続した複数の AI コール
 変数 seq_1 = プロンプト @default: "質問 1"
 変数 seq_2 = プロンプト @default: "質問 2"

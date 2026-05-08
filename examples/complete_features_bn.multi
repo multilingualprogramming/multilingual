@@ -449,6 +449,21 @@ asink সংজ্ঞা spawn_test_async():
 ধরি spawn_result = asyncio.run(spawn_test_async())
 ছাপাও("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+সংজ্ঞা test_reactive_ui() ব্যবহার ui:
+    পর্যবেক্ষণ var counter_value = 0
+    পর্যবেক্ষণ var status_text = "ready"
+
+    পরিবর্তনে counter_value.change:
+        ছাপাও("Counter value changed")
+
+    পরিবর্তনে status_text.change:
+        ছাপাও("Status changed")
+
+    ছাপাও("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # ক্রমিক ক্রমে কৃত্রিম বুদ্ধিমত্তা কল
 ধরি seq_1 = জিজ্ঞেস @default: "প্রশ্ন 1"
 ধরি seq_2 = জিজ্ঞেস @default: "প্রশ্ন 2"

@@ -449,6 +449,21 @@ async definieer spawn_test_async():
 laat spawn_result = asyncio.run(spawn_test_async())
 afdrukken("Async concurrency keywords validated:", spawn_result)
 
+# Reactive UI Keywords (v0.8.0) - OBSERVE, ON_CHANGE
+definieer test_reactive_ui() gebruikt ui:
+    observeer var counter_value = 0
+    observeer var status_text = "ready"
+
+    bij_wijziging counter_value.change:
+        afdrukken("Counter value changed")
+
+    bij_wijziging status_text.change:
+        afdrukken("Status changed")
+
+    afdrukken("Reactive UI keywords validated")
+
+test_reactive_ui()
+
 # Meerdere AI-aanroepen in volgorde
 laat seq_1 = vraag @default: "Vraag 1"
 laat seq_2 = vraag @default: "Vraag 2"
