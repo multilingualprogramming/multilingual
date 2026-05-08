@@ -5,23 +5,23 @@
 
 # ── Placement: @local significa que el cálculo se mantiene en el dispositivo ──
 @local
-def analizar_sensor(datos: str) -> str uses ai:
+def analizar_sensor(datos: str) -> str usa ai:
     sea analisis = preguntar @llama3:
         "Analizar estos datos del sensor y marcar anomalías:\n" + datos
     retorno analisis
 
 @local
-def clasificar_estado(datos: str) -> str uses ai:
+def clasificar_estado(datos: str) -> str usa ai:
     sea estado = clasificar @mistral: datos -> EstadoDispositivo
     retorno estado
 
 @local
-def generar_alerta(problema: str) -> str uses ai:
+def generar_alerta(problema: str) -> str usa ai:
     sea alerta = generar @phi3: "Crear una alerta para: " + problema
     retorno alerta
 
 # ── Inferencia paralela: múltiples modelos en paralelo ──────────────────────
-def analisis_multi_modelo(datos: str) -> str uses ai:
+def analisis_multi_modelo(datos: str) -> str usa ai:
     sea analisis, clasificacion, alerta = paralelo [
         preguntar @llama3: "Analizar: " + datos,
         clasificar @mistral: datos -> EstadoDispositivo,
@@ -35,7 +35,7 @@ def analisis_multi_modelo(datos: str) -> str uses ai:
     retorno resumen
 
 # ── Caché: memoria local para resultados de inferencia ───────────────────────
-def analisis_en_cache(consulta: str) -> str uses ai:
+def analisis_en_cache(consulta: str) -> str usa ai:
     sea cache = memoria("cache_analisis", scope="session")
 
     si consulta en cache:
@@ -46,7 +46,7 @@ def analisis_en_cache(consulta: str) -> str uses ai:
     retorno resultado
 
 # ── Seguimiento de costos con modelos locales ────────────────────────────────
-def inferencia_trazada(consulta: str) -> str uses ai:
+def inferencia_trazada(consulta: str) -> str usa ai:
     sea resultado_con_costo = costo(preguntar @llama3: consulta)
     sea resultado, gastos = resultado_con_costo
 
@@ -56,21 +56,21 @@ def inferencia_trazada(consulta: str) -> str uses ai:
 # ── Enjambre: múltiples agentes locales con memoria compartida ──────────────
 @local
 @agent(model=@llama3)
-def analizador_local(datos: str) -> str uses ai:
+def analizador_local(datos: str) -> str usa ai:
     retorno preguntar @llama3: "Analizar estos datos:\n" + datos
 
 @local
 @agent(model=@mistral)
-def clasificador_local(datos: str) -> str uses ai:
+def clasificador_local(datos: str) -> str usa ai:
     retorno clasificar @mistral: datos -> Categoria
 
 @local
 @agent(model=@phi3)
-def resumidor_local(texto: str) -> str uses ai:
+def resumidor_local(texto: str) -> str usa ai:
     retorno preguntar @phi3: "Resumir en una oración:\n" + texto
 
 @enjambre(agents=[analizador_local, clasificador_local, resumidor_local])
-def equipo_analitica_borde(datos_entrada: str) -> str uses ai:
+def equipo_analitica_borde(datos_entrada: str) -> str usa ai:
     sea cache = memoria("resultados_equipo", scope="session")
 
     si datos_entrada en cache:
@@ -90,7 +90,7 @@ def equipo_analitica_borde(datos_entrada: str) -> str uses ai:
     retorno final
 
 # ── Principal: demostrar patrones de computación en el borde ───────────────
-def principal() uses ai:
+def principal() usa ai:
     sea datos = "Temperatura: 72C, Humedad: 65%, Presión: 1013mb"
     sea analisis = analizar_sensor(datos)
     imprimir("Análisis del sensor:", analisis)

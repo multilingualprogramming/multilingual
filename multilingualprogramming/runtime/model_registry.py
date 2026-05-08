@@ -31,6 +31,7 @@ Usage
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Optional
 
 
@@ -287,15 +288,10 @@ class ModelRegistry:
 # Runtime helper
 # ---------------------------------------------------------------------------
 
-_GLOBAL_REGISTRY: Optional[ModelRegistry] = None
-
-
+@lru_cache(maxsize=1)
 def get_registry() -> ModelRegistry:
     """Return the global model registry (singleton)."""
-    global _GLOBAL_REGISTRY
-    if _GLOBAL_REGISTRY is None:
-        _GLOBAL_REGISTRY = ModelRegistry()
-    return _GLOBAL_REGISTRY
+    return ModelRegistry()
 
 
 def ml_model(

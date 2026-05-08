@@ -47,7 +47,7 @@ def _estimate_tokens(text: str) -> int:
     This is a rough heuristic: ~4 characters per token on average for English.
     For multilingual text, it's approximate.
     """
-    # Rough heuristic: 1 token ≈ 4 characters
+    # Rough heuristic: 1 token â‰ˆ 4 characters
     return max(1, len(text) // 4)
 
 
@@ -244,29 +244,59 @@ class PromptOptimizer:
     @staticmethod
     def sentiment_template() -> PromptTemplate:
         """Return a sentiment analysis template in multiple languages."""
-        return PromptTemplate({
-            "en": "Analyze the sentiment of the following text:\n{text}\n\nClassify as: positive, negative, or neutral.",
-            "fr": "Analyser le sentiment du texte suivant:\n{text}\n\nClassez comme: positif, négatif ou neutre.",
-            "es": "Analizar el sentimiento del siguiente texto:\n{text}\n\nClasifique como: positivo, negativo o neutral.",
-            "de": "Analysieren Sie das Sentiment des folgenden Textes:\n{text}\n\nKlassifizieren Sie als: positiv, negativ oder neutral.",
-        })
+        return PromptTemplate(
+            {
+                "en": (
+                    "Analyze the sentiment of the following text:\n{text}\n\n"
+                    "Classify as: positive, negative, or neutral."
+                ),
+                "fr": (
+                    "Analyser le sentiment du texte suivant:\n{text}\n\n"
+                    "Classez comme: positif, nÃ©gatif ou neutre."
+                ),
+                "es": (
+                    "Analizar el sentimiento del siguiente texto:\n{text}\n\n"
+                    "Clasifique como: positivo, negativo o neutral."
+                ),
+                "de": (
+                    "Analysieren Sie das Sentiment des folgenden Textes:\n{text}\n\n"
+                    "Klassifizieren Sie als: positiv, negativ oder neutral."
+                ),
+            }
+        )
 
     @staticmethod
     def summarization_template() -> PromptTemplate:
         """Return a summarization template in multiple languages."""
-        return PromptTemplate({
-            "en": "Summarize the following text in 2-3 sentences:\n{text}",
-            "fr": "Résumez le texte suivant en 2-3 phrases:\n{text}",
-            "es": "Resuma el siguiente texto en 2-3 oraciones:\n{text}",
-            "de": "Fassen Sie den folgenden Text in 2-3 Sätzen zusammen:\n{text}",
-        })
+        return PromptTemplate(
+            {
+                "en": "Summarize the following text in 2-3 sentences:\n{text}",
+                "fr": "RÃ©sumez le texte suivant en 2-3 phrases:\n{text}",
+                "es": "Resuma el siguiente texto en 2-3 oraciones:\n{text}",
+                "de": "Fassen Sie den folgenden Text in 2-3 SÃ¤tzen zusammen:\n{text}",
+            }
+        )
 
     @staticmethod
     def extraction_template() -> PromptTemplate:
         """Return a key-phrase extraction template in multiple languages."""
-        return PromptTemplate({
-            "en": "Extract the most important key phrases from:\n{text}\n\nReturn as a comma-separated list.",
-            "fr": "Extrayez les phrases clés les plus importantes de:\n{text}\n\nRetournez sous forme de liste séparée par des virgules.",
-            "es": "Extraiga las frases clave más importantes de:\n{text}\n\nDevuelva como una lista separada por comas.",
-            "de": "Extrahieren Sie die wichtigsten Schlüsselphrases aus:\n{text}\n\nGeben Sie als durch Kommas getrennte Liste zurück.",
-        })
+        return PromptTemplate(
+            {
+                "en": (
+                    "Extract the most important key phrases from:\n{text}\n\n"
+                    "Return as a comma-separated list."
+                ),
+                "fr": (
+                    "Extrayez les phrases clÃ©s les plus importantes de:\n{text}\n\n"
+                    "Retournez sous forme de liste sÃ©parÃ©e par des virgules."
+                ),
+                "es": (
+                    "Extraiga las frases clave mÃ¡s importantes de:\n{text}\n\n"
+                    "Devuelva como una lista separada por comas."
+                ),
+                "de": (
+                    "Extrahieren Sie die wichtigsten SchlÃ¼sselphrases aus:\n{text}\n\n"
+                    "Geben Sie als durch Kommas getrennte Liste zurÃ¼ck."
+                ),
+            }
+        )

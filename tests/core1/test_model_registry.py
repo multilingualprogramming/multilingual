@@ -37,7 +37,7 @@ class TestModelSpec:
         assert spec.provider == ""
         assert spec.placement == "local"
         assert spec.version == "latest"
-        assert spec.capabilities == []
+        assert not spec.capabilities
 
     def test_model_spec_repr(self):
         spec = ModelSpec(name="test", version="1.0", placement="cloud")

@@ -16,7 +16,6 @@ from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
 from multilingualprogramming.core.validators import validate_semantic_ir
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
-from multilingualprogramming.source_extensions import iter_source_files
 
 
 _EXAMPLES_DIR = (
@@ -180,4 +179,3 @@ class TestOllamaExampleSpecific:
                 "photo" in source or "image" in source)
         # Should use French memory keyword
         assert "memoire" in source.lower()
-

@@ -39,7 +39,7 @@ class TestTokenEstimation:
 class TestCostBudget:
     def test_within_budget(self):
         budget = CostBudget(max_tokens=100)
-        ok, msg = budget.check(50)
+        ok, _msg = budget.check(50)
         assert ok is True
 
     def test_exceeds_budget(self):
@@ -120,7 +120,6 @@ class TestPromptTemplate:
 class TestPromptOptimizer:
     def test_optimize_renders_template(self):
         optimizer = PromptOptimizer()
-        tmpl = PromptTemplate({"en": "Question: {q}"})
         # optimize() doesn't fill in variables, so use a template without placeholders
         tmpl_no_vars = PromptTemplate({"en": "Question without variables"})
         result = optimizer.optimize(tmpl_no_vars, "en", max_tokens=100)
@@ -162,7 +161,6 @@ class TestPromptOptimizer:
         assert shortest == "fr"
 
     def test_sentiment_template(self):
-        optimizer = PromptOptimizer()
         tmpl = PromptOptimizer.sentiment_template()
         assert tmpl.has_language("en")
         assert tmpl.has_language("fr")
@@ -183,7 +181,6 @@ class TestPromptOptimizer:
 
     def test_template_preset_languages(self):
         """All preset templates should be multilingual."""
-        optimizer = PromptOptimizer()
         for template_fn in [
             PromptOptimizer.sentiment_template,
             PromptOptimizer.summarization_template,
