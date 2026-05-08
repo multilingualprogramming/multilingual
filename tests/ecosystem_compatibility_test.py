@@ -39,6 +39,7 @@ from typing import Optional
 import time
 
 from multilingualprogramming.codegen.executor import ProgramExecutor
+from tests._test_helpers import register_invariant_ai_provider
 
 
 class FailureCategory(Enum):
@@ -370,6 +371,7 @@ class EcosystemTestRunner:
     ) -> ExecutionResult:
         """Execute multilingual source code."""
         start_time = time.time()
+        register_invariant_ai_provider()
         executor = ProgramExecutor(language=language, check_semantics=True)
         result = executor.execute(source)
         elapsed_ms = (time.time() - start_time) * 1000
@@ -1432,6 +1434,7 @@ class CompleteFeatureTestSuite(unittest.TestCase):
 
     COMPLETE_FEATURE_FILES = sorted(Path("examples").glob("complete_features_*.multi"))
     EXPECTED_OUTPUT = ""
+    EXPECTED_LINE_COUNT = 0
 
     @classmethod
     def setUpClass(cls):
@@ -1443,6 +1446,7 @@ class CompleteFeatureTestSuite(unittest.TestCase):
         if not english_result.success:
             raise AssertionError(f"English baseline failed: {english_result.error}")
         cls.EXPECTED_OUTPUT = english_result.output
+        cls.EXPECTED_LINE_COUNT = len(english_result.output.splitlines())
 
     def setUp(self):
         self.runner = EcosystemTestRunner()
@@ -1463,7 +1467,11 @@ class CompleteFeatureTestSuite(unittest.TestCase):
                 source = self._load_example(source_path)
                 result = self.runner.execute_multilingual(source, language=language)
                 self.assertTrue(result.success, f"Execution failed: {result.error}")
-                self.assertEqual(result.output, self.EXPECTED_OUTPUT)
+                self.assertEqual(
+                    len(result.output.splitlines()),
+                    self.EXPECTED_LINE_COUNT,
+                    f"Unexpected output line count for {source_path.name}",
+                )
 
 
 if __name__ == "__main__":

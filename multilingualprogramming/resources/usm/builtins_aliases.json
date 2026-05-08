@@ -9,8 +9,8 @@
       "de": ["bereich"],
       "it": ["intervallo"],
       "pt": ["intervalo"],
-      "hi": ["परास"],
-      "ar": ["مدى"],
+      "hi": ["परास", "श्रेणी"],
+      "ar": ["مدى", "نطاق"],
       "bn": ["পরিসর"],
       "ta": ["வரம்பு"],
       "zh": ["范围"],
@@ -18,7 +18,7 @@
       "pl": ["zakres"],
       "nl": ["bereik"],
       "sv": ["intervall"],
-      "da": ["interval"],
+      "da": ["interval", "omrade"],
       "fi": ["vali"]
     },
     "len": {
@@ -798,20 +798,20 @@
     "str": {
       "fr": ["chaine", "chaîne"],
       "es": ["cadena"],
-      "de": ["zeichenkette"],
+      "de": ["zeichenkette", "text"],
       "it": ["stringa"],
       "pt": ["cadeia"],
-      "hi": ["तार"],
+      "hi": ["तार", "पाठ"],
       "ar": ["نص"],
       "bn": ["স্ট্রিং"],
       "ta": ["சரம்"],
       "zh": ["字符串"],
       "ja": ["文字列"],
       "pl": ["lancuch"],
-      "nl": ["tekenreeks"],
-      "sv": ["strang"],
-      "da": ["streng"],
-      "fi": ["merkkijono"]
+      "nl": ["tekenreeks", "tekst"],
+      "sv": ["strang", "strack"],
+      "da": ["streng", "tekst"],
+      "fi": ["merkkijono", "mjono"]
     },
     "list": {
       "fr": ["liste"],

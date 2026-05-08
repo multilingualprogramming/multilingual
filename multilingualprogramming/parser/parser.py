@@ -113,6 +113,23 @@ _AI_NATIVE_CONCEPTS = frozenset({
     "PROMPT", "THINK", "GENERATE", "STREAM_KW",
     "EMBED", "EXTRACT", "CLASSIFY", "PLAN", "TRANSCRIBE", "RETRIEVE",
 })
+_AI_NATIVE_IDENTIFIER_CONCEPTS = {
+    "prompt": "PROMPT",
+    "think": "THINK",
+    "generate": "GENERATE",
+    "stream": "STREAM_KW",
+    "embed": "EMBED",
+    "extract": "EXTRACT",
+    "classify": "CLASSIFY",
+    "plan": "PLAN",
+    "transcribe": "TRANSCRIBE",
+    "retrieve": "RETRIEVE",
+}
+_CANONICAL_IDENTIFIER_CONCEPTS = {
+    **_AI_NATIVE_IDENTIFIER_CONCEPTS,
+    "par": "PAR",
+    "spawn": "SPAWN",
+}
 
 # Augmented assignment operators
 _AUGMENTED_OPS = {
@@ -1854,6 +1871,17 @@ class Parser:
 
         # Identifier
         if tok.type == TokenType.IDENTIFIER:
+            fallback_concept = _CANONICAL_IDENTIFIER_CONCEPTS.get(tok.value)
+            if fallback_concept in _AI_NATIVE_CONCEPTS and self._is_native_ai_form():
+                return self._parse_native_ai_expression(
+                    fallback_concept=fallback_concept
+                )
+            if fallback_concept == "PAR" and self._match_next_delimiter("["):
+                tok.concept = "PAR"
+                return self._parse_keyword_atom(tok)
+            if fallback_concept == "SPAWN" and self._has_inline_expression_after_keyword():
+                tok.concept = "SPAWN"
+                return self._parse_keyword_atom(tok)
             self._advance()
             return Identifier(tok.value,
                               line=tok.line, column=tok.column)
@@ -1922,11 +1950,12 @@ class Parser:
         nxt = self.tokens[idx]
         return nxt.type == TokenType.DELIMITER and nxt.value in {"@", ":"}
 
-    def _parse_native_ai_expression(self):
+    def _parse_native_ai_expression(self, fallback_concept=None):
         """Parse native AI syntax such as `prompt @model: template`."""
         tok = self._advance()
+        concept = fallback_concept or tok.concept
         func = Identifier(tok.value, line=tok.line, column=tok.column)
-        if tok.concept == "RETRIEVE":
+        if concept == "RETRIEVE":
             index = self._parse_expression()
             self._expect_delimiter(":")
             query = self._parse_expression()
@@ -1947,7 +1976,7 @@ class Parser:
         node = CallExpr(func, args, line=tok.line, column=tok.column)
         setattr(node, "native_ai_syntax", True)
 
-        if tok.concept in {"GENERATE", "EXTRACT", "CLASSIFY"} and self._match_operator("->"):
+        if concept in {"GENERATE", "EXTRACT", "CLASSIFY"} and self._match_operator("->"):
             self._advance()
             setattr(node, "core_target_type", self._parse_annotation_expression())
 

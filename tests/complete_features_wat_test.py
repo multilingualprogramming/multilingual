@@ -31,6 +31,7 @@ from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
 from multilingualprogramming.source_extensions import iter_source_files
+from tests._test_helpers import register_invariant_ai_provider
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +150,7 @@ class CompleteFeaturesExecutionSuite(unittest.TestCase):
     def test_all_files_execute_without_error(self):
         for lang, code in _load_examples():
             with self.subTest(lang=lang):
+                register_invariant_ai_provider()
                 result = ProgramExecutor(language=lang).execute(code)
                 self.assertTrue(
                     result.success,
@@ -159,6 +161,7 @@ class CompleteFeaturesExecutionSuite(unittest.TestCase):
         """Every complete-features program must print at least one line."""
         for lang, code in _load_examples():
             with self.subTest(lang=lang):
+                register_invariant_ai_provider()
                 result = ProgramExecutor(language=lang).execute(code)
                 self.assertTrue(result.success,
                                 f"[{lang}] Execution failed: {result.errors}")
@@ -171,6 +174,7 @@ class CompleteFeaturesExecutionSuite(unittest.TestCase):
         """The executor must produce a Python transpilation for every file."""
         for lang, code in _load_examples():
             with self.subTest(lang=lang):
+                register_invariant_ai_provider()
                 result = ProgramExecutor(language=lang).execute(code)
                 self.assertTrue(result.success,
                                 f"[{lang}] Execution failed: {result.errors}")
