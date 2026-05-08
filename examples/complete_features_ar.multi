@@ -399,13 +399,13 @@ async دالة مهمة_async_مع():
     محتوى_stream = محتوى_stream + نص(جزء_stream)
 طباعة("بث:", محتوى_stream)
 
-ليكن نتيجة_plan = plan @default: "كيف تخبز كعكة"
+ليكن نتيجة_plan = خطّط @default: "كيف تخبز كعكة"
 طباعة("PLAN:", نتيجة_plan)
 
 ليكن نتيجة_embed = ضمِّن @default: "هذه جملة"
 طباعة("أبعاد ضمِّن:", طول(نتيجة_embed))
 
-ليكن نتيجة_transcribe = transcribe @default: "بيانات_صوتية_وهمية"
+ليكن نتيجة_transcribe = انسخ @default: "بيانات_صوتية_وهمية"
 طباعة("TRANSCRIBE:", نتيجة_transcribe)
 
 # كلمات مفاتيح التزامن (v0.7.0) - متوازٍ، قناة، إطلاق

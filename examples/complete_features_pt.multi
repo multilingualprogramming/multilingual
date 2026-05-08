@@ -399,13 +399,13 @@ para pedaco_fluxo em resultado_fluxo:
     conteudo_fluxo = conteudo_fluxo + cadeia(pedaco_fluxo)
 imprima("TRANSMITIR:", conteudo_fluxo)
 
-seja resultado_planejar = plan @default: "Como fazer um bolo"
+seja resultado_planejar = planejar @default: "Como fazer um bolo"
 imprima("PLAN:", resultado_planejar)
 
 seja resultado_incorporar = incorporar @default: "Esta é uma sentença"
 imprima("Dimensões de INCORPORAR:", comprimento(resultado_incorporar))
 
-seja resultado_transcrever = transcribe @default: "dados_audio_ficticios"
+seja resultado_transcrever = transcrever @default: "dados_audio_ficticios"
 imprima("TRANSCRIBE:", resultado_transcrever)
 
 # Palavras-chave de concorrência (v0.7.0) - PARALELO, CANAL, INICIAR

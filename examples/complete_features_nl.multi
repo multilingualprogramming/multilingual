@@ -399,13 +399,13 @@ voor deel_stroom in uitkomst_stroom:
     inhoud_stroom = inhoud_stroom + tekst(deel_stroom)
 afdrukken("STROOM:", inhoud_stroom)
 
-laat uitkomst_plan = plan @default: "Hoe maak je een taart"
+laat uitkomst_plan = plannen @default: "Hoe maak je een taart"
 afdrukken("PLAN:", uitkomst_plan)
 
 laat uitkomst_inbed = insluiten @default: "Dit is een zin"
 afdrukken("Dimensies van INSLUITEN:", lengte(uitkomst_inbed))
 
-laat uitkomst_transcribeer = transcribe @default: "fictieve_audiogegevens"
+laat uitkomst_transcribeer = transcribeer @default: "fictieve_audiogegevens"
 afdrukken("TRANSCRIBE:", uitkomst_transcribeer)
 
 # Gelijktijdigheidssleutelwoorden (v0.7.0) - PARALLEL, KANAAL, STARTEN

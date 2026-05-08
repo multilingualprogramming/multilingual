@@ -399,13 +399,13 @@ für teil_stroem in ergebnis_stroem:
     inhalt_stroem = inhalt_stroem + text(teil_stroem)
 ausgeben("STREAMEN:", inhalt_stroem)
 
-sei ergebnis_planen = plan @default: "Wie man einen Kuchen backt"
+sei ergebnis_planen = planen @default: "Wie man einen Kuchen backt"
 ausgeben("PLAN:", ergebnis_planen)
 
 sei ergebnis_einbetten = einbetten @default: "Dies ist ein Satz"
 ausgeben("Dimensionen von EINBETTEN:", laenge(ergebnis_einbetten))
 
-sei ergebnis_transkribieren = transcribe @default: "fiktive_audiodaten"
+sei ergebnis_transkribieren = transkribieren @default: "fiktive_audiodaten"
 ausgeben("TRANSCRIBE:", ergebnis_transkribieren)
 
 # Nebenläufigkeitsschlüsselwörter (v0.7.0) - PARALLEL, KANAL, STARTEN

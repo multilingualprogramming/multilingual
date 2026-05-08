@@ -399,13 +399,13 @@ for del_strom i resultat_strom:
     innehall_strom = innehall_strom + strack(del_strom)
 skriv("STROM:", innehall_strom)
 
-lat resultat_planera = plan @default: "Hur man bakar en tårta"
+lat resultat_planera = planera @default: "Hur man bakar en tårta"
 skriv("PLAN:", resultat_planera)
 
 lat resultat_inbadat = badda_in @default: "Det här är en mening"
 skriv("Dimensioner för BADDA_IN:", langd(resultat_inbadat))
 
-lat resultat_transkribera = transcribe @default: "fiktiva_ljuddata"
+lat resultat_transkribera = transkribera @default: "fiktiva_ljuddata"
 skriv("TRANSCRIBE:", resultat_transkribera)
 
 # Concurrency-nyckelord (v0.7.0) - PARALLELLT, KANAL, STARTA

@@ -399,13 +399,13 @@ pour morceau_diffuse dans resultat_diffuser:
     contenu_diffuse = contenu_diffuse + chaine(morceau_diffuse)
 afficher("DIFFUSER:", contenu_diffuse)
 
-soit resultat_planifier = plan @default: "Comment faire un gâteau"
+soit resultat_planifier = planifier @default: "Comment faire un gâteau"
 afficher("PLAN:", resultat_planifier)
 
 soit resultat_incorporer = incorporer @default: "Ceci est une phrase"
 afficher("Dimensions de INCORPORER:", longueur(resultat_incorporer))
 
-soit resultat_transcrire = transcribe @default: "donnees_audio_fictive"
+soit resultat_transcrire = transcrire @default: "donnees_audio_fictive"
 afficher("TRANSCRIBE:", resultat_transcrire)
 
 # Mots-clés de concurrence (v0.7.0) - PARALLÈLE, CANAL, LANCER

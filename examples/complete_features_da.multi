@@ -399,13 +399,13 @@ for del_stroemm i resultat_stroemm:
     indhold_stroemm = indhold_stroemm + tekst(del_stroemm)
 skriv("STROM:", indhold_stroemm)
 
-lad resultat_planlaeg = plan @default: "Hvordan man bager en kage"
+lad resultat_planlaeg = planl?g @default: "Hvordan man bager en kage"
 skriv("PLAN:", resultat_planlaeg)
 
 lad resultat_indfoejet = indsaet @default: "Dette er en saetning"
 skriv("Dimensioner for INDSAET:", laengde(resultat_indfoejet))
 
-lad resultat_transkriber = transcribe @default: "fiktive_lyddata"
+lad resultat_transkriber = transskriber @default: "fiktive_lyddata"
 skriv("TRANSCRIBE:", resultat_transkriber)
 
 # Concurrency-nøgleord (v0.7.0) - PARALLELT, KANAL, START

@@ -399,13 +399,13 @@ jokaiselle pala_virta sisalla tulos_virta:
     sisalto_virta = sisalto_virta + mjono(pala_virta)
 tulosta("VIRTA:", sisalto_virta)
 
-olkoon tulos_suunnittele = plan @default: "Kuinka tehdä kakku"
+olkoon tulos_suunnittele = suunnittele @default: "Kuinka tehdä kakku"
 tulosta("PLAN:", tulos_suunnittele)
 
 olkoon tulos_upoita = upota @default: "Tämä on lause"
 tulosta("UPOTA-dimension:", pituus(tulos_upoita))
 
-olkoon tulos_puhu = transcribe @default: "fiktiiviset_audiodatat"
+olkoon tulos_puhu = litteroi @default: "fiktiiviset_audiodatat"
 tulosta("TRANSCRIBE:", tulos_puhu)
 
 # Samanaikaisuusavainsanat (v0.7.0) - RINNAKKAIN, KANAVA, KÄYNNISTÄ

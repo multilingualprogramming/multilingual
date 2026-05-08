@@ -399,13 +399,13 @@ para fragmento_transmitido en resultado_transmitir:
     contenido_transmitido = contenido_transmitido + cadena(fragmento_transmitido)
 imprimir("TRANSMITIR:", contenido_transmitido)
 
-sea resultado_planificar = plan @default: "Cómo hacer un pastel"
+sea resultado_planificar = planificar @default: "Cómo hacer un pastel"
 imprimir("PLAN:", resultado_planificar)
 
 sea resultado_incrustar = incrustar @default: "Esta es una oración"
 imprimir("Dimensiones de INCRUSTAR:", longitud(resultado_incrustar))
 
-sea resultado_transcribir = transcribe @default: "datos_audio_ficticios"
+sea resultado_transcribir = transcribir @default: "datos_audio_ficticios"
 imprimir("TRANSCRIBE:", resultado_transcribir)
 
 # Palabras clave de concurrencia (v0.7.0) - PARALELO, CANAL, LANZAR

@@ -399,13 +399,13 @@ dla czesc_przeplyw w wynik_przeplyw:
     zawartosc_przeplyw = zawartosc_przeplyw + lancuch(czesc_przeplyw)
 drukuj("PRZEPŁYW:", zawartosc_przeplyw)
 
-niech wynik_plan = plan @default: "Jak upiąć ciasto"
+niech wynik_plan = planuj @default: "Jak upiąć ciasto"
 drukuj("PLAN:", wynik_plan)
 
 niech wynik_osadz = embed @default: "To jest zdanie"
 drukuj("Wymiary OSADŹ:", dlugosc(wynik_osadz))
 
-niech wynik_transkryb = transcribe @default: "fiktywne_dane_audio"
+niech wynik_transkryb = transkrybuj @default: "fiktywne_dane_audio"
 drukuj("TRANSKRYB:", wynik_transkryb)
 
 # Słowa kluczowe współbieżności (v0.7.0) - PAR, KANAŁ, SPAWN

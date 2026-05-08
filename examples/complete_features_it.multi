@@ -399,13 +399,13 @@ per pezzo_flusso in risultato_flusso:
     contenuto_flusso = contenuto_flusso + stringa(pezzo_flusso)
 stampa("TRASMETTI:", contenuto_flusso)
 
-sia risultato_pianificare = plan @default: "Come fare una torta"
+sia risultato_pianificare = pianifica @default: "Come fare una torta"
 stampa("PLAN:", risultato_pianificare)
 
 sia risultato_incorporare = incorpora @default: "Questa è una frase"
 stampa("Dimensioni di INCORPORA:", lunghezza(risultato_incorporare))
 
-sia risultato_trascrivere = transcribe @default: "dati_audio_fittizi"
+sia risultato_trascrivere = trascrivi @default: "dati_audio_fittizi"
 stampa("TRANSCRIBE:", risultato_trascrivere)
 
 # Parole chiave di concorrenza (v0.7.0) - PARALLELO, CANALE, AVVIARE
