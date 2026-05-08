@@ -855,18 +855,13 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
     # ------------------------------------------------------------------
 
     def _emit_IRParExpr(self, node):
-        """par [ b1, b2, ... ] → await asyncio.gather(b1, b2, ...)
+        """par [ b1, b2, ... ] → _ml_par_gather(b1, b2, ...)
 
         Emitted as a statement (expression result discarded).  Use
         _render_IRParExpr when the result is needed as a value.
         """
-        self._ensure_asyncio()
         branches = ", ".join(self._expr_ir(b) for b in node.branches)
-        if self._async_function_depth > 0:
-            self._emit(f"await asyncio.gather({branches})")
-        else:
-            self._ensure_async_bridge()
-            self._emit(f"_ml_await(asyncio.gather({branches}))")
+        self._emit(f"_ml_par_gather({branches})")
 
     def _emit_IRSpawnExpr(self, node):
         """spawn expr → asyncio.create_task(expr)
@@ -1840,11 +1835,9 @@ class _IRExpressionGenerator:
         return f"semantic_match({', '.join(args)})"
 
     def _render_IRParExpr(self, node):
-        """par [ b1, b2 ] as an expression → await asyncio.gather(b1, b2)"""
+        """par [ b1, b2 ] as an expression → _ml_par_gather(b1, b2)"""
         branches = ", ".join(self.render(b) for b in node.branches)
-        if self.async_context:
-            return f"await asyncio.gather({branches})"
-        return f"_ml_await(asyncio.gather({branches}))"
+        return f"_ml_par_gather({branches})"
 
     def _render_IRSpawnExpr(self, node):
         """spawn expr as an expression → asyncio.create_task(expr)"""

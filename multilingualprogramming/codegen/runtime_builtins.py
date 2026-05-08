@@ -153,6 +153,40 @@ def _delegate(agent_func, *args, **kwargs):
     return agent_func(*args, **kwargs)
 
 
+def _ml_par_gather(*values):
+    """Gather multiple values, handling both async and sync results.
+
+    Executes all expressions in parallel (when possible) and returns results as tuple.
+    For synchronous functions, this executes them in order and collects results.
+    For coroutines, uses asyncio.gather() to run them concurrently.
+    """
+    import asyncio
+    import inspect
+
+    # If all values are non-awaitable, just return them as-is (sequential execution)
+    if all(not (inspect.iscoroutine(v) or inspect.isawaitable(v)) for v in values):
+        return tuple(values)
+
+    # If any values are coroutines, wrap all in coroutines for gather()
+    async def _gather():
+        async def _wrap(val):
+            if inspect.iscoroutine(val) or inspect.isawaitable(val):
+                return await val
+            return val
+
+        tasks = [_wrap(v) for v in values]
+        return await asyncio.gather(*tasks)
+
+    # Run the async gather
+    try:
+        loop = asyncio.get_running_loop()
+        # Already in async context - return the coroutine to be awaited
+        return _gather()
+    except RuntimeError:
+        # Not in async context - run the event loop
+        return asyncio.run(_gather())
+
+
 class RuntimeBuiltins:
     """
     Builds a dict of built-in names that should be available at runtime.
@@ -390,6 +424,7 @@ class RuntimeBuiltins:
         "get_tool_registry": get_registry,
         "memory": ml_memory,
         "memoire": ml_memory,
+        "_ml_par_gather": _ml_par_gather,
     }
 
     # Non-callable special values available in exec() namespace

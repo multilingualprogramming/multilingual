@@ -1,0 +1,52 @@
+# Testing par[...] parallel execution without AI models
+# Goal: Verify par[...] syntax works with simple operations
+
+# Simple pure functions for parallel testing
+fn add_numbers(a: int, b: int) -> int:
+    return a + b
+
+fn multiply_numbers(a: int, b: int) -> int:
+    return a * b
+
+fn string_concat(s1: str, s2: str) -> str:
+    return s1 + s2
+
+fn main():
+    print("━━━ Testing Parallel Execution (par syntax) ━━━")
+
+    # Test 1: Simple parallel function calls
+    print("\n→ Test 1: Parallel arithmetic operations...")
+    let sum, product = par [
+        add_numbers(5, 3),
+        multiply_numbers(5, 3)
+    ]
+    print("✓ Results: sum=" + str(sum) + ", product=" + str(product))
+
+    # Test 2: Three parallel operations
+    print("\n→ Test 2: Three parallel operations...")
+    let result1, result2, result3 = par [
+        add_numbers(10, 20),
+        multiply_numbers(4, 5),
+        string_concat("Hello ", "World")
+    ]
+    print("✓ Results:")
+    print("  - Addition: " + str(result1))
+    print("  - Multiplication: " + str(result2))
+    print("  - String concat: " + result3)
+
+    # Test 3: Nested parallel calls
+    print("\n→ Test 3: Sequential then parallel...")
+    let a = add_numbers(2, 3)
+    print("  Sequential result: " + str(a))
+
+    let x1, x2 = par [
+        multiply_numbers(a, 4),
+        string_concat("Result is ", str(a))
+    ]
+    print("✓ Parallel on sequential result:")
+    print("  - Multiply: " + str(x1))
+    print("  - Concat: " + x2)
+
+    print("\n━━━ All par[...] Tests Complete ━━━")
+
+main()

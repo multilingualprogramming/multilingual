@@ -58,16 +58,18 @@ fn traced_inference(query: str) -> str uses ai:
     print("Local inference cost (estimated tokens):", spend)
     return result
 
-# ── Multi-model analysis: sequential processing with caching
+# ── Multi-model analysis: parallel execution with local models
 fn edge_analytics_team(input_data: str) -> str uses ai:
     let cache = memory("team_results", scope="session")
 
     if input_data in cache:
         return cache[input_data]
 
-    let analysis = prompt @llama3: "Analyze this data:\n" + input_data
-    let classification = classify @llama3: input_data
-    let summary = prompt @llama3: "Summarize in one sentence:\n" + input_data
+    let analysis, classification, summary = par [
+        prompt @llama3: "Analyze this data:\n" + input_data,
+        classify @llama3: input_data,
+        prompt @llama3: "Summarize in one sentence:\n" + input_data
+    ]
 
     let final = prompt @llama3:
         "Combine these results:\n"
