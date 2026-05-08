@@ -376,3 +376,85 @@ tulosta(elem_monikko_fi, iter_summa)
 tulosta(kaksinkertaistettu)
 tulosta(result_mjono_m, result_ei_mitaan, result_num_m, result_monikko_m)
 tulosta(tulos_async, tulos_async_jokaiselle, tulos_async_kanssa)
+
+# Tekoäly-avainsanat (v0.7.0) - toimii MockProviderin kanssa testeissä
+olkoon tulos_kysymys = prompt @default: "Mikä on 2 + 2?"
+tulosta("KYSYMYS:", tulos_kysymys)
+
+olkoon tulos_tuota = generate @default: "Luo yksinkertainen JSON-objekti"
+tulosta("TUOTA:", tulos_tuota)
+
+olkoon tulos_poimi = extract @default: "Poimi elementit: omena, banaani, appelsiini"
+tulosta("POIMI:", tulos_poimi)
+
+olkoon tulos_luokittele = classify @default: "Tämä on loistavaa!"
+tulosta("LUOKITTELE:", tulos_luokittele)
+
+olkoon tulos_ajattele = think @default: "Miksi 42 on merkityksellinen?"
+tulosta("AJATTELE:", tulos_ajattele)
+
+olkoon tulos_virta = stream @default: "Kerro lyhyt tarina"
+olkoon sisalto_virta = ""
+jokaiselle pala_virta sisalla tulos_virta:
+    sisalto_virta = sisalto_virta + mjono(pala_virta)
+tulosta("VIRTA:", sisalto_virta)
+
+olkoon tulos_suunnittele = plan @default: "Kuinka tehdä kakku"
+tulosta("SUUNNITTELE:", tulos_suunnittele)
+
+olkoon tulos_upoita = embed @default: "Tämä on lause"
+tulosta("UPOITA-dimension:", pituus(tulos_upoita))
+
+olkoon tulos_puhu = transcribe @default: "fiktiiviset_audiodatat"
+tulosta("PUHU:", tulos_puhu)
+
+# Samanaikaisuusavainsanat (v0.7.0) - PAR, KANAVA, SPAWN
+maarittele laskea_luvut(x, y):
+    palauta x + y
+
+maarittele kertoa_luvut(x, y):
+    palauta x * y
+
+olkoon par_a, par_b = par [
+    laskea_luvut(5, 3),
+    kertoa_luvut(4, 2)
+]
+tulosta("PAR-tulokset:", par_a, par_b)
+
+# Sisakkäinen PAR
+olkoon tulos_par_sisakkainen = par [
+    par [1, 2, 3],
+    par [4, 5, 6]
+]
+tulosta("Sisäkkäinen PAR:", tulos_par_sisakkainen)
+
+# Kanava tehtävien väliseen viestintään
+olkoon kanava_viesti = channel()
+tulosta("Kanava luotu onnistuneesti")
+
+olkoon kanava_rajattu = channel(capacity=10)
+tulosta("Rajattu kanava luotu")
+
+# Useita tekoäly-puheluita peräkkäin
+olkoon seq_1 = prompt @default: "Kysymys 1"
+olkoon seq_2 = prompt @default: "Kysymys 2"
+olkoon seq_3 = prompt @default: "Kysymys 3"
+tulosta("Peräkkäiset tekoäly-puhelut:", seq_1, seq_2, seq_3)
+
+# Tekoäly-avainsanat muuttujien kanssa
+olkoon kysymys_ai = "Mikä on Python?"
+olkoon vastaus_ai = prompt @default: kysymys_ai
+tulosta("Tekoäly muuttujien kanssa:", vastaus_ai)
+
+# Tekoäly silmukoissa
+olkoon tulokset_silmukka_ai = []
+jokaiselle indeksi_ai sisalla vali(2):
+    olkoon vastaus_silmukka = prompt @default: f"Iteraatio {indeksi_ai}"
+    tulokset_silmukka_ai.append(vastaus_silmukka)
+tulosta("Tekoäly silmukoissa:", pituus(tulokset_silmukka_ai), "vastauksia")
+
+# Multimodaalinen käsittely (paikanpitäjät)
+olkoon tulos_multimodaali = prompt @default: "Kuvaile tämä: <kuva>"
+tulosta("Multimodaalinen kysymys:", tulos_multimodaali)
+
+tulosta("Kaikki tekoäly- ja samanaikaisuusominaisuudet esitelty")

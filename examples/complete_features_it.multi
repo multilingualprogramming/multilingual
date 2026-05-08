@@ -376,3 +376,85 @@ stampa(elem_tupla_it, somma_iter)
 stampa(lista_doppia)
 stampa(result_stringa_m, result_nessuno, result_num_m, result_tupla_m)
 stampa(risultato_async, risultato_async_per, risultato_async_con)
+
+# Parole chiave IA (v0.7.0) - funziona con MockProvider nei test
+sia risultato_domanda = prompt @default: "Quanto fa 2 + 2?"
+stampa("DOMANDA:", risultato_domanda)
+
+sia risultato_generare = generate @default: "Crea un oggetto JSON semplice"
+stampa("GENERARE:", risultato_generare)
+
+sia risultato_estrarre = extract @default: "Estrai elementi da: mela, banana, arancia"
+stampa("ESTRARRE:", risultato_estrarre)
+
+sia risultato_classificare = classify @default: "Questo è fantastico!"
+stampa("CLASSIFICARE:", risultato_classificare)
+
+sia risultato_pensare = think @default: "Perché è significativo 42?"
+stampa("PENSARE:", risultato_pensare)
+
+sia risultato_flusso = stream @default: "Racconta una breve storia"
+sia contenuto_flusso = ""
+per pezzo_flusso in risultato_flusso:
+    contenuto_flusso = contenuto_flusso + stringa(pezzo_flusso)
+stampa("FLUSSO:", contenuto_flusso)
+
+sia risultato_pianificare = plan @default: "Come fare una torta"
+stampa("PIANIFICARE:", risultato_pianificare)
+
+sia risultato_incorporare = embed @default: "Questa è una frase"
+stampa("Dimensioni di INCORPORARE:", lunghezza(risultato_incorporare))
+
+sia risultato_trascrivere = transcribe @default: "dati_audio_fittizi"
+stampa("TRASCRIVERE:", risultato_trascrivere)
+
+# Parole chiave di concorrenza (v0.7.0) - PAR, CANALE, SPAWN
+definisci aggiungi_numeri(x, y):
+    ritorna x + y
+
+definisci moltiplica_numeri(x, y):
+    ritorna x * y
+
+sia par_a, par_b = par [
+    aggiungi_numeri(5, 3),
+    moltiplica_numeri(4, 2)
+]
+stampa("Risultati PAR:", par_a, par_b)
+
+# PAR annidato
+sia risultato_par_annidato = par [
+    par [1, 2, 3],
+    par [4, 5, 6]
+]
+stampa("PAR annidato:", risultato_par_annidato)
+
+# Canale per comunicazione tra attività
+sia canale_comunicazione = channel()
+stampa("Canale creato con successo")
+
+sia canale_limitato = channel(capacity=10)
+stampa("Canale limitato creato")
+
+# Molteplici chiamate IA in sequenza
+sia seq_1 = prompt @default: "Domanda 1"
+sia seq_2 = prompt @default: "Domanda 2"
+sia seq_3 = prompt @default: "Domanda 3"
+stampa("Chiamate IA sequenziali:", seq_1, seq_2, seq_3)
+
+# Parole chiave IA con variabili
+sia domanda_ia = "Cos'è Python?"
+sia risposta_ia = prompt @default: domanda_ia
+stampa("IA con variabili:", risposta_ia)
+
+# IA nei cicli
+sia risultati_ciclo_ia = []
+per indice_ia in intervallo(2):
+    sia risposta_ciclo = prompt @default: f"Iterazione {indice_ia}"
+    risultati_ciclo_ia.append(risposta_ciclo)
+stampa("IA nei cicli:", lunghezza(risultati_ciclo_ia), "risposte")
+
+# Gestione multimodale (placeholder)
+sia risultato_multimodale = prompt @default: "Descrivi questo: <immagine>"
+stampa("Domanda multimodale:", risultato_multimodale)
+
+stampa("Tutte le funzionalità di IA e concorrenza dimostrate")

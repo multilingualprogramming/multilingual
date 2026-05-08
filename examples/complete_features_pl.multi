@@ -376,3 +376,85 @@ drukuj(elem_krotka_pl, suma_iter)
 drukuj(lista_podwoj)
 drukuj(result_lancuch_m, result_brak, result_num_m, result_krotka_m)
 drukuj(wynik_async, wynik_async_dla, wynik_async_z)
+
+# Słowa kluczowe sztucznej inteligencji (v0.7.0) - pracuje z MockProvider w testach
+niech wynik_pytanie = prompt @default: "Ile to 2 + 2?"
+drukuj("PYTANIE:", wynik_pytanie)
+
+niech wynik_generuj = generate @default: "Utwórz prosty obiekt JSON"
+drukuj("GENERUJ:", wynik_generuj)
+
+niech wynik_wydobywaj = extract @default: "Wydobądź elementy z: jabłko, banan, pomarańcza"
+drukuj("WYDOBYWAJ:", wynik_wydobywaj)
+
+niech wynik_klasyfikuj = classify @default: "To jest niesamowite!"
+drukuj("KLASYFIKUJ:", wynik_klasyfikuj)
+
+niech wynik_mysl = think @default: "Dlaczego liczba 42 jest znacząca?"
+drukuj("MYŚL:", wynik_mysl)
+
+niech wynik_przeplyw = stream @default: "Opowiedz krótką historię"
+niech zawartosc_przeplyw = ""
+dla czesc_przeplyw w wynik_przeplyw:
+    zawartosc_przeplyw = zawartosc_przeplyw + lancuch(czesc_przeplyw)
+drukuj("PRZEPŁYW:", zawartosc_przeplyw)
+
+niech wynik_plan = plan @default: "Jak upiąć ciasto"
+drukuj("PLAN:", wynik_plan)
+
+niech wynik_osadz = embed @default: "To jest zdanie"
+drukuj("Wymiary OSADŹ:", dlugosc(wynik_osadz))
+
+niech wynik_transkryb = transcribe @default: "fiktywne_dane_audio"
+drukuj("TRANSKRYB:", wynik_transkryb)
+
+# Słowa kluczowe współbieżności (v0.7.0) - PAR, KANAŁ, SPAWN
+funkcja dodaj_liczby(x, y):
+    zwroc_wartosc x + y
+
+funkcja pomnoz_liczby(x, y):
+    zwroc_wartosc x * y
+
+niech par_a, par_b = par [
+    dodaj_liczby(5, 3),
+    pomnoz_liczby(4, 2)
+]
+drukuj("Wyniki PAR:", par_a, par_b)
+
+# Zagnieżdżony PAR
+niech wynik_par_zagn = par [
+    par [1, 2, 3],
+    par [4, 5, 6]
+]
+drukuj("Zagnieżdżony PAR:", wynik_par_zagn)
+
+# Kanał do komunikacji między zadaniami
+niech kanal_kom = channel()
+drukuj("Kanał utworzony pomyślnie")
+
+niech kanal_ograniczony = channel(capacity=10)
+drukuj("Kanał ograniczony utworzony")
+
+# Wielokrotne wywołania sztucznej inteligencji w sekwencji
+niech seq_1 = prompt @default: "Pytanie 1"
+niech seq_2 = prompt @default: "Pytanie 2"
+niech seq_3 = prompt @default: "Pytanie 3"
+drukuj("Sekwencyjne wywołania sztucznej inteligencji:", seq_1, seq_2, seq_3)
+
+# Słowa kluczowe sztucznej inteligencji ze zmiennymi
+niech pytanie_ai = "Co to jest Python?"
+niech odpowiedz_ai = prompt @default: pytanie_ai
+drukuj("Sztuczna inteligencja ze zmiennymi:", odpowiedz_ai)
+
+# Sztuczna inteligencja w pętlach
+niech wyniki_petla_ai = []
+dla indeks_ai w zakres(2):
+    niech odpowiedz_petla = prompt @default: f"Iteracja {indeks_ai}"
+    wyniki_petla_ai.append(odpowiedz_petla)
+drukuj("Sztuczna inteligencja w pętlach:", dlugosc(wyniki_petla_ai), "odpowiedzi")
+
+# Obsługa multimodalna (symbole zastępcze)
+niech wynik_multimodalny = prompt @default: "Opisz to: <obraz>"
+drukuj("Pytanie multimodalne:", wynik_multimodalny)
+
+drukuj("Wszystkie funkcje sztucznej inteligencji i współbieżności zademonstrowane")

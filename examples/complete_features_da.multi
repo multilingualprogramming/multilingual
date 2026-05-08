@@ -376,3 +376,85 @@ skriv(elem_tupel_da, iter_sum)
 skriv(dobbelt_liste)
 skriv(result_streng_m, result_ingen, result_num_m, result_tupel_m)
 skriv(resultat_async, resultat_async_for, resultat_async_med)
+
+# AI-nøgleord (v0.7.0) - fungerer med MockProvider i tests
+lad resultat_sporgsmal = prompt @default: "Hvad er 2 + 2?"
+skriv("SPØRGSMÅL:", resultat_sporgsmal)
+
+lad resultat_generer = generate @default: "Opret et enkelt JSON-objekt"
+skriv("GENERER:", resultat_generer)
+
+lad resultat_udtraek = extract @default: "Udtraek elementer fra: aebel, banan, appelsin"
+skriv("UDTRAEK:", resultat_udtraek)
+
+lad resultat_klassificer = classify @default: "Dette er fantastisk!"
+skriv("KLASSIFICER:", resultat_klassificer)
+
+lad resultat_taenk = think @default: "Hvorfor er 42 signifikant?"
+skriv("TAENK:", resultat_taenk)
+
+lad resultat_stroemm = stream @default: "Fortael en kort historie"
+lad indhold_stroemm = ""
+for del_stroemm i resultat_stroemm:
+    indhold_stroemm = indhold_stroemm + tekst(del_stroemm)
+skriv("STROEMM:", indhold_stroemm)
+
+lad resultat_planlaeg = plan @default: "Hvordan man bager en kage"
+skriv("PLANLAEG:", resultat_planlaeg)
+
+lad resultat_indfoejet = embed @default: "Dette er en saetning"
+skriv("Dimensioner for INDFOEJ:", laengde(resultat_indfoejet))
+
+lad resultat_transkriber = transcribe @default: "fiktive_lyddata"
+skriv("TRANSKRIBER:", resultat_transkriber)
+
+# Concurrency-nøgleord (v0.7.0) - PAR, KANAL, SPAWN
+definer tilfoej_tal(x, y):
+    returner x + y
+
+definer ganges_tal(x, y):
+    returner x * y
+
+lad par_a, par_b = par [
+    tilfoej_tal(5, 3),
+    ganges_tal(4, 2)
+]
+skriv("PAR-resultater:", par_a, par_b)
+
+# Indlejret PAR
+lad resultat_par_indlejret = par [
+    par [1, 2, 3],
+    par [4, 5, 6]
+]
+skriv("Indlejret PAR:", resultat_par_indlejret)
+
+# Kanal til kommunikation mellem opgaver
+lad kanal_komm = channel()
+skriv("Kanal oprettet med succes")
+
+lad kanal_begransed = channel(capacity=10)
+skriv("Begrænset kanal oprettet")
+
+# Flere AI-kald i sekvens
+lad seq_1 = prompt @default: "Spoergsmal 1"
+lad seq_2 = prompt @default: "Spoergsmal 2"
+lad seq_3 = prompt @default: "Spoergsmal 3"
+skriv("Sekventielle AI-kald:", seq_1, seq_2, seq_3)
+
+# AI-nøgleord med variabler
+lad sporgsmal_ai = "Hvad er Python?"
+lad svar_ai = prompt @default: sporgsmal_ai
+skriv("AI med variabler:", svar_ai)
+
+# AI i loops
+lad resultater_loop_ai = []
+for indeks_ai i omrade(2):
+    lad svar_loop = prompt @default: f"Iteration {indeks_ai}"
+    resultater_loop_ai.append(svar_loop)
+skriv("AI i loops:", laengde(resultater_loop_ai), "svar")
+
+# Multimodal håndtering (pladsholdere)
+lad resultat_multimodal = prompt @default: "Beskriv dette: <billede>"
+skriv("Multimodalt spørgsmål:", resultat_multimodal)
+
+skriv("Alle AI- og concurrency-funktioner demonstreret")

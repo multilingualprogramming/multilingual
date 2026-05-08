@@ -376,3 +376,85 @@ print(tup_elem, iter_sum)
 print(doubled_list)
 print(msr, mnr, mcr, mtr)
 print(async_result, async_for_result, async_with_result)
+
+# AI Keywords (v0.7.0) - works with MockProvider in tests
+let ai_prompt_result = prompt @default: "What is 2 + 2?"
+print("PROMPT:", ai_prompt_result)
+
+let ai_generate_result = generate @default: "Create a simple JSON object"
+print("GENERATE:", ai_generate_result)
+
+let ai_extract_result = extract @default: "Extract items from: apple, banana, orange"
+print("EXTRACT:", ai_extract_result)
+
+let ai_classify_result = classify @default: "This is amazing!"
+print("CLASSIFY:", ai_classify_result)
+
+let ai_think_result = think @default: "Why is 42 significant?"
+print("THINK:", ai_think_result)
+
+let ai_stream_result = stream @default: "Tell a short story"
+let ai_stream_full = ""
+for ai_chunk in ai_stream_result:
+    ai_stream_full = ai_stream_full + str(ai_chunk)
+print("STREAM:", ai_stream_full)
+
+let ai_plan_result = plan @default: "How to bake a cake"
+print("PLAN:", ai_plan_result)
+
+let ai_embed_result = embed @default: "This is a sentence"
+print("EMBED vector dimensions:", len(ai_embed_result))
+
+let ai_transcribe_result = transcribe @default: "mock_audio_data"
+print("TRANSCRIBE:", ai_transcribe_result)
+
+# Concurrency Keywords (v0.7.0) - PAR, CHANNEL, SPAWN
+def add_numbers(x, y):
+    return x + y
+
+def multiply_numbers(x, y):
+    return x * y
+
+let par_a, par_b = par [
+    add_numbers(5, 3),
+    multiply_numbers(4, 2)
+]
+print("PAR results:", par_a, par_b)
+
+# Nested PAR
+let nested_par_result = par [
+    par [1, 2, 3],
+    par [4, 5, 6]
+]
+print("Nested PAR:", nested_par_result)
+
+# Channel for inter-task communication
+let comm_channel = channel()
+print("Channel created successfully")
+
+let bounded_channel = channel(capacity=10)
+print("Bounded channel created")
+
+# Multiple AI calls in sequence
+let seq_1 = prompt @default: "Question 1"
+let seq_2 = prompt @default: "Question 2"
+let seq_3 = prompt @default: "Question 3"
+print("Sequential AI calls:", seq_1, seq_2, seq_3)
+
+# AI keywords with variables
+let ai_question = "What is Python?"
+let ai_answer = prompt @default: ai_question
+print("AI with variables:", ai_answer)
+
+# AI in loops
+let ai_loop_results = []
+for ai_i in range(2):
+    let ai_loop_resp = prompt @default: f"Iteration {ai_i}"
+    ai_loop_results.append(ai_loop_resp)
+print("AI in loops:", len(ai_loop_results), "responses")
+
+# Multimodal-style handling (placeholders)
+let multimodal_prompt_result = prompt @default: "Describe this: <image>"
+print("Multimodal prompt:", multimodal_prompt_result)
+
+print("All AI and concurrency features demonstrated")

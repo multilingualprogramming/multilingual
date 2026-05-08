@@ -376,3 +376,85 @@ async 函数 异步使用任务():
 打印(双倍列表)
 打印(字符串结果, 空结果, 数字结果, 元组结果)
 打印(异步结果, 异步循环结果, 异步使用结果)
+
+# 人工智能关键字 (v0.7.0) - 在测试中与 MockProvider 配合工作
+令 提示结果 = prompt @default: "2 + 2 等于多少？"
+打印("PROMPT:", 提示结果)
+
+令 生成结果 = generate @default: "创建一个简单的 JSON 对象"
+打印("GENERATE:", 生成结果)
+
+令 提取结果 = extract @default: "提取元素：苹果、香蕉、橙子"
+打印("EXTRACT:", 提取结果)
+
+令 分类结果 = classify @default: "这太棒了！"
+打印("CLASSIFY:", 分类结果)
+
+令 思考结果 = think @default: "为什么 42 很重要？"
+打印("THINK:", 思考结果)
+
+令 流结果 = stream @default: "讲一个短故事"
+令 流内容 = ""
+对于 流块 里 流结果:
+    流内容 = 流内容 + 字符串(流块)
+打印("STREAM:", 流内容)
+
+令 计划结果 = plan @default: "如何烤蛋糕"
+打印("PLAN:", 计划结果)
+
+令 嵌入结果 = embed @default: "这是一个句子"
+打印("EMBED 维度:", 长度(嵌入结果))
+
+令 转录结果 = transcribe @default: "虚构的音频数据"
+打印("TRANSCRIBE:", 转录结果)
+
+# 并发关键字 (v0.7.0) - PAR、CHANNEL、SPAWN
+函数 添加数字(x, y):
+    返回 x + y
+
+函数 乘以数字(x, y):
+    返回 x * y
+
+令 par_a, par_b = par [
+    添加数字(5, 3),
+    乘以数字(4, 2)
+]
+打印("PAR 结果:", par_a, par_b)
+
+# 嵌套的 PAR
+令 嵌套_par结果 = par [
+    par [1, 2, 3],
+    par [4, 5, 6]
+]
+打印("嵌套的 PAR:", 嵌套_par结果)
+
+# 用于任务间通信的通道
+令 通信通道 = channel()
+打印("通道已成功创建")
+
+令 受限通道 = channel(capacity=10)
+打印("已创建受限通道")
+
+# 按顺序的多个 AI 调用
+令 seq_1 = prompt @default: "问题 1"
+令 seq_2 = prompt @default: "问题 2"
+令 seq_3 = prompt @default: "问题 3"
+打印("按顺序的 AI 调用:", seq_1, seq_2, seq_3)
+
+# 带变量的人工智能关键字
+令 问题_ai = "Python 是什么？"
+令 答案_ai = prompt @default: 问题_ai
+打印("带变量的 AI:", 答案_ai)
+
+# 循环中的 AI
+令 循环_ai结果 = []
+对于 索引_ai 里 范围(2):
+    令 循环答案 = prompt @default: f"迭代 {索引_ai}"
+    循环_ai结果.append(循环答案)
+打印("循环中的 AI:", 长度(循环_ai结果), "答案")
+
+# 多模态处理（占位符）
+令 多模态结果 = prompt @default: "描述这个：<图像>"
+打印("多模态问题:", 多模态结果)
+
+打印("已演示所有 AI 和并发功能")

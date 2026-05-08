@@ -376,3 +376,85 @@ afdrukken(elem_tupel_nl, iter_som)
 afdrukken(dubbele_lijst)
 afdrukken(result_tekstr_m, result_geen, result_num_m, result_tupel_m)
 afdrukken(uitkomst_async, uitkomst_async_voor, uitkomst_async_met)
+
+# AI-sleutelwoorden (v0.7.0) - werkt met MockProvider in tests
+laat uitkomst_vraag = prompt @default: "Wat is 2 + 2?"
+afdrukken("VRAAG:", uitkomst_vraag)
+
+laat uitkomst_genereer = generate @default: "Creëer een eenvoudig JSON-object"
+afdrukken("GENEREER:", uitkomst_genereer)
+
+laat uitkomst_extraheer = extract @default: "Extraheer elementen uit: appel, banaan, sinaasappel"
+afdrukken("EXTRAHEER:", uitkomst_extraheer)
+
+laat uitkomst_klassificeer = classify @default: "Dit is geweldig!"
+afdrukken("KLASSIFICEER:", uitkomst_klassificeer)
+
+laat uitkomst_denk = think @default: "Waarom is 42 significant?"
+afdrukken("DENK:", uitkomst_denk)
+
+laat uitkomst_stroom = stream @default: "Vertel een kort verhaal"
+laat inhoud_stroom = ""
+voor deel_stroom in uitkomst_stroom:
+    inhoud_stroom = inhoud_stroom + tekst(deel_stroom)
+afdrukken("STROOM:", inhoud_stroom)
+
+laat uitkomst_plan = plan @default: "Hoe maak je een taart"
+afdrukken("PLAN:", uitkomst_plan)
+
+laat uitkomst_inbed = embed @default: "Dit is een zin"
+afdrukken("Dimensies van INBED:", lengte(uitkomst_inbed))
+
+laat uitkomst_transcribeer = transcribe @default: "fictieve_audiogegevens"
+afdrukken("TRANSCRIBEER:", uitkomst_transcribeer)
+
+# Gelijktijdigheidssleutelwoorden (v0.7.0) - PAR, KANAAL, SPAWN
+definieer voeg_getallen_toe(x, y):
+    retourneer x + y
+
+definieer vermenigvuldig_getallen(x, y):
+    retourneer x * y
+
+laat par_a, par_b = par [
+    voeg_getallen_toe(5, 3),
+    vermenigvuldig_getallen(4, 2)
+]
+afdrukken("PAR-resultaten:", par_a, par_b)
+
+# Geneste PAR
+laat uitkomst_par_genest = par [
+    par [1, 2, 3],
+    par [4, 5, 6]
+]
+afdrukken("Geneste PAR:", uitkomst_par_genest)
+
+# Kanaal voor communicatie tussen taken
+laat kanaal_comm = channel()
+afdrukken("Kanaal succesvol aangemaakt")
+
+laat kanaal_beperkt = channel(capacity=10)
+afdrukken("Beperkt kanaal aangemaakt")
+
+# Meerdere AI-aanroepen in volgorde
+laat seq_1 = prompt @default: "Vraag 1"
+laat seq_2 = prompt @default: "Vraag 2"
+laat seq_3 = prompt @default: "Vraag 3"
+afdrukken("Sequentiële AI-aanroepen:", seq_1, seq_2, seq_3)
+
+# AI-sleutelwoorden met variabelen
+laat vraag_ai = "Wat is Python?"
+laat antwoord_ai = prompt @default: vraag_ai
+afdrukken("AI met variabelen:", antwoord_ai)
+
+# AI in lussen
+laat resultaten_lus_ai = []
+voor index_ai in bereik(2):
+    laat antwoord_lus = prompt @default: f"Iteratie {index_ai}"
+    resultaten_lus_ai.append(antwoord_lus)
+afdrukken("AI in lussen:", lengte(resultaten_lus_ai), "antwoorden")
+
+# Multimodale verwerking (placeholders)
+laat uitkomst_multimodaal = prompt @default: "Beschrijf dit: <afbeelding>"
+afdrukken("Multimodale vraag:", uitkomst_multimodaal)
+
+afdrukken("Alle AI- en gelijktijdigheidsfuncties gedemonstreerd")
