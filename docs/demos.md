@@ -15,6 +15,16 @@ programming platform where agent code is idiomatic in any human language.
 - `examples/agent_fr.multi` — French
 - `examples/agent_ja.multi` — Japanese
 
+### Memory Card Game (Reactive UI showcase)
+
+Interactive game demonstrating `observe var`, `async/await`, and event binding within a reactive UI. 
+Written in both English and French to prove polyglot semantics.
+
+**[Play the Memory Game →](browser/memory-game/)** (Compiled to WASM)
+
+- `examples/memory_game_en.multi` — English version
+- `examples/memory_game_fr.multi` — French version (identical logic, different syntax)
+
 ### Reactive counter
 
 `observe var` + `on .change` + `canvas` — the simplest reactive web app.
@@ -93,6 +103,7 @@ Use for ahead-of-time compilation to `module.wasm` and minimal JavaScript host.
 | Demo | Shows |
 |------|-------|
 | Multilingual agent (3 languages) | Agent logic is idiomatic in any human language |
+| Memory Card Game | `observe var`, `async/await`, event binding in reactive UI; polyglot semantics (English + French) |
 | Reactive counter | `observe var` + `on .change` + `canvas` reactive model |
 | Streaming chat (French) | AI stream bound to reactive view in French |
 | Semantic search (Japanese) | `~=` and `embed` across multilingual input |
