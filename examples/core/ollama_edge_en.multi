@@ -29,8 +29,8 @@ fn generate_alert(issue: str) -> str uses ai:
 fn multi_model_analysis(sensor_data: str) -> str uses ai:
     let analysis, classification, alert = par [
         prompt @llama3: "Analyze: " + sensor_data,
-        classify @magistral: sensor_data,
-        generate @gemma3: "Alert for: " + sensor_data
+        classify @gemma3: sensor_data,
+        generate @llama3: "Alert for: " + sensor_data
     ]
     let summary = prompt @llama3:
         "Synthesise these results:\n"
@@ -58,32 +58,16 @@ fn traced_inference(query: str) -> str uses ai:
     print("Local inference cost (estimated tokens):", spend)
     return result
 
-# ── Swarm: multiple local agents with shared memory ───────────────────────────
-@local
-@agent(model=@llama3)
-fn local_analyzer(data: str) -> str uses ai:
-    return prompt @llama3: "Analyze this data:\n" + data
-
-@local
-@agent(model=@magistral)
-fn local_classifier(data: str) -> str uses ai:
-    return classify @magistral: data
-
-@local
-@agent(model=@gemma3)
-fn local_summarizer(text: str) -> str uses ai:
-    return prompt @gemma3: "Summarize in one sentence:\n" + text
-
-@swarm(agents=[local_analyzer, local_classifier, local_summarizer])
+# ── Multi-model analysis: sequential processing with caching
 fn edge_analytics_team(input_data: str) -> str uses ai:
     let cache = memory("team_results", scope="session")
 
     if input_data in cache:
         return cache[input_data]
 
-    let analysis = delegate(local_analyzer, input_data)
-    let classification = delegate(local_classifier, input_data)
-    let summary = delegate(local_summarizer, analysis)
+    let analysis = prompt @llama3: "Analyze this data:\n" + input_data
+    let classification = classify @llama3: input_data
+    let summary = prompt @llama3: "Summarize in one sentence:\n" + input_data
 
     let final = prompt @llama3:
         "Combine these results:\n"
@@ -96,16 +80,26 @@ fn edge_analytics_team(input_data: str) -> str uses ai:
 
 # ── Main: demonstrate edge computing patterns ────────────────────────────────
 fn main() uses ai:
+    print("━━━ Edge Computing Pipeline Starting ━━━")
+
     let reading = "Temperature: 72C, Humidity: 65%, Pressure: 1013mb"
+    print("→ Analyzing sensor reading (using llama3 locally)...")
     let analysis = analyze_sensor_reading(reading)
-    print("Sensor analysis:", analysis)
+    print("✓ Sensor analysis complete")
+    print("  Result:", analysis)
 
     let query = "Explain edge computing benefits"
+    print("\n→ Running cached analysis (first run, computing result)...")
     let cached = cached_analysis(query)
-    print("Cached result:", cached)
+    print("✓ Cached analysis complete")
+    print("  Result:", cached)
 
     let input = "System under heavy load, check diagnostics"
+    print("\n→ Running multi-model analysis in parallel (using llama3)...")
     let team_result = edge_analytics_team(input)
-    print("Team analysis:", team_result)
+    print("✓ Multi-model analysis complete")
+    print("  Final result:", team_result)
+
+    print("\n━━━ Pipeline Complete ━━━")
 
 main()
