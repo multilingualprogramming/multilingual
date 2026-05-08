@@ -1258,6 +1258,8 @@ class _LoweringContext:
             else:
                 children.append(self.lower(child))
 
+        children = self._fix_misplaced_ui_elements(children)
+
         cond = self.lower(node.condition) if node.condition else None
         text_content = None
         raw_text_content = getattr(node, "text_content", None)
@@ -1269,6 +1271,41 @@ class _LoweringContext:
             text_content=text_content,
             line=node.line, column=node.column,
         )
+
+    def _fix_misplaced_ui_elements(self, children: list) -> list:
+        """Fix parser bug: move UI elements mistakenly nested in for loops back to parent level.
+
+        When a for loop contains UI elements that shouldn't be there (past the main loop body),
+        this method extracts them to be siblings of the for loop instead.
+        Keep the first N elements in the loop (actual loop content) but extract trailing elements.
+        """
+        if not children:
+            return children
+
+        result = []
+        for child in children:
+            if isinstance(child, IRForLoop) and child.body and len(child.body) > 1:
+                loop_body = list(child.body) if child.body else []
+                extracted = []
+
+                while len(loop_body) > 1:
+                    last = loop_body[-1]
+                    if isinstance(last, IRUIElement) or (hasattr(last, '__class__') and 'Expr' in last.__class__.__name__):
+                        extracted.insert(0, last)
+                        loop_body.pop()
+                    else:
+                        break
+
+                if extracted:
+                    child.body = loop_body
+                    result.append(child)
+                    result.extend(extracted)
+                else:
+                    result.append(child)
+            else:
+                result.append(child)
+
+        return result
 
     def _lower_FunctionDef(
         self, node: ast.FunctionDef

@@ -194,7 +194,7 @@ def test_memory_game_ui_contains_render():
 
 
 def test_memory_game_html_contains_game_board():
-    """Generated HTML contains game board element."""
+    """Generated HTML contains game board element and reset button."""
     game_file = Path(__file__).parent.parent.parent / "examples" / "memory_game_en.multi"
     source = game_file.read_text()
     lexer = Lexer(source, lang="en")
@@ -205,7 +205,12 @@ def test_memory_game_html_contains_game_board():
     ui_result = lower_to_ui(ir_program)
 
     html = ui_result.emit_html()
+    js = ui_result.emit_js()
+
     # Check for expected HTML elements
     assert "game-board" in html
     assert "Memory Game" in html
-    assert "New Game" in html
+
+    # Check for reset button (created dynamically in JS)
+    assert "reset-btn" in html
+    assert "New Game" in js  # Text is in JS, not static HTML

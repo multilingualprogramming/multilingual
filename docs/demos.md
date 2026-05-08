@@ -20,7 +20,7 @@ programming platform where agent code is idiomatic in any human language.
 Interactive game demonstrating `observe var`, `async/await`, and event binding within a reactive UI. 
 Written in both English and French to prove polyglot semantics.
 
-**[Play the Memory Game →](browser/memory-game/)** (Compiled to WASM)
+**[Play the Memory Game →](memory-game/)** (Compiled to WASM)
 
 - `examples/memory_game_en.multi` — English version
 - `examples/memory_game_fr.multi` — French version (identical logic, different syntax)

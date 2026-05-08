@@ -275,12 +275,96 @@ const __ml_signals = _engine.signals;"""
       margin: 0;
       padding: 24px;
       font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }}
     .ml-canvas {{
       min-height: 48px;
       border: 1px dashed #8aa;
       padding: 12px;
       margin-bottom: 12px;
+    }}
+    .memory-game {{
+      background: white;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      max-width: 600px;
+    }}
+    .memory-game h1 {{
+      text-align: center;
+      color: #333;
+      margin-top: 0;
+      margin-bottom: 24px;
+      font-size: 28px;
+    }}
+    .game-board {{
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+      padding: 16px;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }}
+    .card {{
+      aspect-ratio: 1;
+      padding: 0;
+      border: 2px solid #ddd;
+      background: #fff;
+      color: #333;
+      font-size: 32px;
+      font-weight: bold;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }}
+    .card:hover {{
+      transform: scale(1.05);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }}
+    .card:disabled {{
+      opacity: 0.6;
+      cursor: not-allowed;
+    }}
+    .card.revealed {{
+      background: #e3f2fd;
+      border-color: #2196f3;
+      color: #1976d2;
+    }}
+    .card.matched {{
+      background: #c8e6c9;
+      border-color: #4caf50;
+      color: #2e7d32;
+    }}
+    .status {{
+      text-align: center;
+      margin-bottom: 16px;
+    }}
+    .status p {{
+      margin: 8px 0;
+      color: #555;
+      font-size: 16px;
+    }}
+    .reset-btn {{
+      display: block;
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }}
+    .reset-btn:hover {{
+      background: #764ba2;
     }}
   </style>
 </head>
@@ -437,6 +521,9 @@ const __ml_signals = _engine.signals;"""
         if isinstance(child, IRIfStatement):
             return [self._if_render_to_js(child, parent_var, indent)]
         if isinstance(child, IRExprStatement):
+            if isinstance(child.expression, IRCallExpr):
+                if self._call_name(child.expression.func) == "memory_game":
+                    return []
             value = self._expr_to_js(child.expression)
             return [f"{pad}{parent_var}.appendChild(document.createTextNode(String({value})));"]
         if isinstance(child, (IRLiteral, IRCallExpr, IRIdentifier, IRBinaryOp, IRConditionalExpr)):
