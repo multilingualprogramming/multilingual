@@ -1985,12 +1985,10 @@ class Parser:
     def _parse_native_ai_template(self, tok):
         """Parse the template section of a native AI expression.
 
-        Handles both:
+        Handles:
         1. Single-line templates: prompt @model: expression
-        2. Multi-line templates: prompt @model:\\n    expression with operators
-
-        Multi-line templates are parsed as full expressions to support
-        string concatenation: "prefix" + variable + "suffix"
+        2. Multi-line plain text: prompt @model:\\n    text lines
+        3. Multi-line expressions: prompt @model:\\n    "str" + variable + ...
         """
         if not self._match_type(TokenType.NEWLINE):
             return self._parse_expression()
@@ -2001,52 +1999,50 @@ class Parser:
             return StringLiteral("", line=tok.line, column=tok.column)
 
         self._advance()
-        saved_position = self.pos
 
-        peek_tokens = []
-        while (not self._at_end() and
-               not self._match_type(TokenType.DEDENT) and
-               not self._match_type(TokenType.NEWLINE)):
-            peek_tokens.append(self._current())
+        template_tokens = []
+        while not self._at_end() and not self._match_type(TokenType.DEDENT):
+            template_tokens.append(self._current())
             self._advance()
 
-        self.pos = saved_position
+        if self._match_type(TokenType.DEDENT):
+            self._advance()
 
-        has_expression_op = any(t.value in {'+', '-', '*', '/', '%'}
-                               for t in peek_tokens
-                               if t.type == TokenType.OPERATOR)
+        if not template_tokens:
+            return StringLiteral("", line=tok.line, column=tok.column)
 
-        if has_expression_op:
-            expr = self._parse_expression()
-            self._skip_newlines()
-            if self._match_type(TokenType.DEDENT):
-                self._advance()
-            return expr
-        else:
-            lines = []
-            current_line = []
+        has_binary_op = any(t.type == TokenType.OPERATOR and t.value in {'+', '-', '*', '/'}
+                           for t in template_tokens
+                           if t.type != TokenType.NEWLINE)
 
-            while not self._at_end() and not self._match_type(TokenType.DEDENT):
-                cur = self._current()
-                if cur.type == TokenType.NEWLINE:
-                    if current_line:
-                        lines.append(" ".join(current_line).strip())
-                        current_line = []
-                    self._advance()
-                    continue
-                current_line.append(str(cur.value))
-                self._advance()
+        if has_binary_op:
+            try:
+                clean_tokens = [t for t in template_tokens if t.type != TokenType.NEWLINE]
+                tokens_for_parse = clean_tokens + [self.tokens[-1]]
+                template_parser = Parser(tokens_for_parse, source_language=self.source_language)
+                template_parser.pos = 0
+                return template_parser._parse_expression()
+            except Exception:
+                pass
 
-            if current_line:
-                lines.append(" ".join(current_line).strip())
-            if self._match_type(TokenType.DEDENT):
-                self._advance()
+        lines = []
+        current_line = []
+        for token in template_tokens:
+            if token.type == TokenType.NEWLINE:
+                if current_line:
+                    lines.append(" ".join(current_line).strip())
+                    current_line = []
+                continue
+            current_line.append(str(token.value))
 
-            return StringLiteral(
-                "\n".join(line for line in lines if line),
-                line=tok.line,
-                column=tok.column,
-            )
+        if current_line:
+            lines.append(" ".join(current_line).strip())
+
+        return StringLiteral(
+            "\n".join(line for line in lines if line),
+            line=tok.line,
+            column=tok.column,
+        )
 
     def _parse_model_ref_literal(self):
         """Parse a model reference literal starting with `@`."""

@@ -317,6 +317,18 @@ def _should_skip_example(filename: str) -> tuple[bool, str]:
 
         ),
 
+        "swarm_agents_en.multi": (
+
+            "Requires Ollama provider (set TEST_WITH_OLLAMA=1 to enable)"
+
+        ),
+
+        "swarm_delegation_en.multi": (
+
+            "Requires Ollama provider (set TEST_WITH_OLLAMA=1 to enable)"
+
+        ),
+
     }
 
     if filename in runtime_gaps:
