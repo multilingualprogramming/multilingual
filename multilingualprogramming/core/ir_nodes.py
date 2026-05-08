@@ -42,7 +42,8 @@ Node families
                     IROrPattern, IRRecordPattern, IRGuardedPattern,
                     IRAsPattern, IRSemanticPattern
   Reactive        — IRObserveBinding, IROnChange,
-                    IRCanvasBlock, IRRenderExpr, IRViewBinding
+                    IRCanvasBlock, IRRenderExpr, IRViewBinding,
+                    IRUIAttribute, IRUIElement, IRRenderBlock
 """
 
 from __future__ import annotations
@@ -919,6 +920,34 @@ class IRViewBinding(IRNode):
 
     signal: IRNode | None = None   # the source signal/stream
     target: IRNode | None = None   # the view target
+
+
+@dataclass
+class IRUIAttribute(IRNode):
+    """One attribute on a UI element: class="x", class:name=(expr), onclick=handler."""
+
+    name: str = ""
+    value: IRNode | None = None
+    is_class_binding: bool = False   # class:name=(expr) syntax
+    is_event_handler: bool = False   # onclick=handler syntax
+
+
+@dataclass
+class IRUIElement(IRNode):
+    """A single element in a render: block (div, button, h1, p, etc.)."""
+
+    tag: str = ""
+    attributes: list = field(default_factory=list)   # list[IRUIAttribute]
+    children: list = field(default_factory=list)     # list[IRUIElement | IRNode]
+    condition: IRNode | None = None                  # `p if game_won:` gating
+    text_content: IRNode | None = None               # leaf text nodes
+
+
+@dataclass
+class IRRenderBlock(IRNode):
+    """Top-level render: block — lowered from ast.RenderBlock."""
+
+    root: IRUIElement | None = None                  # root element of the tree
 
 
 # ---------------------------------------------------------------------------

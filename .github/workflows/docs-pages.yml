@@ -55,12 +55,10 @@ jobs:
           cp examples/browser/browser_runtime.js docs/browser/fibonacci/browser_runtime.js
           cp examples/browser/browser_runtime.js docs/browser/dom-demo/browser_runtime.js
 
-      - name: Stage Memory Game demo for Pages (Reactive UI showcase)
+      - name: Build Memory Game UI bundle for Pages (Reactive UI showcase)
         run: |
           mkdir -p docs/browser/memory-game
-          python -m multilingualprogramming build-wasm-bundle examples/memory_game_en.multi --lang en --out-dir docs/browser/memory-game
-          cp examples/browser/browser_runtime.js docs/browser/memory-game/browser_runtime.js
-          cp docs/memory-game-demo.html docs/browser/memory-game/index.html
+          python -m multilingualprogramming build-ui-bundle examples/memory_game_en.multi --lang en --out-dir docs/browser/memory-game
 
       - name: Stage root docs into docs_dir
         run: python tools/stage_docs.py

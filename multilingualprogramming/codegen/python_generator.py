@@ -79,6 +79,7 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         self._swarm_emitted = False
         self._channel_emitted = False
         self._handler_counter = 0
+        self._observe_list_names: set[str] = set()
 
     # ------------------------------------------------------------------
     # Public API
@@ -595,6 +596,9 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         self._emit(
             f"{node.name} = _ml_reactive_engine.declare({node.name!r}, {val})"
         )
+        # Track list-valued observe vars for indexed assignment codegen
+        if isinstance(node.value, ir.IRListLiteral):
+            self._observe_list_names.add(node.name)
 
     def _emit_IRAssignment(self, node):
         chain_targets = getattr(node, "chain_targets", None)
@@ -602,6 +606,18 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
             targets = " = ".join(self._expr_ir(target) for target in chain_targets)
             self._emit(f"{targets} = {self._expr_ir(node.value)}")
             return
+
+        # Check for indexed assignment to a reactive list: obj[i] = val -> obj.set_index(i, val)
+        if isinstance(node.target, ir.IRIndexAccess) and node.op == "=":
+            obj_name = None
+            if isinstance(node.target.obj, ir.IRIdentifier):
+                obj_name = node.target.obj.name
+            if obj_name and obj_name in self._observe_list_names:
+                idx = self._expr_ir(node.target.index)
+                val = self._expr_ir(node.value)
+                self._emit(f"{obj_name}.set_index({idx}, {val})")
+                return
+
         self._emit(
             f"{self._expr_ir(node.target)} {node.op} {self._expr_ir(node.value)}"
         )
@@ -862,6 +878,15 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
         signal = self._expr_ir(node.signal)
         target = self._expr_ir(node.target)
         self._emit(f"_ml_stream_to_view({signal}, {target})")
+
+    def _emit_IRRenderBlock(self, node):
+        # Render blocks are compiled to JS in the browser path.
+        # In Python, emit a comment noting that the render block exists but is not executed.
+        self._emit("# render block (compiled to reactive JavaScript for browser)")
+
+    def _emit_IRUIElement(self, node):
+        # UI elements are compiled to JS. In Python, this is a no-op stub.
+        pass
 
     # ------------------------------------------------------------------
     # Structured concurrency constructs

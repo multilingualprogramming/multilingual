@@ -282,6 +282,36 @@ def cmd_build_wasm_bundle(args):
     print(f"[PASS] {outputs.build_lockfile}")
 
 
+def cmd_build_ui_bundle(args):
+    """Build a self-contained reactive UI bundle (HTML + JS)."""
+    import os
+    from pathlib import Path
+    from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
+    from multilingualprogramming.codegen.ui_lowering import lower_to_ui
+
+    program = _parse_program_from_file(args.file, args.lang)
+    ir = lower_to_semantic_ir(program, args.lang or "en")
+    result = lower_to_ui(ir)
+
+    # Create output directory
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write HTML file
+    html_path = out_dir / "index.html"
+    html_path.write_text(result.emit_html(), encoding="utf-8")
+    print(f"[PASS] {html_path}")
+
+    # Write JS file (for inspection/debug)
+    js_path = out_dir / "bundle.js"
+    js_path.write_text(result.emit_js(), encoding="utf-8")
+    print(f"[PASS] {js_path}")
+
+    if result.diagnostics:
+        for diag in result.diagnostics:
+            print(f"[WARN] {diag}")
+
+
 def cmd_ir(args):
     """Lower a source file to semantic IR and print a summary."""
     program = _parse_program_from_file(args.file, args.lang)
@@ -639,6 +669,21 @@ def main():  # pylint: disable=too-many-statements
         ),
     )
 
+    # build-ui-bundle subcommand
+    build_ui_bundle_parser = subparsers.add_parser(
+        "build-ui-bundle",
+        help="Build a self-contained reactive UI bundle (HTML + JS)",
+    )
+    build_ui_bundle_parser.add_argument("file", help="Path to the source file")
+    build_ui_bundle_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    build_ui_bundle_parser.add_argument(
+        "--out-dir", default="build/ui",
+        help="Output directory for generated artifacts (default: build/ui)",
+    )
+
     # ir subcommand
     ir_parser = subparsers.add_parser(
         "ir", help="Show the semantic IR for a source file"
@@ -703,6 +748,8 @@ def main():  # pylint: disable=too-many-statements
         cmd_encoding_check_generated(args)
     elif args.command == "build-wasm-bundle":
         cmd_build_wasm_bundle(args)
+    elif args.command == "build-ui-bundle":
+        cmd_build_ui_bundle(args)
     elif args.command == "ir":
         cmd_ir(args)
     elif args.command == "explain":

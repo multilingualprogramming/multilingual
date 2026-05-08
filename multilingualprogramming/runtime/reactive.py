@@ -91,6 +91,56 @@ class Signal(Generic[T]):
         return f"Signal({self._name!r}, value={self._value!r})"
 
 
+class ReactiveList:
+    """List-valued signal. Notifies handlers on any index mutation."""
+
+    def __init__(self, name: str, initial: list) -> None:
+        self._name = name
+        self._value: list = list(initial)
+        self._handlers: list[Callable[[list], None]] = []
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def get(self) -> list:
+        """Return a defensive copy of the list."""
+        return self._value[:]
+
+    def set(self, new_list: list) -> None:
+        """Replace the entire list and notify handlers."""
+        self._value = list(new_list)
+        self._notify()
+
+    def set_index(self, index: int, value: Any) -> None:
+        """Mutate a single index and notify handlers."""
+        self._value[index] = value
+        self._notify()
+
+    def __getitem__(self, index: int) -> Any:
+        return self._value[index]
+
+    def __setitem__(self, index: int, value: Any) -> None:
+        self.set_index(index, value)
+
+    def on_change(self, handler: Callable[[list], None]) -> Callable[[list], None]:
+        """Register a change handler that receives the full list on mutation."""
+        self._handlers.append(handler)
+        return handler
+
+    def remove_handler(self, handler: Callable[[list], None]) -> None:
+        """Remove a previously registered handler."""
+        self._handlers = [h for h in self._handlers if h is not handler]
+
+    def _notify(self) -> None:
+        """Notify all handlers of the change."""
+        for h in self._handlers:
+            h(self._value)
+
+    def __repr__(self) -> str:
+        return f"ReactiveList({self._name!r}, value={self._value!r})"
+
+
 # ---------------------------------------------------------------------------
 # ReactiveEngine
 # ---------------------------------------------------------------------------
@@ -102,19 +152,23 @@ class ReactiveEngine:
     """
 
     def __init__(self) -> None:
-        self._signals: dict[str, Signal[Any]] = {}
+        self._signals: dict[str, Signal[Any] | ReactiveList] = {}
 
     # ------------------------------------------------------------------
     # Signal management
     # ------------------------------------------------------------------
 
-    def declare(self, name: str, initial: Any = None) -> Signal[Any]:
+    def declare(self, name: str, initial: Any = None) -> Signal[Any] | ReactiveList:
         """Declare a new signal with an initial value.
 
+        If initial is a list, returns a ReactiveList. Otherwise returns a Signal.
         If a signal with the same name already exists, returns it unchanged.
         """
         if name not in self._signals:
-            self._signals[name] = Signal(name, initial)
+            if isinstance(initial, list):
+                self._signals[name] = ReactiveList(name, initial)
+            else:
+                self._signals[name] = Signal(name, initial)
         return self._signals[name]
 
     def get(self, name: str) -> Signal[Any]:

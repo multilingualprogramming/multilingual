@@ -125,6 +125,9 @@ from multilingualprogramming.core.ir_nodes import (
     IRTupleLiteral,
     IRTranscribeExpr,
     IRUnaryOp,
+    IRUIAttribute,
+    IRUIElement,
+    IRRenderBlock,
     IRViewBinding,
     IRWithStatement,
     IRWildcardPattern,
@@ -1222,6 +1225,46 @@ class _LoweringContext:
             target=self.lower(node.target),
             line=node.line,
             column=node.column,
+        )
+
+    def _lower_RenderBlock(self, node: ast.RenderBlock) -> IRRenderBlock:
+        root = None
+        if node.body:
+            for child in node.body:
+                if hasattr(child, 'tag'):
+                    root = self._lower_UIElement(child)
+                    break
+        return IRRenderBlock(root=root, line=node.line, column=node.column)
+
+    def _lower_UIElement(self, node: ast.UIElement) -> IRUIElement:
+        attrs = []
+        for attr_name, attr_value in (node.attributes or []):
+            is_class = attr_name.startswith("class:")
+            is_event = attr_name in ("onclick", "onchange", "oninput")
+            lowered_val = self.lower(attr_value) if attr_value else None
+            attrs.append(IRUIAttribute(
+                name=attr_name, value=lowered_val,
+                is_class_binding=is_class, is_event_handler=is_event,
+                line=getattr(attr_value, 'line', 0),
+                column=getattr(attr_value, 'column', 0),
+            ))
+
+        children = []
+        for child in (node.children or []):
+            if hasattr(child, 'tag'):
+                children.append(self._lower_UIElement(child))
+            else:
+                children.append(self.lower(child))
+
+        cond = self.lower(node.condition) if node.condition else None
+        text_content = None
+        if node.text_content:
+            text_content = self.lower(node.text_content)
+
+        return IRUIElement(
+            tag=node.tag, attributes=attrs, children=children, condition=cond,
+            text_content=text_content,
+            line=node.line, column=node.column,
         )
 
     def _lower_FunctionDef(
