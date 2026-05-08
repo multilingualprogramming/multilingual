@@ -1,4 +1,4 @@
-# Core 1.0 Multimodal Edge Computing — English
+# Core 1.0 Multimodal Edge Computing - English
 # Demonstrates: image analysis at the edge with @local placement,
 #               multimodal prompts with vision models,
 #               document processing pipelines,
@@ -7,81 +7,84 @@
 # Setup: Register OllamaProvider to connect to local Ollama instance
 from multilingualprogramming.runtime.ai_runtime import AIRuntime
 from multilingualprogramming.runtime.ollama_provider import OllamaProvider
-AIRuntime.register(OllamaProvider())
+AIRuntime.register(OllamaProvider(max_tokens=256))
 
-# ── Image analysis at the edge ────────────────────────────────────────────────
+fn vision_query(media, instruction) -> str uses ai:
+    let request = MultimodalPrompt().add_text(instruction).add(media)
+    return prompt @llama3.2-vision: request
+
+# -- Image analysis at the edge -----------------------------------------------
 @local
 fn analyze_image(photo) -> str uses ai:
-    let analysis = prompt @llama3: "Analyze this image and describe what you see:\n" + photo
-    return analysis
+    return vision_query(photo, "Describe this image in one concise sentence.")
 
 @local
 fn classify_scene(photo) -> str uses ai:
-    let scene = generate @magistral: "What type of scene is this? Classify as: outdoor, indoor, nature, urban, other\n" + photo    return scene
+    return vision_query(photo, "Classify the scene in five words or fewer.")
 
 @local
 fn detect_objects(photo) -> str uses ai:
-    let objects = generate @llama3: "List all visible objects in this image:\n" + photo    return objects
+    return vision_query(photo, "List the main visible objects only.")
 
-# ── Document processing: OCR + extraction at the edge ────────────────────────
+# -- Document processing: OCR + extraction at the edge ------------------------
 @local
 fn extract_from_document(doc) -> str uses ai:
-    let text = generate @gemma3: "Extract all text from this document:\n" + doc    return text
+    return vision_query(doc, "Extract the visible text exactly.")
 
 @local
 fn extract_invoice_items(invoice_doc) -> str uses ai:
-    let items = generate @magistral: "Extract line items, quantities, and prices from this invoice:\n" + invoice_doc    return items
+    return vision_query(invoice_doc, "Extract invoice items as a short list.")
 
-# ── Parallel multimodal analysis ─────────────────────────────────────────────
+# -- Parallel multimodal analysis ---------------------------------------------
 fn multi_analysis(photo) -> str uses ai:
     let analysis, scene, objects = par [
-        prompt @llama3: "Describe this image:\n" + photo,
-        generate @magistral: "Scene classification:\n" + photo,
-        generate @llama3: "Objects in image:\n" + photo
+        vision_query(photo, "Describe this image in one concise sentence."),
+        vision_query(photo, "Classify the scene in five words or fewer."),
+        vision_query(photo, "List the main clear and visible objects only.")
     ]
-    let summary = prompt @llama3:
-        "Synthesize these analyses:\n"
-        + "Description: " + analysis + "\n"
-        + "Scene: " + scene + "\n"
-        + "Objects: " + objects
+    let summary = prompt @llama3: "Summarize: " + analysis + " " + scene + " " + objects
     return summary
 
-# ── Caching multimodal results for repeated queries ──────────────────────────
+# -- Caching multimodal results for repeated queries --------------------------
 fn cached_analysis(photo) -> str uses ai:
     let cache = memory("image_analysis_cache", scope="session")
-    let photo_key = cost(photo)
+    let photo_key = "flower_jpg"
+
     if photo_key in cache:
         return cache[photo_key]
 
-    let result = prompt @llama3: "Provide detailed analysis of this image:\n" + photo
+    let result = vision_query(photo, "Describe this image in one concise sentence.")
     cache[photo_key] = result
     return result
 
-# ── Cost-aware multimodal inference ──────────────────────────────────────────
+# -- Cost-aware multimodal inference ------------------------------------------
 fn cost_tracked_analysis(photo) -> str uses ai:
-    let with_cost = cost(prompt @llama3: "Analyze image:\n" + photo)
+    let with_cost = cost(vision_query(photo, "Describe this image in one concise sentence."))
     let result, expense = with_cost
     print("Inference cost (tokens):", expense)
     return result
 
-# ── Multi-modal swarm: specialized agents for different modalities ────────────
+# -- Multi-modal swarm: specialized agents for different modalities -----------
 @local
-@agent(model=@llama3)
+@agent(model=@llama3.2-vision)
 fn image_analyst(photo) -> str uses ai:
-    return prompt @llama3: "Detailed image analysis:\n" + photo
+    return vision_query(photo, "Describe this image in one concise sentence.")
 
 @local
-@agent(model=@magistral)
+@agent(model=@llama3.2-vision)
 fn scene_classifier(photo) -> str uses ai:
-    return generate @magistral: "Scene type:\n" + photo
+    return vision_query(photo, "Classify the scene in five words or fewer.")
+
 @local
-@agent(model=@gemma3)
+@agent(model=@llama3.2-vision)
 fn document_extractor(doc) -> str uses ai:
-    return generate @gemma3: "Extract text:\n" + doc
+    return vision_query(doc, "Extract the visible text exactly.")
+
 @swarm(agents=[image_analyst, scene_classifier, document_extractor])
 fn media_analysis_team(media_input) -> str uses ai:
     let cache = memory("media_team_results", scope="session")
-    let media_key = cost(media_input)
+    let media_key = "media_analysis"
+
     if media_key in cache:
         return cache[media_key]
 
@@ -89,26 +92,48 @@ fn media_analysis_team(media_input) -> str uses ai:
     let scene = delegate(scene_classifier, media_input)
     let extracted = delegate(document_extractor, media_input)
 
-    let final = prompt @llama3:
-        "Integrate these results:\n"
-        + "Image: " + image_analysis + "\n"
-        + "Scene: " + scene + "\n"
-        + "Extracted: " + extracted
+    let final = prompt @llama3: "Combine: " + image_analysis + " " + scene + " " + extracted
 
     cache[media_key] = final
     return final
 
-# ── Main: demonstrate multimodal edge patterns ──────────────────────────────
+# -- Main: quick multimodal edge demo -----------------------------------------
 fn main() uses ai:
-    let photo_data = "sample_image.jpg"
+    print("=== Multimodal Edge Computing ===")
+
+    let photo_data = ImageValue.from_path("examples/flower.jpg", mime_type="image/jpeg")
+
+    print("")
+    print("-> Test 1: Analyzing image with vision model...")
     let analyzed = analyze_image(photo_data)
-    print("Image analysis:", analyzed)
+    print("OK Image analysis:", analyzed)
 
-    let doc_data = "document.pdf"
-    let extracted = extract_from_document(doc_data)
-    print("Document extraction:", extracted)
+    print("")
+    print("-> Test 2: Cached analysis...")
+    let cached = cached_analysis(photo_data)
+    print("OK Cached result:", cached)
 
+    print("")
+    print("-> Test 3: Scene classification...")
+    let classified = classify_scene(photo_data)
+    print("OK Scene classification:", classified)
+
+    print("")
+    print("-> Test 4: Object detection...")
+    let objects = detect_objects(photo_data)
+    print("OK Objects detected:", objects)
+
+    print("")
+    print("-> Test 5: Parallel multimodal analysis...")
     let combined = multi_analysis(photo_data)
-    print("Multi-modal analysis:", combined)
+    print("OK Combined analysis:", combined)
+
+    print("")
+    print("-> Test 6: Swarm media analysis team...")
+    let team_result = media_analysis_team(photo_data)
+    print("OK Team analysis:", team_result)
+
+    print("")
+    print("=== Multimodal Processing Complete ===")
 
 main()

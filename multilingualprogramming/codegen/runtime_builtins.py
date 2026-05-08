@@ -13,6 +13,7 @@ Hindi word for "print") resolve to Python built-ins.
 """
 
 import json
+import sys
 from pathlib import Path
 
 from multilingualprogramming.keyword.keyword_registry import KeywordRegistry
@@ -22,6 +23,7 @@ from multilingualprogramming.runtime.multimodal_runtime import (
     AudioValue,
     DocumentValue,
     ImageValue,
+    MultimodalValue,
     MultimodalPrompt,
     VideoValue,
 )
@@ -52,20 +54,41 @@ def _coerce_model(model):
     return ModelRef(str(model))
 
 
+def _runtime_input(prompt=""):
+    """Display prompts on the real terminal even when stdout is captured."""
+    if prompt and sys.stdout is not sys.__stdout__:
+        visible_stdout = sys.__stdout__
+        visible_stdout.write(str(prompt))
+        visible_stdout.flush()
+        return input()
+    return input(prompt)
+
+
+def _coerce_ai_payload(value):
+    """Preserve multimodal payloads while normalizing plain values to text."""
+    if isinstance(value, (MultimodalValue, MultimodalPrompt)):
+        return value
+    return str(value)
+
+
 def _prompt(model, template):
-    return AIRuntime.prompt(_coerce_model(model), str(template)).content
+    return AIRuntime.prompt(_coerce_model(model), _coerce_ai_payload(template)).content
 
 
 def _generate(model, template, target_type=None):
-    return AIRuntime.generate(_coerce_model(model), str(template), target_type=target_type)
+    return AIRuntime.generate(
+        _coerce_model(model),
+        _coerce_ai_payload(template),
+        target_type=target_type,
+    )
 
 
 def _think(model, template):
-    return AIRuntime.think(_coerce_model(model), str(template))
+    return AIRuntime.think(_coerce_model(model), _coerce_ai_payload(template))
 
 
 def _stream(model, template):
-    return AIRuntime.stream(_coerce_model(model), str(template))
+    return AIRuntime.stream(_coerce_model(model), _coerce_ai_payload(template))
 
 
 def _embed(model, value):
@@ -73,7 +96,11 @@ def _embed(model, value):
 
 
 def _extract(model, source, target_type=None):
-    return AIRuntime.generate(_coerce_model(model), str(source), target_type=target_type)
+    return AIRuntime.generate(
+        _coerce_model(model),
+        _coerce_ai_payload(source),
+        target_type=target_type,
+    )
 
 
 def _classify(model, subject, *categories, target_type=None):
@@ -207,7 +234,7 @@ class RuntimeBuiltins:
     # Mapping from USM concept ID to the Python built-in object
     _CONCEPT_TO_BUILTIN = {
         "PRINT": print,
-        "INPUT": input,
+        "INPUT": _runtime_input,
         "TYPE_INT": int,
         "TYPE_FLOAT": float,
         "TYPE_STR": str,
@@ -257,7 +284,7 @@ class RuntimeBuiltins:
         "staticmethod": staticmethod,
         "classmethod": classmethod,
         "print": print,
-        "input": input,
+        "input": _runtime_input,
         "int": int,
         "float": float,
         "str": str,

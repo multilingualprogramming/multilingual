@@ -61,6 +61,19 @@ def _emit_backend_report(result):
     )
 
 
+def _safe_stream_write(stream, text: str) -> None:
+    """Write text even when the active console encoding cannot represent it."""
+    try:
+        stream.write(text)
+    except UnicodeEncodeError:
+        buffer = getattr(stream, "buffer", None)
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        if buffer is not None:
+            buffer.write(text.encode(encoding, errors="replace"))
+        else:
+            stream.write(text.encode(encoding, errors="replace").decode(encoding))
+
+
 def _read_source_file(path: str) -> str:
     try:
         with open(path, encoding="utf-8") as f:
@@ -124,7 +137,7 @@ def cmd_run(args):
     result = executor.execute(source, globals_dict=run_globals or None)
 
     if result.output:
-        sys.stdout.write(result.output)
+        _safe_stream_write(sys.stdout, result.output)
 
     if getattr(args, "show_backend", False):
         _emit_backend_report(result)

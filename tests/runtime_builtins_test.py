@@ -6,10 +6,11 @@
 
 """Tests for the runtime built-in functions."""
 
+import io
 import unittest
 from unittest.mock import patch
 
-from multilingualprogramming.codegen.runtime_builtins import RuntimeBuiltins
+from multilingualprogramming.codegen.runtime_builtins import RuntimeBuiltins, _runtime_input
 from multilingualprogramming.keyword.keyword_registry import KeywordRegistry
 
 
@@ -24,7 +25,7 @@ class RuntimeBuiltinsTestSuite(unittest.TestCase):
     def test_english_namespace_has_input(self):
         ns = RuntimeBuiltins("en").namespace()
         self.assertIn("input", ns)
-        self.assertIs(ns["input"], input)
+        self.assertIs(ns["input"], _runtime_input)
 
     def test_french_namespace_has_afficher(self):
         ns = RuntimeBuiltins("fr").namespace()
@@ -34,7 +35,19 @@ class RuntimeBuiltinsTestSuite(unittest.TestCase):
     def test_french_namespace_has_saisir(self):
         ns = RuntimeBuiltins("fr").namespace()
         self.assertIn("saisir", ns)
-        self.assertIs(ns["saisir"], input)
+        self.assertIs(ns["saisir"], _runtime_input)
+
+    def test_runtime_input_writes_prompt_to_real_stdout_when_captured(self):
+        captured = io.StringIO()
+        visible = io.StringIO()
+        with patch("sys.stdout", captured), patch("sys.__stdout__", visible):
+            with patch("builtins.input", return_value="yes") as fake_input:
+                result = _runtime_input("Prompt: ")
+
+        self.assertEqual(result, "yes")
+        self.assertEqual(captured.getvalue(), "")
+        self.assertEqual(visible.getvalue(), "Prompt: ")
+        fake_input.assert_called_once_with()
 
     def test_hindi_namespace_has_print_keyword(self):
         ns = RuntimeBuiltins("hi").namespace()

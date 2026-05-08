@@ -8,7 +8,9 @@
 """Tests for the program executor (full pipeline)."""
 # pylint: disable=mixed-line-endings
 
+import io
 import unittest
+from unittest.mock import patch
 
 from multilingualprogramming.codegen.executor import ProgramExecutor
 
@@ -531,3 +533,18 @@ let x = 1 / 0
         result = executor.execute(source)
         self.assertFalse(result.success)
         self.assertIn("before", result.output)
+
+    def test_input_prompt_is_visible_while_output_is_captured(self):
+        source = """\
+let answer = input("Enter value: ")
+print(answer)
+"""
+        executor = ProgramExecutor(language="en")
+        visible = io.StringIO()
+        with patch("sys.__stdout__", visible):
+            with patch("builtins.input", return_value="ok"):
+                result = executor.execute(source)
+
+        self.assertTrue(result.success, result.errors)
+        self.assertEqual(visible.getvalue(), "Enter value: ")
+        self.assertEqual(result.output.strip(), "ok")

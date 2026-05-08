@@ -32,7 +32,9 @@ through as-is, so @llama3.2:latest works without any configuration.
 
 from __future__ import annotations
 
+import base64
 import json
+from pathlib import Path
 from typing import Iterator
 
 from multilingualprogramming.runtime.ai_runtime import AIProvider
@@ -42,6 +44,7 @@ from multilingualprogramming.runtime.ai_types import (
     PromptResult,
     StreamChunk,
 )
+from multilingualprogramming.runtime.multimodal_runtime import ImageValue, MultimodalPrompt
 
 
 # Short name → full Ollama model tag
@@ -106,21 +109,75 @@ class OllamaProvider(AIProvider):
     def _max_tokens_for(self, kwargs: dict) -> int:
         return kwargs.pop("max_tokens", self._max_tokens)
 
+    def _read_image_bytes(self, image: ImageValue) -> bytes:
+        """Return raw bytes for an ImageValue, tolerating legacy path-style use."""
+        if isinstance(image.data, (bytes, bytearray)) and image.data:
+            return bytes(image.data)
+        if image.source_path:
+            return Path(image.source_path).read_bytes()
+        if isinstance(image.data, str) and image.data:
+            candidate = Path(image.data)
+            if candidate.exists():
+                return candidate.read_bytes()
+        raise ValueError(
+            "ImageValue has no binary data or readable source_path for Ollama vision input."
+        )
+
+    def _build_message(self, template) -> dict[str, object]:
+        """Build an Ollama chat message, including images for multimodal prompts."""
+        message: dict[str, object] = {"role": "user"}
+
+        if isinstance(template, ImageValue):
+            image_data = base64.standard_b64encode(
+                self._read_image_bytes(template)
+            ).decode("utf-8")
+            message["content"] = "Analyze this image."
+            message["images"] = [image_data]
+            return message
+
+        if isinstance(template, MultimodalPrompt):
+            texts: list[str] = []
+            images: list[str] = []
+            for part in template.parts:
+                if isinstance(part, str):
+                    texts.append(part)
+                elif isinstance(part, ImageValue):
+                    images.append(
+                        base64.standard_b64encode(
+                            self._read_image_bytes(part)
+                        ).decode("utf-8")
+                    )
+                else:
+                    texts.append(repr(part))
+            message["content"] = "\n".join(t for t in texts if t).strip() or "Analyze this input."
+            if images:
+                message["images"] = images
+            return message
+
+        message["content"] = template
+        return message
+
     # ------------------------------------------------------------------
     # Required abstract methods
     # ------------------------------------------------------------------
 
-    def prompt(self, model: ModelRef, template: str, **kwargs) -> PromptResult:
-        """Send a prompt and return the full text response."""
+    def prompt(self, model: ModelRef, template, **kwargs) -> PromptResult:
+        """Send a prompt and return the full text response.
+
+        Supports both text prompts (str) and multimodal prompts with images (ImageValue).
+        """
         model_tag = self._resolve_model(model)
         max_tokens = self._max_tokens_for(kwargs)
         options = kwargs.pop("options", {})
         options.setdefault("num_predict", max_tokens)
+
+        chat_kwargs = {"options": options, **kwargs}
+        message = self._build_message(template)
+
         response = self._client.chat(
             model=model_tag,
-            messages=[{"role": "user", "content": template}],
-            options=options,
-            **kwargs,
+            messages=[message],
+            **chat_kwargs,
         )
         message = getattr(response, "message", None)
         content = getattr(message, "content", "")
@@ -234,17 +291,23 @@ class OllamaProvider(AIProvider):
     # Async variants
     # ------------------------------------------------------------------
 
-    async def prompt_async(self, model: ModelRef, template: str, **kwargs) -> PromptResult:
-        """Async prompt using the Ollama async client."""
+    async def prompt_async(self, model: ModelRef, template, **kwargs) -> PromptResult:
+        """Async prompt using the Ollama async client.
+
+        Supports both text prompts (str) and multimodal prompts with images (ImageValue).
+        """
         model_tag = self._resolve_model(model)
         max_tokens = self._max_tokens_for(kwargs)
         options = kwargs.pop("options", {})
         options.setdefault("num_predict", max_tokens)
+
+        chat_kwargs = {"options": options, **kwargs}
+        message = self._build_message(template)
+
         response = await self._async_client.chat(
             model=model_tag,
-            messages=[{"role": "user", "content": template}],
-            options=options,
-            **kwargs,
+            messages=[message],
+            **chat_kwargs,
         )
         message = getattr(response, "message", None)
         content = getattr(message, "content", "")

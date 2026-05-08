@@ -9,10 +9,12 @@
 
 import pytest
 
+from multilingualprogramming.codegen.runtime_builtins import RuntimeBuiltins
 from multilingualprogramming.runtime.ai_types import (
     EmbeddingVector, ModelRef, Plan, Reasoning, ToolCall,
 )
 from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
+from multilingualprogramming.runtime.multimodal_runtime import ImageValue
 from multilingualprogramming.runtime.tool_runtime import (
     AgentLoop, ToolRegistry, tool,
 )
@@ -184,6 +186,17 @@ class TestAIRuntime:
         AIRuntime.register(MockProvider())
         text = AIRuntime.transcribe(ModelRef("m"), b"audio-bytes")
         assert isinstance(text, str)
+
+    def test_runtime_prompt_preserves_image_value_payload(self):
+        provider = MockProvider().add_response("vision ok")
+        AIRuntime.register(provider)
+        prompt = RuntimeBuiltins("en").namespace()["prompt"]
+        image = ImageValue(data=b"\x89PNG", source_path="test.png")
+
+        result = prompt(ModelRef("vision"), image)
+
+        assert result == "vision ok"
+        assert provider.call_log[0]["template"] is image
 
 
 # ===========================================================================
