@@ -1,0 +1,84 @@
+importer asyncio
+
+déf jeu_memoire() utilise ui:
+    # État du jeu - paires de cartes correspondantes
+    observer var cartes = [1, 2, 3, 4, 1, 2, 3, 4]
+    observer var revelees = [faux, faux, faux, faux, faux, faux, faux, faux]
+    observer var correspondantes = [faux, faux, faux, faux, faux, faux, faux, faux]
+    observer var premier_choix = -1
+    observer var deuxieme_choix = -1
+    observer var paires_trouvees = 0
+    observer var jeu_gagne = faux
+    observer var en_verification = faux
+
+    asynchrone déf gerer_clic_carte(indice):
+        # Ignorer les clics pendant la vérification ou sur les cartes déjà appariées/révélées
+        si en_verification ou correspondantes[indice] ou revelees[indice]:
+            retour
+
+        revelees[indice] = vrai
+
+        si premier_choix == -1:
+            premier_choix = indice
+        sinon si premier_choix != indice:
+            deuxieme_choix = indice
+            en_verification = vrai
+
+            # Attendre avant de vérifier la correspondance
+            attendre asyncio.sleep(1.0)
+
+            # Vérifier si les cartes correspondent
+            si cartes[premier_choix] == cartes[deuxieme_choix]:
+                correspondantes[premier_choix] = vrai
+                correspondantes[deuxieme_choix] = vrai
+                paires_trouvees = paires_trouvees + 1
+
+                si paires_trouvees == 4:
+                    jeu_gagne = vrai
+            sinon:
+                # Pas de correspondance - retourner
+                revelees[premier_choix] = faux
+                revelees[deuxieme_choix] = faux
+
+            # Réinitialiser pour le prochain tour
+            premier_choix = -1
+            deuxieme_choix = -1
+            en_verification = faux
+
+    asynchrone déf reinitialiser_jeu():
+        cartes = [1, 2, 3, 4, 1, 2, 3, 4]
+        revelees = [faux, faux, faux, faux, faux, faux, faux, faux]
+        correspondantes = [faux, faux, faux, faux, faux, faux, faux, faux]
+        premier_choix = -1
+        deuxieme_choix = -1
+        paires_trouvees = 0
+        jeu_gagne = faux
+        en_verification = faux
+
+    render:
+        div class="memory-game":
+            h1: "🎮 Jeu de Mémoire"
+
+            div class="game-board":
+                pour i dans intervalle(8):
+                    button class="card"
+                            class:matched=(correspondantes[i])
+                            class:revealed=(revelees[i])
+                            disabled=(correspondantes[i] ou en_verification)
+                            onclick=gerer_clic_carte(i):
+                        si correspondantes[i]:
+                            "✓"
+                        sinon si revelees[i]:
+                            chaine(cartes[i])
+                        sinon:
+                            "?"
+
+            div class="status":
+                p: "Paires trouvées: " + chaine(paires_trouvees) + " / 4"
+                p si jeu_gagne: "🎉 Vous avez gagné! Toutes les paires sont appariées!"
+                p si en_verification: "Vérification..."
+
+            button class="reset-btn" onclick=reinitialiser_jeu():
+                "Nouveau Jeu"
+
+jeu_memoire()

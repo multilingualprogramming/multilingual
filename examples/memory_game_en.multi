@@ -1,0 +1,84 @@
+import asyncio
+
+fn memory_game() uses ui:
+    # Game state - pairs of matching cards
+    observe var cards = [1, 2, 3, 4, 1, 2, 3, 4]
+    observe var revealed = [false, false, false, false, false, false, false, false]
+    observe var matched = [false, false, false, false, false, false, false, false]
+    observe var first_pick = -1
+    observe var second_pick = -1
+    observe var matches_found = 0
+    observe var game_won = false
+    observe var is_checking = false
+
+    async def handle_card_click(index):
+        # Ignore clicks during checking or on already matched/revealed cards
+        if is_checking or matched[index] or revealed[index]:
+            return
+
+        revealed[index] = true
+
+        if first_pick == -1:
+            first_pick = index
+        else if first_pick != index:
+            second_pick = index
+            is_checking = true
+
+            # Wait before checking for match
+            await asyncio.sleep(1.0)
+
+            # Check if cards match
+            if cards[first_pick] == cards[second_pick]:
+                matched[first_pick] = true
+                matched[second_pick] = true
+                matches_found = matches_found + 1
+
+                if matches_found == 4:
+                    game_won = true
+            else:
+                # No match - flip back
+                revealed[first_pick] = false
+                revealed[second_pick] = false
+
+            # Reset for next turn
+            first_pick = -1
+            second_pick = -1
+            is_checking = false
+
+    async def reset_game():
+        cards = [1, 2, 3, 4, 1, 2, 3, 4]
+        revealed = [false, false, false, false, false, false, false, false]
+        matched = [false, false, false, false, false, false, false, false]
+        first_pick = -1
+        second_pick = -1
+        matches_found = 0
+        game_won = false
+        is_checking = false
+
+    render:
+        div class="memory-game":
+            h1: "🎮 Memory Card Game"
+
+            div class="game-board":
+                for i in range(8):
+                    button class="card"
+                            class:matched=(matched[i])
+                            class:revealed=(revealed[i])
+                            disabled=(matched[i] or is_checking)
+                            onclick=handle_card_click(i):
+                        if matched[i]:
+                            "✓"
+                        else if revealed[i]:
+                            str(cards[i])
+                        else:
+                            "?"
+
+            div class="status":
+                p: "Matches found: " + str(matches_found) + " / 4"
+                p if game_won: "🎉 You won! All pairs matched!"
+                p if is_checking: "Checking..."
+
+            button class="reset-btn" onclick=reset_game():
+                "New Game"
+
+memory_game()

@@ -48,6 +48,13 @@ jobs:
           cp examples/browser/browser_runtime.js docs/browser/fibonacci/browser_runtime.js
           cp examples/browser/browser_runtime.js docs/browser/dom-demo/browser_runtime.js
 
+      - name: Build Memory Game demo for Pages (Reactive UI showcase)
+        run: |
+          mkdir -p docs/games/memory-game
+          python -m multilingualprogramming examples/memory_game_en.multi --target=wasm --output=docs/games/memory-game/memory_game_en.wasm
+          python -m multilingualprogramming examples/memory_game_fr.multi --target=wasm --output=docs/games/memory-game/memory_game_fr.wasm
+          cp docs/memory-game-demo.html docs/games/memory-game/index.html
+
       - name: Stage root docs into docs_dir
         run: python tools/stage_docs.py
 
