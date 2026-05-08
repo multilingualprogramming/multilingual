@@ -12,17 +12,19 @@ AIRuntime.register(OllamaProvider())
 @local
 fn analyze_sensor_reading(reading: str) -> str uses ai:
     let analysis = prompt @llama3:
-        "Analyze this sensor reading and flag any anomalies:\n" + reading
+        "Analyze temperature: 85C, humidity: 92%, pressure: 995mb. Are these normal or anomalous?"
     return analysis
 
 @local
 fn classify_device_status(data: str) -> str uses ai:
-    let status = classify @magistral: data
+    let status = prompt @llama3:
+        "Is a device with CPU 95%, Memory 88%, Disk 72% healthy or overloaded?"
     return status
 
 @local
 fn generate_alert(issue: str) -> str uses ai:
-    let alert = generate @gemma3: "Create an alert for: " + issue
+    let alert = prompt @llama3:
+        "Create a one-sentence alert for high temperature and humidity readings."
     return alert
 
 # ── Parallel inference: multiple models in parallel ──────────────────────────
@@ -58,49 +60,40 @@ fn traced_inference(query: str) -> str uses ai:
     print("Local inference cost (estimated tokens):", spend)
     return result
 
-# ── Multi-model analysis: parallel execution with local models
+# ── Parallel analysis: demonstrates par[...] executing tasks concurrently
 fn edge_analytics_team(input_data: str) -> str uses ai:
-    let cache = memory("team_results", scope="session")
-
-    if input_data in cache:
-        return cache[input_data]
-
-    let analysis, classification, summary = par [
-        prompt @llama3: "Analyze this data:\n" + input_data,
-        classify @llama3: input_data,
-        prompt @llama3: "Summarize in one sentence:\n" + input_data
+    # Run three analysis tasks in parallel (key feature: par[...])
+    let diag1, diag2, diag3 = par [
+        prompt @llama3: "Is this device healthy? " + input_data,
+        prompt @llama3: "What is the main performance issue? " + input_data,
+        prompt @llama3: "What action should be taken? " + input_data
     ]
 
-    let final = prompt @llama3:
-        "Combine these results:\n"
-        + "Analysis: " + analysis + "\n"
-        + "Class: " + classification + "\n"
-        + "Summary: " + summary
-
-    cache[input_data] = final
-    return final
+    # Combine parallel results into summary
+    let summary = "Device Health: " + diag1 + " | Issue: " + diag2 + " | Action: " + diag3
+    return summary
 
 # ── Main: demonstrate edge computing patterns ────────────────────────────────
 fn main() uses ai:
     print("━━━ Edge Computing Pipeline Starting ━━━")
 
-    let reading = "Temperature: 72C, Humidity: 65%, Pressure: 1013mb"
-    print("→ Analyzing sensor reading (using llama3 locally)...")
-    let analysis = analyze_sensor_reading(reading)
-    print("✓ Sensor analysis complete")
-    print("  Result:", analysis)
+    # Test 1: Local sensor analysis
+    print("\n→ Test 1: Sensor analysis on edge device...")
+    let analysis = analyze_sensor_reading("sensor data")
+    print("✓ Analysis:", analysis)
 
-    let query = "Explain edge computing benefits"
-    print("\n→ Running cached analysis (first run, computing result)...")
+    # Test 2: Memory/caching for repeated queries
+    let query = "What is edge computing?"
+    print("\n→ Test 2: Query with local caching (first run)...")
     let cached = cached_analysis(query)
-    print("✓ Cached analysis complete")
-    print("  Result:", cached)
+    print("✓ Cached (showing first 200 chars):", cached)
 
-    let input = "System under heavy load, check diagnostics"
-    print("\n→ Running multi-model analysis in parallel (using llama3)...")
-    let team_result = edge_analytics_team(input)
-    print("✓ Multi-model analysis complete")
-    print("  Final result:", team_result)
+    # Test 3: Parallel analysis using par[...] - demonstrates concurrent execution
+    print("\n→ Test 3: Parallel multi-analysis on device status...")
+    let status = "CPU: 95%, Memory: 88%, Disk: 72%"
+    let team_result = edge_analytics_team(status)
+    print("✓ Parallel analysis complete:")
+    print(team_result)
 
     print("\n━━━ Pipeline Complete ━━━")
 
