@@ -244,13 +244,19 @@ jeu_memoire()</code></pre>
         // All game logic lives in the compiled Multilingual code
 
         async function loadWasmGame() {
+            const gameContainer = document.getElementById('wasm-game');
+            if (!gameContainer) {
+                console.error('Game container not found');
+                return;
+            }
+
             try {
                 // Try to load pre-compiled WASM from GitHub Pages
                 const wasmPath = './memory_game_en.wasm';
 
                 const response = await fetch(wasmPath);
                 if (!response.ok) {
-                    throw new Error(`WASM not found at ${wasmPath}. Fallback implementation loading...`);
+                    throw new Error(`WASM not found at ${wasmPath}`);
                 }
 
                 const wasmBuffer = await response.arrayBuffer();
@@ -272,11 +278,11 @@ jeu_memoire()</code></pre>
                     wasmModule.instance.exports.memory_game();
                 }
 
-                document.getElementById('wasm-game').innerHTML = '<p style="color: #667eea;">✅ WASM module loaded successfully!</p>';
+                gameContainer.innerHTML = '<p style="color: #667eea;">✅ WASM module loaded successfully!</p>';
             } catch (error) {
                 console.log('WASM loading info:', error.message);
                 // Provide fallback info
-                document.getElementById('wasm-game').innerHTML = `
+                gameContainer.innerHTML = `
                     <div style="text-align: left; background: white; padding: 20px; border-radius: 8px; margin-top: 15px;">
                         <p style="color: #333; margin-bottom: 15px;"><strong>How to Run Locally:</strong></p>
                         <pre style="background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 8px;">
@@ -299,7 +305,11 @@ python -m http.server --directory docs 8000
         }
 
         // Load WASM on page load
-        document.addEventListener('DOMContentLoaded', loadWasmGame);
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadWasmGame);
+        } else {
+            loadWasmGame();
+        }
     </script>
 </body>
 </html>
