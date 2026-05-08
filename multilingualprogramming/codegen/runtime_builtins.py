@@ -213,6 +213,102 @@ def _ml_par_gather(*values):
         return asyncio.run(_gather())
 
 
+def _spawn(coro):
+    """Spawn a fire-and-forget coroutine task.
+
+    Creates an asyncio task from the coroutine and returns immediately.
+    The task runs concurrently in the background without awaiting completion.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop; create one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    if inspect.iscoroutine(coro):
+        return loop.create_task(coro)
+    # If already a task, return it
+    return coro
+
+
+def _channel(capacity=0):
+    """Create a channel for inter-task communication.
+
+    Parameters:
+        capacity: Maximum buffered items (0 = unbounded)
+
+    Returns:
+        A Channel[T] instance with send(), receive(), and close() methods.
+    """
+    from multilingualprogramming.runtime.channel import Channel
+    return Channel(capacity=capacity)
+
+
+def _on_change(signal_or_name, handler=None):
+    """Register a change handler on a signal.
+
+    Can be used as:
+    - signal.on_change(handler) — register handler directly
+    - on_change(signal_name) — decorator factory (if ReactiveEngine available)
+    """
+    if handler is not None:
+        # Direct call: signal.on_change(handler)
+        return signal_or_name.on_change(handler)
+
+    # Decorator factory pattern (for future use with engine)
+    def decorator(fn):
+        if hasattr(signal_or_name, 'on_change'):
+            signal_or_name.on_change(fn)
+        return fn
+    return decorator
+
+
+def _canvas(name="", children=None, bindings=None):
+    """Create a canvas node for UI rendering.
+
+    Parameters:
+        name: Canvas element identifier
+        children: List of child CanvasNodes or values
+        bindings: Dict mapping slot names to Signal values
+
+    Returns:
+        A CanvasNode instance.
+    """
+    from multilingualprogramming.runtime.reactive import CanvasNode
+    return CanvasNode(name=name, children=children, bindings=bindings)
+
+
+def _render(canvas_or_dict):
+    """Render a canvas to its dictionary representation.
+
+    Converts a CanvasNode (or already-dict) to a plain dict suitable for
+    serialization or JavaScript code generation.
+
+    Returns:
+        A dict with 'name', 'bindings', and 'children' keys.
+    """
+    if hasattr(canvas_or_dict, 'to_dict'):
+        return canvas_or_dict.to_dict()
+    # Already a dict
+    return canvas_or_dict
+
+
+def _bind(canvas_or_node, slot_name, signal):
+    """Bind a signal to a named slot on a canvas node.
+
+    When the signal changes, the canvas node is notified (for live updates).
+
+    Parameters:
+        canvas_or_node: CanvasNode instance
+        slot_name: Name of the slot to bind
+        signal: Signal instance to observe
+    """
+    if hasattr(canvas_or_node, 'bind'):
+        canvas_or_node.bind(slot_name, signal)
+    return canvas_or_node
+
+
 class RuntimeBuiltins:
     """
     Builds a dict of built-in names that should be available at runtime.
@@ -451,6 +547,25 @@ class RuntimeBuiltins:
         "memory": ml_memory,
         "memoire": ml_memory,
         "_ml_par_gather": _ml_par_gather,
+        # Concurrency keywords
+        "spawn": _spawn,
+        "launch": _spawn,
+        "lancer": _spawn,
+        "channel": _channel,
+        "canal": _channel,
+        # Reactive & UI keywords
+        "on": _on_change,
+        "on_change": _on_change,
+        "onchange": _on_change,
+        "canvas": _canvas,
+        "render": _render,
+        "afficher": _render,
+        "mostrar": _render,
+        "bind": _bind,
+        "lier": _bind,
+        "vincular": _bind,
+        "CanvasNode": _canvas,
+        "Channel": _channel,
     }
 
     # Non-callable special values available in exec() namespace

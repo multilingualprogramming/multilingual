@@ -210,3 +210,137 @@ class RuntimeBuiltinsTestSuite(unittest.TestCase):
             self.assertIs(ns["len"], len)
             self.assertIn("plage_test", ns)
             self.assertIs(ns["plage_test"], range)
+
+
+class ConcurrencyKeywordsTestSuite(unittest.TestCase):
+    """Test concurrency keywords: spawn, channel, send, receive."""
+
+    def test_spawn_function_exists(self):
+        """spawn keyword should be available in namespace."""
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIn("spawn", ns)
+        self.assertTrue(callable(ns["spawn"]))
+
+    def test_channel_function_exists(self):
+        """channel keyword should be available in namespace."""
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIn("channel", ns)
+        self.assertTrue(callable(ns["channel"]))
+
+    def test_channel_creation(self):
+        """channel() should create a Channel instance."""
+        from multilingualprogramming.runtime.channel import Channel
+        ns = RuntimeBuiltins("en").namespace()
+        ch = ns["channel"]()
+        self.assertIsInstance(ch, Channel)
+
+    def test_channel_with_capacity(self):
+        """channel(8) should create a bounded channel."""
+        from multilingualprogramming.runtime.channel import Channel
+        ns = RuntimeBuiltins("en").namespace()
+        ch = ns["channel"](8)
+        self.assertIsInstance(ch, Channel)
+        # Channel should have send/receive methods
+        self.assertTrue(hasattr(ch, "send"))
+        self.assertTrue(hasattr(ch, "receive"))
+
+    def test_spawn_French_variant(self):
+        """lancer (French) should also be available."""
+        ns = RuntimeBuiltins("fr").namespace()
+        self.assertIn("lancer", ns)
+        self.assertTrue(callable(ns["lancer"]))
+
+    def test_channel_French_variant(self):
+        """canal (French) should also be available."""
+        ns = RuntimeBuiltins("fr").namespace()
+        self.assertIn("canal", ns)
+        self.assertTrue(callable(ns["canal"]))
+
+
+class ReactiveUIKeywordsTestSuite(unittest.TestCase):
+    """Test reactive UI keywords: on_change, canvas, render, bind."""
+
+    def test_on_change_function_exists(self):
+        """on_change keyword should be available."""
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIn("on_change", ns)
+        self.assertTrue(callable(ns["on_change"]))
+
+    def test_on_keyword_exists(self):
+        """on (short form) should be available."""
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIn("on", ns)
+
+    def test_canvas_function_exists(self):
+        """canvas keyword should be available."""
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIn("canvas", ns)
+        self.assertTrue(callable(ns["canvas"]))
+
+    def test_canvas_creation(self):
+        """canvas() should create a CanvasNode instance."""
+        from multilingualprogramming.runtime.reactive import CanvasNode
+        ns = RuntimeBuiltins("en").namespace()
+        node = ns["canvas"]("mycanvas")
+        self.assertIsInstance(node, CanvasNode)
+        self.assertEqual(node.name, "mycanvas")
+
+    def test_render_function_exists(self):
+        """render keyword should be available."""
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIn("render", ns)
+        self.assertTrue(callable(ns["render"]))
+
+    def test_render_canvas_to_dict(self):
+        """render() should convert CanvasNode to dict."""
+        ns = RuntimeBuiltins("en").namespace()
+        canvas = ns["canvas"]("test")
+        rendered = ns["render"](canvas)
+        self.assertIsInstance(rendered, dict)
+        self.assertIn("name", rendered)
+        self.assertEqual(rendered["name"], "test")
+
+    def test_bind_function_exists(self):
+        """bind keyword should be available."""
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIn("bind", ns)
+        self.assertTrue(callable(ns["bind"]))
+
+    def test_bind_signal_to_canvas(self):
+        """bind() should attach signal to canvas slot."""
+        from multilingualprogramming.runtime.reactive import Signal
+        ns = RuntimeBuiltins("en").namespace()
+        canvas = ns["canvas"]("test")
+        signal = Signal("count", 0)
+        ns["bind"](canvas, "counter", signal)
+        self.assertIn("counter", canvas.bindings)
+        self.assertIs(canvas.bindings["counter"], signal)
+
+    def test_on_change_with_signal(self):
+        """on_change() should register handler on signal."""
+        from multilingualprogramming.runtime.reactive import Signal
+        ns = RuntimeBuiltins("en").namespace()
+        signal = Signal("test", 0)
+        called = []
+
+        def handler(val):
+            called.append(val)
+
+        ns["on_change"](signal, handler)
+        signal.set(42)
+        self.assertEqual(called, [42])
+
+    def test_French_render_variant(self):
+        """afficher (French) should also work for render."""
+        ns = RuntimeBuiltins("fr").namespace()
+        self.assertIn("afficher", ns)
+
+    def test_French_bind_variant(self):
+        """lier (French) should also work for bind."""
+        ns = RuntimeBuiltins("fr").namespace()
+        self.assertIn("lier", ns)
+
+    def test_Spanish_bind_variant(self):
+        """vincular (Spanish) should also work for bind."""
+        ns = RuntimeBuiltins("es").namespace()
+        self.assertIn("vincular", ns)
