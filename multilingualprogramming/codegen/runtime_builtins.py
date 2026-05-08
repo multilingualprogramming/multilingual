@@ -14,6 +14,8 @@ Hindi word for "print") resolve to Python built-ins.
 
 import json
 import sys
+import asyncio
+import inspect
 from pathlib import Path
 
 from multilingualprogramming.keyword.keyword_registry import KeywordRegistry
@@ -187,9 +189,6 @@ def _ml_par_gather(*values):
     For synchronous functions, this executes them in order and collects results.
     For coroutines, uses asyncio.gather() to run them concurrently.
     """
-    import asyncio
-    import inspect
-
     # If all values are non-awaitable, just return them as-is (sequential execution)
     if all(not (inspect.iscoroutine(v) or inspect.isawaitable(v)) for v in values):
         return tuple(values)
@@ -206,7 +205,7 @@ def _ml_par_gather(*values):
 
     # Run the async gather
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         # Already in async context - return the coroutine to be awaited
         return _gather()
     except RuntimeError:
@@ -486,7 +485,10 @@ class RuntimeBuiltins:
         catalog = cls._load_builtin_alias_catalog()
         aliases = {}
         for canonical, by_language in catalog.get("aliases", {}).items():
-            builtin_obj = cls._UNIVERSAL_BUILTINS.get(canonical)
+            if canonical == "input":
+                builtin_obj = input
+            else:
+                builtin_obj = cls._UNIVERSAL_BUILTINS.get(canonical)
             if builtin_obj is None or not isinstance(by_language, dict):
                 continue
             for alias in by_language.get(language, []):

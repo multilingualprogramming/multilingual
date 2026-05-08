@@ -16,11 +16,15 @@ from multilingualprogramming.runtime.ollama_provider import OllamaProvider
 
 
 class _FakeClient:
+    """Minimal sync Ollama client stub for request-shaping tests."""
+
     def __init__(self, host=None):
+        """Store the configured host and capture chat payloads."""
         self.host = host
         self.calls = []
 
     def chat(self, **kwargs):
+        """Capture sync chat payloads and return a fake response."""
         self.calls.append(kwargs)
         return SimpleNamespace(
             message=SimpleNamespace(content="ok"),
@@ -29,22 +33,40 @@ class _FakeClient:
         )
 
 
-class _FakeAsyncClient(_FakeClient):
+class _FakeAsyncClient:
+    """Async Ollama client stub that records the same payload shape."""
+
+    def __init__(self, host=None):
+        """Store the configured host and capture async chat payloads."""
+        self.host = host
+        self.calls = []
+
     async def chat(self, **kwargs):
-        return super().chat(**kwargs)
+        """Capture async chat payloads and return a fake response."""
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            message=SimpleNamespace(content="ok"),
+            eval_count=7,
+            prompt_eval_count=3,
+        )
 
 
 class _FakeOllamaModule:
+    """Module-shaped stub exposing sync and async client constructors."""
+
     def __init__(self):
+        """Track instantiated fake clients for later assertions."""
         self.clients = []
         self.async_clients = []
 
     def Client(self, host=None):  # pylint: disable=invalid-name
+        """Return a fake sync client and remember it."""
         client = _FakeClient(host=host)
         self.clients.append(client)
         return client
 
     def AsyncClient(self, host=None):  # pylint: disable=invalid-name
+        """Return a fake async client and remember it."""
         client = _FakeAsyncClient(host=host)
         self.async_clients.append(client)
         return client

@@ -478,7 +478,8 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
                 "    except RuntimeError:",
                 "        return asyncio.run(awaitable)",
                 "    raise RuntimeError(",
-                "        'Cannot use async-only construct from sync code while an event loop is running'",
+                "        'Cannot use async-only construct from sync code '",
+                "        'while an event loop is running'",
                 "    )",
             ]),
         )
