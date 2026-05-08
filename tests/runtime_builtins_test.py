@@ -118,6 +118,20 @@ class RuntimeBuiltinsTestSuite(unittest.TestCase):
         self.assertIn("combinar", ns)
         self.assertIs(ns["combinar"], zip)
 
+    def test_render_keyword_does_not_override_french_print(self):
+        ns = RuntimeBuiltins("fr").namespace()
+        self.assertIn("render", ns)
+        self.assertIn("afficher", ns)
+        self.assertNotEqual(ns["render"], print)
+        self.assertIs(ns["afficher"], print)
+
+    def test_render_keyword_does_not_override_spanish_print(self):
+        ns = RuntimeBuiltins("es").namespace()
+        self.assertIn("render", ns)
+        self.assertIn("imprimir", ns)
+        self.assertNotEqual(ns["render"], print)
+        self.assertIs(ns["imprimir"], print)
+
     def test_japanese_collection_aliases(self):
         ns = RuntimeBuiltins("ja").namespace()
         self.assertIn("集合", ns)

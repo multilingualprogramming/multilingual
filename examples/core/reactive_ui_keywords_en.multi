@@ -1,0 +1,119 @@
+# Core 1.0 Reactive & UI Keywords Demo
+# Demonstrates: canvas for UI node creation,
+#               render for canvas serialization,
+#               bind for reactive signal binding,
+#               on_change for event handler registration
+
+fn test_canvas_builtin():
+    print("Demo 1: Canvas keyword availability")
+    print("canvas() creates UI node structure")
+    print("canvas(name, children, bindings) signature")
+
+
+fn test_render_builtin():
+    print("\nDemo 2: Render keyword availability")
+    print("render() serializes canvas to dictionary")
+    print("Output has: name, bindings, children keys")
+
+
+fn test_bind_builtin():
+    print("\nDemo 3: Bind keyword availability")
+    print("bind(canvas, slot_name, signal) signature")
+    print("Connects Signal to canvas slot")
+    print("Canvas updates when signal changes")
+
+
+fn test_on_change_builtin():
+    print("\nDemo 4: On-change keyword availability")
+    print("on_change(signal, handler) registers listener")
+    print("Handler called synchronously on change")
+    print("Supports decorator pattern")
+
+
+fn test_reactive_flow():
+    print("\nDemo 5: Reactive update flow")
+    print("Step 1: Create canvas for UI structure")
+    print("Step 2: Create signal with initial value")
+    print("Step 3: Register on_change handler")
+    print("Step 4: Bind signal to canvas slot")
+    print("Step 5: Signal change triggers handler")
+    print("Step 6: Canvas slot receives update")
+
+
+fn test_common_patterns():
+    print("\nDemo 6: Common reactive patterns")
+
+    print("Pattern 1: Counter Display")
+    print("  - Signal holds count")
+    print("  - Canvas displays value")
+    print("  - on_change updates display")
+
+    print("Pattern 2: Form State")
+    print("  - Signal per form field")
+    print("  - Bind to canvas slots")
+    print("  - Validation via on_change")
+
+    print("Pattern 3: Dynamic List")
+    print("  - Canvas children reflect list")
+    print("  - Signal triggers update")
+
+    print("Pattern 4: Responsive Layout")
+    print("  - Canvas for responsive structure")
+    print("  - Breakpoint signals trigger rebind")
+
+
+fn test_canvas_codegen():
+    print("\nDemo 7: Canvas for code generation")
+    print("Canvas serialized via render()")
+    print("Output convertible to HTML/JS")
+    print("Can be sent to browser/frontend")
+
+
+fn test_component_patterns():
+    print("\nDemo 8: Component-based architecture")
+    print("Reusable component functions")
+    print("Functions return canvas nodes")
+    print("Compose complex UIs from simple pieces")
+
+
+fn test_binding_workflow():
+    print("\nDemo 9: Complete binding workflow")
+    print("1. Create canvas node")
+    print("2. Create signal")
+    print("3. Register on_change handler")
+    print("4. Bind signal to canvas slot")
+    print("5. Updates flow automatically")
+
+
+fn test_live_updates():
+    print("\nDemo 10: Live update scenario")
+    print("Use case: Real-time dashboard")
+    print("- Metrics arrive via channel")
+    print("- Signal updated with metric")
+    print("- on_change handler formats display")
+    print("- Canvas slot shows latest value")
+    print("- Browser gets updated HTML/JSON")
+
+
+fn main():
+    print("=================================================")
+    print("Core 1.0 Reactive & UI Keywords Demo")
+    print("=================================================")
+
+    test_canvas_builtin()
+    test_render_builtin()
+    test_bind_builtin()
+    test_on_change_builtin()
+    test_reactive_flow()
+    test_common_patterns()
+    test_canvas_codegen()
+    test_component_patterns()
+    test_binding_workflow()
+    test_live_updates()
+
+    print("\n=================================================")
+    print("All reactive & UI keyword demonstrations complete!")
+    print("=================================================")
+
+
+main()

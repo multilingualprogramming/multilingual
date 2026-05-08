@@ -559,8 +559,6 @@ class RuntimeBuiltins:
         "onchange": _on_change,
         "canvas": _canvas,
         "render": _render,
-        "afficher": _render,
-        "mostrar": _render,
         "bind": _bind,
         "lier": _bind,
         "vincular": _bind,

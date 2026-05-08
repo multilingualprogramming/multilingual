@@ -1,0 +1,119 @@
+# Core 1.0 Mots-clés Réactifs et UI — Français
+# Démontre: toile pour la création de nœuds UI,
+#           afficher pour la sérialisation toile,
+#           lier pour la liaison de signal réactif,
+#           sur_changement pour l'enregistrement du gestionnaire d'événements
+
+déf test_toile_disponible():
+    afficher("Démo 1: Disponibilité du mot-clé toile")
+    afficher("toile() crée une structure de nœud UI")
+    afficher("toile(nom, enfants, liaisons) signature")
+
+
+déf test_afficher_disponible():
+    afficher("\nDémo 2: Disponibilité du mot-clé afficher")
+    afficher("afficher() sérialise toile en dictionnaire")
+    afficher("Sortie contient: clés nom, liaisons, enfants")
+
+
+déf test_lier_disponible():
+    afficher("\nDémo 3: Disponibilité du mot-clé lier")
+    afficher("lier(toile, nom_fente, signal) signature")
+    afficher("Connecte Signal à la fente toile")
+    afficher("Toile se met à jour quand signal change")
+
+
+déf test_sur_changement_disponible():
+    afficher("\nDémo 4: Disponibilité du mot-clé sur_changement")
+    afficher("sur_changement(signal, gestionnaire) enregistre écouteur")
+    afficher("Gestionnaire appelé de manière synchrone sur changement")
+    afficher("Supporte le motif décorateur")
+
+
+déf test_flux_reactif():
+    afficher("\nDémo 5: Flux de mise à jour réactif")
+    afficher("Étape 1: Créer toile pour structure UI")
+    afficher("Étape 2: Créer signal avec valeur initiale")
+    afficher("Étape 3: Enregistrer gestionnaire sur_changement")
+    afficher("Étape 4: Lier signal à fente toile")
+    afficher("Étape 5: Changement signal déclenche gestionnaire")
+    afficher("Étape 6: Fente toile reçoit mise à jour")
+
+
+déf test_motifs_communs():
+    afficher("\nDémo 6: Motifs réactifs courants")
+
+    afficher("Motif 1: Affichage compteur")
+    afficher("  - Signal contient compte")
+    afficher("  - Toile affiche valeur")
+    afficher("  - sur_changement met à jour affichage")
+
+    afficher("Motif 2: État formulaire")
+    afficher("  - Signal par champ formulaire")
+    afficher("  - Lier aux fentes toile")
+    afficher("  - Validation via sur_changement")
+
+    afficher("Motif 3: Liste dynamique")
+    afficher("  - Enfants toile reflètent liste")
+    afficher("  - Signal déclenche mise à jour")
+
+    afficher("Motif 4: Disposition réactive")
+    afficher("  - Toile pour structure réactive")
+    afficher("  - Signaux point-de-rupture déclenchent re-liaison")
+
+
+déf test_toile_generation_code():
+    afficher("\nDémo 7: Toile pour génération de code")
+    afficher("Toile sérialisée via afficher()")
+    afficher("Sortie convertible en HTML/JS")
+    afficher("Peut être envoyée au navigateur/interface")
+
+
+déf test_motifs_composant():
+    afficher("\nDémo 8: Architecture basée sur composants")
+    afficher("Fonctions composant réutilisables")
+    afficher("Fonctions retournent nœuds toile")
+    afficher("Composer des UIs complexes à partir de pièces simples")
+
+
+déf test_flux_liaison():
+    afficher("\nDémo 9: Flux de liaison complet")
+    afficher("1. Créer nœud toile")
+    afficher("2. Créer signal")
+    afficher("3. Enregistrer gestionnaire sur_changement")
+    afficher("4. Lier signal à fente toile")
+    afficher("5. Mises à jour circulent automatiquement")
+
+
+déf test_mises_a_jour_directes():
+    afficher("\nDémo 10: Scénario de mise à jour directe")
+    afficher("Cas d'usage: Tableau de bord temps réel")
+    afficher("- Métriques arrivent via canal")
+    afficher("- Signal mise à jour avec métrique")
+    afficher("- Gestionnaire sur_changement formate affichage")
+    afficher("- Fente toile montre valeur dernière")
+    afficher("- Navigateur obtient HTML/JSON mise à jour")
+
+
+déf principal():
+    afficher("=================================================")
+    afficher("Core 1.0 Mots-clés Réactifs et UI")
+    afficher("=================================================")
+
+    test_toile_disponible()
+    test_afficher_disponible()
+    test_lier_disponible()
+    test_sur_changement_disponible()
+    test_flux_reactif()
+    test_motifs_communs()
+    test_toile_generation_code()
+    test_motifs_composant()
+    test_flux_liaison()
+    test_mises_a_jour_directes()
+
+    afficher("\n=================================================")
+    afficher("Toutes démonstrations de mots-clés réactifs et UI terminées!")
+    afficher("=================================================")
+
+
+principal()

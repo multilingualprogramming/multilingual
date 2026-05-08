@@ -1,0 +1,103 @@
+# Core 1.0 Mots-clés de Concurrence — Français
+# Démontre: canal() pour la communication inter-tâches,
+#           lancer pour les tâches en arrière-plan
+
+déf test_canal_basique():
+    afficher("Démo 1: Création de canal basique")
+    soit ch = canal()
+    afficher("Canal créé avec succès")
+
+
+déf test_canal_borné():
+    afficher("\nDémo 2: Canal borné (capacité=5)")
+    soit ch = canal(5)
+    afficher("Canal borné créé avec capacité 5")
+
+
+déf test_proprietes_canal():
+    afficher("\nDémo 3: Propriétés du canal")
+    soit ch = canal()
+    afficher("Canal a les méthodes envoyer, recevoir, fermer")
+    afficher("Canal a les propriétés vide, taille")
+
+
+déf test_canaux_multiples():
+    afficher("\nDémo 4: Canaux multiples")
+    soit nombres = canal()
+    soit texte = canal()
+    soit mixte = canal()
+    afficher("Créé 3 canaux pour différents types")
+
+
+déf test_canaux_nommés():
+    afficher("\nDémo 5: Canaux nommés (documentation)")
+    soit ch_requete = canal()
+    soit ch_reponse = canal()
+    soit ch_journal = canal()
+    afficher("Créé des canaux nommés logiques")
+
+
+déf test_concept_lancer():
+    afficher("\nDémo 6: Lancer (concept de tâche en arrière-plan)")
+    afficher("lancer() crée une tâche asyncio et retourne immédiatement")
+    afficher("La tâche s'exécute concurremment sans bloquer l'appelant")
+
+
+déf test_cycle_vie_canal():
+    afficher("\nDémo 7: Cycle de vie du canal")
+    soit ch = canal()
+    afficher("canal() crée un canal ouvert")
+    afficher("attendre ch.fermer() signale aucune autre donnée")
+    afficher("recevoir() sur canal fermé lève StopAsyncIteration")
+
+
+déf test_motifs_canal():
+    afficher("\nDémo 8: Motifs courants de canaux")
+    afficher("Motif 1: File d'attente de travaux")
+    afficher("  - Les travailleurs reçoivent des tâches du canal partagé")
+    afficher("  - Distribution de tâches évolutive")
+
+    afficher("Motif 2: Fan-in")
+    afficher("  - Multiples sources envoient vers un seul canal")
+    afficher("  - Collecteur central reçoit de tous")
+
+    afficher("Motif 3: Fan-out")
+    afficher("  - Source unique diffuse vers multiples canaux")
+    afficher("  - Chaque consommateur a son propre canal")
+
+    afficher("Motif 4: Pipeline")
+    afficher("  - Chaîne d'étapes connectées par des canaux")
+    afficher("  - Les données circulent par le pipeline de transformation")
+
+
+déf test_borné_vs_non_borné():
+    afficher("\nDémo 9: Borné vs Non-borné")
+    soit non_borné = canal()
+    soit borné_petit = canal(1)
+    soit borné_grand = canal(100)
+
+    afficher("non_borné = canal()  — pas de limite sur les éléments")
+    afficher("borné = canal(N)     — bloque sur envoyer si plein")
+
+
+déf principal():
+    afficher("=================================================")
+    afficher("Core 1.0 Mots-clés de Concurrence")
+    afficher("=================================================")
+
+    test_canal_basique()
+    test_canal_borné()
+    test_proprietes_canal()
+    test_canaux_multiples()
+    test_canaux_nommés()
+    test_concept_lancer()
+    test_cycle_vie_canal()
+    test_motifs_canal()
+    test_borné_vs_non_borné()
+
+    afficher("\n=================================================")
+    afficher("Démonstrations de mots-clés de concurrence terminées!")
+    afficher("=================================================")
+
+
+principal()

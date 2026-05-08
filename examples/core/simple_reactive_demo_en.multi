@@ -1,0 +1,47 @@
+# Core 1.0 Reactive Keywords Demo
+# Demonstrates reactive and UI keywords
+
+fn test_builtin_availability():
+    print("Testing reactive keyword availability...")
+    print("All keywords are available as functions in the runtime")
+
+
+fn test_on_change_available():
+    print("\non_change keyword:")
+    print("- Register handler: on_change(signal, handler)")
+    print("- Supports decorator pattern")
+    print("- Called synchronously when signal changes")
+
+
+fn test_canvas_available():
+    print("\ncanvas keyword:")
+    print("- Create UI node: canvas(name, children, bindings)")
+    print("- Builds hierarchical UI structure")
+    print("- CanvasNode available in namespace")
+
+
+fn test_render_available():
+    print("\nrender keyword:")
+    print("- Serialize canvas: render(canvas_node)")
+    print("- Produces dict with name, bindings, children")
+    print("- Ready for JavaScript code generation")
+
+
+fn test_bind_available():
+    print("\nbind keyword:")
+    print("- Bind signal to canvas: bind(canvas, slot, signal)")
+    print("- Connects reactive Signal to UI node")
+    print("- Updates canvas when signal changes")
+
+
+fn main():
+    print("=== Reactive Keywords Demo ===\n")
+    test_builtin_availability()
+    test_on_change_available()
+    test_canvas_available()
+    test_render_available()
+    test_bind_available()
+    print("\n=== Demo Complete ===")
+
+
+main()

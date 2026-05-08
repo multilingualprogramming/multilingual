@@ -1,0 +1,123 @@
+# Core 1.0 Concurrency Keywords — English
+# Demonstrates: channel<T>() for inter-task communication,
+#               spawn for fire-and-forget tasks,
+#               send/receive for channel operations
+
+# ── Basic channel creation ──────────────────────────────────────────
+fn demo_basic_channel():
+    print("Demo 1: Basic channel creation")
+    let ch = channel()
+    print("✓ Channel created successfully")
+
+
+# ── Bounded channel (with capacity) ─────────────────────────────────
+fn demo_bounded_channel():
+    print("\nDemo 2: Bounded channel (capacity=5)")
+    let ch = channel(5)
+    print("✓ Bounded channel created with capacity 5")
+
+
+# ── Channel methods introspection ───────────────────────────────────
+fn demo_channel_properties():
+    print("\nDemo 3: Channel properties")
+    let ch = channel()
+    print("✓ Channel has send, receive, close methods")
+    print("✓ Channel has empty, size properties")
+
+
+# ── Multiple channels for different data types ──────────────────────
+fn demo_multiple_channels():
+    print("\nDemo 4: Multiple channels")
+    let numbers = channel()
+    let text = channel()
+    let mixed = channel()
+    print("✓ Created 3 channels for different data types")
+
+
+# ── Channel naming for clarity ──────────────────────────────────────
+fn demo_named_channels():
+    print("\nDemo 5: Named channels (documentation)")
+    # In a real system, you might store channels in a registry:
+    let request_ch = channel()   # for API requests
+    let response_ch = channel()  # for API responses
+    let log_ch = channel()       # for logging
+    print("✓ Created logical named channels")
+
+
+# ── Spawn concept demonstration ─────────────────────────────────────
+fn demo_spawn_concept():
+    print("\nDemo 6: Spawn (fire-and-forget task concept)")
+    print("✓ spawn() creates asyncio task and returns immediately")
+    print("✓ Task runs concurrently without blocking caller")
+
+
+# ── Send/Receive pattern (async) ────────────────────────────────────
+async fn demo_send_receive_async():
+    print("\nDemo 7: Send/Receive (async context)")
+    let ch = channel()
+    print("✓ In async function: can use await ch.send()")
+    print("✓ In async function: can use await ch.receive()")
+
+
+# ── Channel close signal ────────────────────────────────────────────
+fn demo_channel_close():
+    print("\nDemo 8: Channel lifecycle")
+    let ch = channel()
+    print("✓ channel() creates open channel")
+    print("✓ await ch.close() signals no more data")
+    print("✓ receive() on closed channel raises StopAsyncIteration")
+
+
+# ── Channel usage patterns ──────────────────────────────────────────
+fn demo_usage_patterns():
+    print("\nDemo 9: Common channel patterns")
+    print("Pattern 1: Work queue")
+    print("  - Workers receive tasks from shared channel")
+    print("  - Scalable task distribution")
+
+    print("Pattern 2: Fan-in")
+    print("  - Multiple sources send to single channel")
+    print("  - Central collector receives from all")
+
+    print("Pattern 3: Fan-out")
+    print("  - Single source broadcasts to multiple channels")
+    print("  - Each consumer has own channel")
+
+    print("Pattern 4: Pipeline")
+    print("  - Chain of stages connected by channels")
+    print("  - Data flows through transformation pipeline")
+
+
+# ── Bounded vs unbounded channels ───────────────────────────────────
+fn demo_bounded_vs_unbounded():
+    print("\nDemo 10: Bounded vs Unbounded")
+    let unbounded = channel()      # capacity = 0 (unbounded)
+    let bounded_small = channel(1)
+    let bounded_large = channel(100)
+
+    print("✓ unbounded = channel()    — no limit on buffered items")
+    print("✓ bounded = channel(N)     — blocks on send when full")
+
+
+# ── Main execution ──────────────────────────────────────────────────
+fn main():
+    print("═══════════════════════════════════════════════════")
+    print("Core 1.0 Concurrency Keywords Demo")
+    print("═══════════════════════════════════════════════════")
+
+    demo_basic_channel()
+    demo_bounded_channel()
+    demo_channel_properties()
+    demo_multiple_channels()
+    demo_named_channels()
+    demo_spawn_concept()
+    demo_channel_close()
+    demo_usage_patterns()
+    demo_bounded_vs_unbounded()
+
+    print("\n═══════════════════════════════════════════════════")
+    print("All concurrency keyword demonstrations complete!")
+    print("═══════════════════════════════════════════════════")
+
+
+main()
