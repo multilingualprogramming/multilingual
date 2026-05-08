@@ -25,7 +25,7 @@ _EXAMPLES_DIR = (
 
 # New Ollama and edge computing examples
 # Note: Spanish example (ollama_edge_es.multi) requires Spanish keyword support for "uses"
-#       which is currently pending localization. Multimodal French example has parser issues.
+#       which is currently pending localization. English and French examples work fully.
 _OLLAMA_EXAMPLES = [
     "ollama_edge_en.multi",
     "ollama_edge_fr.multi",
@@ -33,6 +33,7 @@ _OLLAMA_EXAMPLES = [
     "local_swarm_en.multi",
     "semantic_cache_en.multi",
     "multimodal_edge_en.multi",
+    "multimodal_edge_fr.multi",
 ]
 
 
@@ -175,7 +176,8 @@ class TestOllamaExampleSpecific:
         path = _EXAMPLES_DIR / "multimodal_edge_fr.multi"
         source = path.read_text(encoding="utf-8")
         # Should contain French multimodal keywords
-        assert ("analyser" in source or "analyse" in source or
+        assert ("analyser" in source or "requête" in source or
                 "photo" in source or "image" in source)
         # Should use French memory keyword
         assert "memoire" in source.lower()
+

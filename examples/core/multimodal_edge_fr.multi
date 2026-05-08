@@ -1,8 +1,6 @@
 # Core 1.0 Calcul en Bordure Multimodal — Français
-# Démontre: analyse d'images au bord avec @local,
-#           requêtes multimodales avec des modèles de vision,
-#           pipelines de traitement de documents,
-#           mise en cache de l'inférence pour résultats visuels
+# Démontre: placement @local, analyse d'images avec modèles locaux,
+#           traitement de documents, mise en cache de l'inférence
 
 # ── Analyse d'images au bord ─────────────────────────────────────────────────
 @local
@@ -17,18 +15,18 @@ def classifier_scene(photo) -> str utilise ai:
 
 @local
 def detecter_objets(photo) -> str utilise ai:
-    soit objets = requête @llama3: "Objets visibles:\n" + photo
+    soit objets = requête @llama3: "Objets dans l'image:\n" + photo
     retour objets
 
 # ── Traitement de documents ──────────────────────────────────────────────────
 @local
-def extraire_document(doc) -> str utilise ai:
-    soit texte = generer @phi3: "Extraire texte:\n" + doc
+def extraire_texte_doc(doc) -> str utilise ai:
+    soit texte = requête @phi3: "Extraire le texte:\n" + doc
     retour texte
 
 @local
-def extraire_articles_facture(facture_doc) -> str utilise ai:
-    soit articles = generer @mistral: "Articles:\n" + facture_doc
+def extraire_facture(facture_doc) -> str utilise ai:
+    soit articles = requête @mistral: "Articles de facture:\n" + facture_doc
     retour articles
 
 # ── Analyse multimodale parallèle ────────────────────────────────────────────
@@ -45,69 +43,69 @@ def analyse_multi(photo) -> str utilise ai:
         + "Objets: " + objets
     retour synthese
 
-# ── Mise en cache de résultats multimodaux ───────────────────────────────────
+# ── Mise en cache de résultats ───────────────────────────────────────────────
 def analyse_en_cache(photo) -> str utilise ai:
-    soit cache = memoire("cache_analyse_images", scope="session")
-    soit cle_photo = cout(photo)
-    si cle_photo dans cache:
-        retour cache[cle_photo]
+    soit cache = memoire("cache_images", scope="session")
+    soit cle = cout(photo)
+    si cle dans cache:
+        retour cache[cle]
 
     soit resultat = requête @llama3: "Analyser:\n" + photo
-    cache[cle_photo] = resultat
+    cache[cle] = resultat
     retour resultat
 
-# ── Inférence multimodale consciente des coûts ───────────────────────────────
-def analyse_avec_cout(photo) -> str utilise ai:
+# ── Inférence avec suivi des coûts ───────────────────────────────────────────
+def analyse_cout(photo) -> str utilise ai:
     soit avec_cout = cout(requête @llama3: "Analyser:\n" + photo)
     soit resultat, depense = avec_cout
     imprimer("Coût (tokens):", depense)
     retour resultat
 
-# ── Essaim multimodal: agents spécialisés ─────────────────────────────────────
+# ── Essaim multimodal ────────────────────────────────────────────────────────
 @local
 @agent(model=@llama3)
-def analyste_image(photo) -> str utilise ai:
+def analyste(photo) -> str utilise ai:
     retour requête @llama3: "Analyser:\n" + photo
 
 @local
 @agent(model=@mistral)
-def classifieur_scene(photo) -> str utilise ai:
-    retour requête @mistral: "Type scène:\n" + photo
+def classifieur(photo) -> str utilise ai:
+    retour requête @mistral: "Classifier:\n" + photo
 
 @local
 @agent(model=@phi3)
-def extracteur_document(doc) -> str utilise ai:
-    retour generer @phi3: "Extraire:\n" + doc
+def extracteur(doc) -> str utilise ai:
+    retour requête @phi3: "Extraire:\n" + doc
 
-@essaim(agents=[analyste_image, classifieur_scene, extracteur_document])
-def equipe_analyse_media(entree_media) -> str utilise ai:
-    soit cache = memoire("resultats_equipe_media", scope="session")
-    soit cle_media = cout(entree_media)
-    si cle_media dans cache:
-        retour cache[cle_media]
+@essaim(agents=[analyste, classifieur, extracteur])
+def equipe_media(entree) -> str utilise ai:
+    soit cache = memoire("equipe_cache", scope="session")
+    soit cle = cout(entree)
+    si cle dans cache:
+        retour cache[cle]
 
-    soit analyse_image = deleguer(analyste_image, entree_media)
-    soit scene = deleguer(classifieur_scene, entree_media)
-    soit extraite = deleguer(extracteur_document, entree_media)
+    soit analyse = deleguer(analyste, entree)
+    soit classification = deleguer(classifieur, entree)
+    soit texte = deleguer(extracteur, entree)
 
     soit final = requête @llama3:
         "Intégrer:\n"
-        + "Image: " + analyse_image + "\n"
-        + "Scène: " + scene + "\n"
-        + "Extraite: " + extraite
+        + "Analyse: " + analyse + "\n"
+        + "Classification: " + classification + "\n"
+        + "Texte: " + texte
 
-    cache[cle_media] = final
+    cache[cle] = final
     retour final
 
 # ── Principal ────────────────────────────────────────────────────────────────
 def principal() utilise ai:
-    soit donnees_photo = "exemple_image.jpg"
-    soit analysee = analyser_image(donnees_photo)
-    imprimer("Analyse:", analysee)
+    soit photo = "image.jpg"
+    soit res1 = analyser_image(photo)
+    imprimer("Analyse:", res1)
 
-    soit donnees_doc = "document.pdf"
-    soit extraite = extraire_document(donnees_doc)
-    imprimer("Extraction:", extraite)
+    soit doc = "document.pdf"
+    soit res2 = extraire_texte_doc(doc)
+    imprimer("Extraction:", res2)
 
-    soit combinee = analyse_multi(donnees_photo)
-    imprimer("Analyse multimodale:", combinee)
+    soit res3 = analyse_multi(photo)
+    imprimer("Multi:", res3)
