@@ -409,11 +409,11 @@ sea resultado_transcribir = transcribe @default: "datos_audio_ficticios"
 imprimir("TRANSCRIBIR:", resultado_transcribir)
 
 # Palabras clave de concurrencia (v0.7.0) - PAR, CANAL, SPAWN
-def sumar_numeros(x, y):
-    devolver x + y
+def sumar_numeros(x, z):
+    devolver x + z
 
-def multiplicar_numeros(x, y):
-    devolver x * y
+def multiplicar_numeros(x, z):
+    devolver x * z
 
 sea par_a, par_b = par [
     sumar_numeros(5, 3),
