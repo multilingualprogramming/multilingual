@@ -1,7 +1,7 @@
 """End-to-end test of memory game compilation pipeline."""
 
 from pathlib import Path
-from multilingualprogramming.parser.lexer import Lexer
+from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
 from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
 from multilingualprogramming.codegen.ui_lowering import lower_to_ui

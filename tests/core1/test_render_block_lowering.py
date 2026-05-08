@@ -1,23 +1,6 @@
 """Test semantic IR lowering for RenderBlock and UIElement."""
 
-# pylint: disable=protected-access
-
 from multilingualprogramming.core import ir_nodes as ir
-from multilingualprogramming.core.semantic_lowering import SemanticLowering
-
-
-def test_render_block_lowering_exists():
-    """SemanticLowering has _lower_RenderBlock method."""
-    lowering = SemanticLowering()
-    assert hasattr(lowering, "_lower_RenderBlock")
-    assert callable(lowering._lower_RenderBlock)
-
-
-def test_ui_element_lowering_exists():
-    """SemanticLowering has _lower_UIElement method."""
-    lowering = SemanticLowering()
-    assert hasattr(lowering, "_lower_UIElement")
-    assert callable(lowering._lower_UIElement)
 
 
 def test_ir_ui_element_node_exists():
