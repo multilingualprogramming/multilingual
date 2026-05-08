@@ -30,6 +30,7 @@ from multilingualprogramming.parser.ast_nodes import (
 from multilingualprogramming.keyword.language_pack_validator import (
     LanguagePackValidator,
 )
+from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
 
 
 def _parse(source, lang="en"):
@@ -419,6 +420,54 @@ class CLITestSuite(unittest.TestCase):
 
         self.assertEqual(stdout.getvalue(), "hello\n")
         self.assertIn("[backend] python (python-codegen-exec)", stderr.getvalue())
+
+    def test_cmd_run_registers_default_mock_provider_for_ai_programs(self):
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".multi", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(
+                'fn main() uses ai:\n'
+                '    print(prompt @claude-sonnet: "hello")\n'
+                'main()\n'
+            )
+            tmp_path = tmp.name
+
+        args = Namespace(file=tmp_path, lang="en", show_backend=False)
+        stdout = io.StringIO()
+        try:
+            AIRuntime.reset()
+            with patch("sys.stdout", stdout):
+                cmd_run(args)
+        finally:
+            AIRuntime.reset()
+            Path(tmp_path).unlink(missing_ok=True)
+
+        self.assertIn("mock response to:", stdout.getvalue())
+
+    def test_cmd_run_preserves_existing_registered_provider(self):
+        with tempfile.NamedTemporaryFile(
+            "w", suffix=".multi", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(
+                'fn main() uses ai:\n'
+                '    print(prompt @claude-sonnet: "hello")\n'
+                'main()\n'
+            )
+            tmp_path = tmp.name
+
+        args = Namespace(file=tmp_path, lang="en", show_backend=False)
+        stdout = io.StringIO()
+        provider = MockProvider().add_response("custom provider response")
+        try:
+            AIRuntime.reset()
+            AIRuntime.register(provider)
+            with patch("sys.stdout", stdout):
+                cmd_run(args)
+        finally:
+            AIRuntime.reset()
+            Path(tmp_path).unlink(missing_ok=True)
+
+        self.assertEqual(stdout.getvalue().strip(), "custom provider response")
 
 
 # ---------------------------------------------------------------

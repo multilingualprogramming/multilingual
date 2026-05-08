@@ -42,6 +42,7 @@ from multilingualprogramming.keyword.language_pack_validator import (
 from multilingualprogramming.exceptions import UnsupportedLanguageError
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
+from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
 from multilingualprogramming.source_extensions import (
     find_package_init,
     has_source_extension,
@@ -86,6 +87,14 @@ def _read_source_file(path: str) -> str:
         sys.exit(1)
 
 
+def _ensure_default_ai_provider() -> None:
+    """Register the CLI's default mock provider when none is active."""
+    try:
+        AIRuntime.get_provider()
+    except RuntimeError:
+        AIRuntime.register(MockProvider())
+
+
 def _parse_program_from_file(path: str, lang: str | None):
     source = _read_source_file(path)
     lexer = Lexer(source, language=lang)
@@ -98,6 +107,7 @@ def _parse_program_from_file(path: str, lang: str | None):
 def cmd_run(args):
     """Execute a multilingual source file."""
     source = _read_source_file(args.file)
+    _ensure_default_ai_provider()
 
     # Determine package context so that relative imports work.
     # Walk up from the file's directory while package initializer files exist;
