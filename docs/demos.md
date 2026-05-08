@@ -1,112 +1,60 @@
 # Demos
 
-Multilingual 1.0 showcases a new kind of AI-native, reactive, multilingual
-programming platform.
+A short tour of Multilingual in the browser and in the repository.
 
-## Core 1.0 flagship demos
+## Featured demos
 
-### Multilingual AI agent (3 languages)
+### Multilingual AI agent
 
-The most compelling demo: the same agent logic written in English, French, and
-Japanese, running identically.  Proves that Multilingual is the only AI
-programming platform where agent code is idiomatic in any human language.
+The same agent logic written in three human languages with shared behavior.
 
-- `examples/agent_en.multi` — English
-- `examples/agent_fr.multi` — French
-- `examples/agent_ja.multi` — Japanese
+- `examples/agent_en.multi`
+- `examples/agent_fr.multi`
+- `examples/agent_ja.multi`
 
-### Memory Card Game (Reactive UI showcase)
+### Memory Game
 
-Interactive game demonstrating `observe var`, `async/await`, and event binding within a reactive UI. 
-Written in both English and French to prove polyglot semantics.
+Reactive UI, async handlers, and browser interaction in Multilingual.
 
-**[Play the Memory Game →](memory-game/)** (Compiled to WASM)
+**[Play the Memory Game](memory-game-demo.html)**
 
-- `examples/memory_game_en.multi` — English version
-- `examples/memory_game_fr.multi` — French version (identical logic, different syntax)
+- `examples/memory_game_en.multi`
+- `examples/memory_game_fr.multi`
 
 ### Reactive counter
 
-`observe var` + `on .change` + `canvas` — the simplest reactive web app.
+A compact reactive web app using state changes and canvas updates.
 
 - `examples/reactive_counter.multi`
 
-### Streaming chat (French)
+### Streaming chat
 
-A streaming AI response bound to a reactive view, written in French.
+French-language example of streaming output bound to a reactive view.
 
 - `examples/streaming_chat_fr.multi`
 
-### Semantic search (Japanese)
+### Semantic search
 
-`embed` + `nearest` + `~=` semantic match across Japanese user input.
+Japanese example using semantic matching concepts.
 
 - `examples/semantic_search_ja.multi`
 
-### Multilingual AI dashboard
+### Multilingual dashboard
 
-`@agent`, reactive state, streaming output, and canvas composition.
+Combines agent-style behavior, reactive state, and UI composition.
 
 - `examples/multilingual_dashboard.multi`
 
-## CLI tools for Core 1.0
+## Browser tools
 
-### Inspect the semantic IR
+- **[Open the Playground](playground.html)** for live editing and experimentation.
+- **[Open the WASM Demo Hub](browser/index.html)** for precompiled browser demos.
 
-```
+## Useful CLI commands
+
+```bash
 multilingual ir my_program.multi
-multilingual ir my_program.multi --format json
-```
-
-### Explain a program's structure
-
-```
 multilingual explain my_program.multi
-```
-
-Output: a plain-English summary of all declared functions, agents, tools,
-reactive bindings, effects, and type declarations.
-
-### Preview reactive UI output
-
-```
-multilingual ui-preview my_program.ml
 multilingual ui-preview my_program.ml --html
-multilingual ui-preview my_program.ml --js
-```
-
-### Validate with Core IR before running
-
-```
 multilingual run my_program.ml --mode core
 ```
-
-Validates the semantic IR (checks capabilities, binding names, match
-statement completeness) before executing.
-
-## Browser deployment models
-
-### 1. Pyodide playground
-
-Use for live editing, full interpreter behavior, IR inspection, and teaching.
-
-**[Open the Pyodide Playground](playground.html)**
-
-### 2. Precompiled Multilingual to WASM
-
-Use for ahead-of-time compilation to `module.wasm` and minimal JavaScript host.
-
-**[Open the Browser WASM Demo Hub](browser/index.html)**
-
-## What each demo proves
-
-| Demo | Shows |
-|------|-------|
-| Multilingual agent (3 languages) | Agent logic is idiomatic in any human language |
-| Memory Card Game | `observe var`, `async/await`, event binding in reactive UI; polyglot semantics (English + French) |
-| Reactive counter | `observe var` + `on .change` + `canvas` reactive model |
-| Streaming chat (French) | AI stream bound to reactive view in French |
-| Semantic search (Japanese) | `~=` and `embed` across multilingual input |
-| Pyodide playground | Live browser compilation and IR inspection |
-| Browser WASM demo | Production-ready prebuilt artifact deployment |
-

@@ -7,16 +7,21 @@ from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
 from multilingualprogramming.codegen.ui_lowering import lower_to_ui
 
 
-def test_memory_game_html_has_required_structure():
-    """Generated HTML has all required structural elements."""
+def _load_memory_game_ui():
+    """Compile the memory game example and return the UI lowering result."""
     game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
+    source = game_file.read_text(encoding="utf-8")
     lexer = Lexer(source, lang="en")
     tokens = lexer.tokenize()
     parser = Parser(tokens, lang="en")
     program = parser.parse()
     ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    return lower_to_ui(ir_program)
+
+
+def test_memory_game_html_has_required_structure():
+    """Generated HTML has all required structural elements."""
+    ui_result = _load_memory_game_ui()
     html = ui_result.emit_html()
 
     # Check doctype
@@ -38,14 +43,7 @@ def test_memory_game_html_has_required_structure():
 
 def test_memory_game_html_has_css_styling():
     """Generated HTML includes CSS for game styling."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     html = ui_result.emit_html()
 
     # Check for stylesheet
@@ -66,14 +64,7 @@ def test_memory_game_html_has_css_styling():
 
 def test_memory_game_js_has_required_functions():
     """Generated JS has all required signal and function declarations."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     js = ui_result.emit_js()
 
     # Check for signal declarations
@@ -91,14 +82,7 @@ def test_memory_game_js_has_required_functions():
 
 def test_memory_game_js_no_undefined_calls():
     """Generated JS does not contain calls to undefined functions."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     js = ui_result.emit_js()
 
     # Should not call memory_game() as a function (it's not in JS context)
@@ -110,14 +94,7 @@ def test_memory_game_js_no_undefined_calls():
 
 def test_memory_game_js_has_render_initialization():
     """Generated JS initializes render on page load."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     js = ui_result.emit_js()
 
     # Check for initialization
@@ -126,14 +103,7 @@ def test_memory_game_js_has_render_initialization():
 
 def test_memory_game_js_signal_change_bindings():
     """Generated JS binds signal changes to re-render."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     js = ui_result.emit_js()
 
     # Check that signals are wired to re-render
@@ -143,14 +113,7 @@ def test_memory_game_js_signal_change_bindings():
 
 def test_memory_game_js_has_reactive_runtime():
     """Generated JS includes ReactiveSignal and ReactiveList classes."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     js = ui_result.emit_js()
 
     # Check for reactive runtime
@@ -162,14 +125,7 @@ def test_memory_game_js_has_reactive_runtime():
 
 def test_memory_game_js_for_loop_structure():
     """Generated JS has correct for-loop structure for game board."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     js = ui_result.emit_js()
 
     # Check for loop iterations 0-7
@@ -192,21 +148,16 @@ def test_memory_game_js_for_loop_structure():
         if 'className = \'reset-btn\'' in line:
             reset_button_line = i
 
-    if for_loop_line and status_div_line:
-        # Status div should be after for loop
+    if for_loop_line is not None and status_div_line is not None:
+        # Status div and reset button should be after the card loop.
         assert status_div_line > for_loop_line
+    if for_loop_line is not None and reset_button_line is not None:
+        assert reset_button_line > for_loop_line
 
 
 def test_memory_game_html_valid_utf8():
     """Generated HTML is valid UTF-8 and encodes properly."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     html = ui_result.emit_html()
 
     # Should be valid UTF-8 and encodable without errors
@@ -218,14 +169,7 @@ def test_memory_game_html_valid_utf8():
 
 def test_memory_game_js_event_handlers():
     """Generated JS has event handlers for card clicks."""
-    game_file = Path("examples/memory_game_en.multi")
-    source = game_file.read_text()
-    lexer = Lexer(source, lang="en")
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, lang="en")
-    program = parser.parse()
-    ir_program = lower_to_semantic_ir(program, lang="en")
-    ui_result = lower_to_ui(ir_program)
+    ui_result = _load_memory_game_ui()
     js = ui_result.emit_js()
 
     # Check for event handler attachment

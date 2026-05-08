@@ -1290,7 +1290,13 @@ class _LoweringContext:
 
                 while len(loop_body) > 1:
                     last = loop_body[-1]
-                    if isinstance(last, IRUIElement) or (hasattr(last, '__class__') and 'Expr' in last.__class__.__name__):
+                    if (
+                        isinstance(last, IRUIElement)
+                        or (
+                            hasattr(last, "__class__")
+                            and "Expr" in last.__class__.__name__
+                        )
+                    ):
                         extracted.insert(0, last)
                         loop_body.pop()
                     else:
