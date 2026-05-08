@@ -378,83 +378,83 @@ afficher(result_chaine_m, result_rien, result_num_m, result_tuple_m)
 afficher(resultat_async, resultat_async_pour, resultat_async_avec)
 
 # Mots-clés IA (v0.7.0) - fonctionne avec MockProvider dans les tests
-soit resultat_demande = prompt @default: "Combien font 2 + 2?"
-afficher("DEMANDE:", resultat_demande)
+soit resultat_demande = requête @default: "Combien font 2 + 2?"
+afficher("REQUÊTE:", resultat_demande)
 
-soit resultat_generer = generate @default: "Créer un objet JSON simple"
-afficher("GENERER:", resultat_generer)
+soit resultat_generer = générer @default: "Créer un objet JSON simple"
+afficher("GÉNÉRER:", resultat_generer)
 
-soit resultat_extraire = extract @default: "Extraire les éléments de: pomme, banane, orange"
+soit resultat_extraire = extraire @default: "Extraire les éléments de: pomme, banane, orange"
 afficher("EXTRAIRE:", resultat_extraire)
 
-soit resultat_classer = classify @default: "C'est fantastique!"
+soit resultat_classer = classer @default: "C'est fantastique!"
 afficher("CLASSER:", resultat_classer)
 
-soit resultat_penser = think @default: "Pourquoi 42 est-il significatif?"
-afficher("PENSER:", resultat_penser)
+soit resultat_penser = réfléchir @default: "Pourquoi 42 est-il significatif?"
+afficher("RÉFLÉCHIR:", resultat_penser)
 
-soit resultat_diffuser = stream @default: "Raconte une courte histoire"
+soit resultat_diffuser = diffuser @default: "Raconte une courte histoire"
 soit contenu_diffuse = ""
 pour morceau_diffuse dans resultat_diffuser:
     contenu_diffuse = contenu_diffuse + chaine(morceau_diffuse)
 afficher("DIFFUSER:", contenu_diffuse)
 
 soit resultat_planifier = plan @default: "Comment faire un gâteau"
-afficher("PLANIFIER:", resultat_planifier)
+afficher("PLAN:", resultat_planifier)
 
-soit resultat_incorporer = embed @default: "Ceci est une phrase"
+soit resultat_incorporer = incorporer @default: "Ceci est une phrase"
 afficher("Dimensions de INCORPORER:", longueur(resultat_incorporer))
 
 soit resultat_transcrire = transcribe @default: "donnees_audio_fictive"
-afficher("TRANSCRIRE:", resultat_transcrire)
+afficher("TRANSCRIBE:", resultat_transcrire)
 
-# Mots-clés de concurrence (v0.7.0) - PARALLEL, CANAL, SPAWN
+# Mots-clés de concurrence (v0.7.0) - PARALLÈLE, CANAL, LANCER
 déf ajouter_nombres(x, y):
     retour x + y
 
 déf multiplier_nombres(x, y):
     retour x * y
 
-soit par_a, par_b = par [
+soit par_a, par_b = parallèle [
     ajouter_nombres(5, 3),
     multiplier_nombres(4, 2)
 ]
-afficher("Résultats PAR:", par_a, par_b)
+afficher("Résultats PARALLÈLE:", par_a, par_b)
 
-# PAR imbriqué
-soit resultat_par_imbrique = par [
-    par [1, 2, 3],
-    par [4, 5, 6]
+# PARALLÈLE imbriqué
+soit resultat_par_imbrique = parallèle [
+    parallèle [1, 2, 3],
+    parallèle [4, 5, 6]
 ]
-afficher("PAR imbriqué:", resultat_par_imbrique)
+afficher("PARALLÈLE imbriqué:", resultat_par_imbrique)
 
 # Canal pour communication inter-tâches
-soit canal_comm = channel()
+soit canal_comm = canal()
 afficher("Canal créé avec succès")
 
-soit canal_limite = channel(capacity=10)
+soit canal_limite = canal(capacity=10)
 afficher("Canal limité créé")
 
 # Appels IA multiples en séquence
-soit seq_1 = prompt @default: "Question 1"
-soit seq_2 = prompt @default: "Question 2"
-soit seq_3 = prompt @default: "Question 3"
+soit seq_1 = requête @default: "Question 1"
+soit seq_2 = requête @default: "Question 2"
+soit seq_3 = requête @default: "Question 3"
 afficher("Appels IA séquentiels:", seq_1, seq_2, seq_3)
 
 # Mots-clés IA avec variables
 soit question_ai = "Qu'est-ce que Python?"
-soit reponse_ai = prompt @default: question_ai
+soit reponse_ai = requête @default: question_ai
 afficher("IA avec variables:", reponse_ai)
 
 # IA dans les boucles
 soit resultats_boucle_ai = []
 pour ai_indice dans intervalle(2):
-    soit reponse_boucle = prompt @default: f"Itération {ai_indice}"
+    soit reponse_boucle = requête @default: f"Itération {ai_indice}"
     resultats_boucle_ai.append(reponse_boucle)
 afficher("IA dans les boucles:", longueur(resultats_boucle_ai), "réponses")
 
 # Gestion multimodale (placeholders)
-soit resultat_multimodal = prompt @default: "Décrire ceci: <image>"
+soit resultat_multimodal = requête @default: "Décrire ceci: <image>"
 afficher("Demande multimodale:", resultat_multimodal)
 
 afficher("Toutes les fonctionnalités IA et de concurrence démontrées")

@@ -378,83 +378,83 @@ skriv(result_strang_m, result_ingen, result_num_m, result_tuppel_m)
 skriv(resultat_async, resultat_async_for, resultat_async_med)
 
 # AI-nyckelord (v0.7.0) - fungerar med MockProvider i tester
-lat resultat_fragor = prompt @default: "Vad är 2 + 2?"
-skriv("FRÅGOR:", resultat_fragor)
+lat resultat_fragor = fraga @default: "Vad är 2 + 2?"
+skriv("FRAGA:", resultat_fragor)
 
-lat resultat_generera = generate @default: "Skapa ett enkelt JSON-objekt"
+lat resultat_generera = generera @default: "Skapa ett enkelt JSON-objekt"
 skriv("GENERERA:", resultat_generera)
 
-lat resultat_extrahera = extract @default: "Extrahera element från: äpple, banan, apelsin"
+lat resultat_extrahera = extrahera @default: "Extrahera element från: äpple, banan, apelsin"
 skriv("EXTRAHERA:", resultat_extrahera)
 
-lat resultat_klassificera = classify @default: "Det här är fantastiskt!"
+lat resultat_klassificera = klassificera @default: "Det här är fantastiskt!"
 skriv("KLASSIFICERA:", resultat_klassificera)
 
-lat resultat_tanka = think @default: "Varför är 42 betydelsefullt?"
-skriv("TÄNKA:", resultat_tanka)
+lat resultat_tanka = tank @default: "Varför är 42 betydelsefullt?"
+skriv("TANK:", resultat_tanka)
 
-lat resultat_strom = stream @default: "Berätta en kort historia"
+lat resultat_strom = strom @default: "Berätta en kort historia"
 lat innehall_strom = ""
 for del_strom i resultat_strom:
     innehall_strom = innehall_strom + strack(del_strom)
-skriv("STRÖMMA:", innehall_strom)
+skriv("STROM:", innehall_strom)
 
 lat resultat_planera = plan @default: "Hur man bakar en tårta"
-skriv("PLANERA:", resultat_planera)
+skriv("PLAN:", resultat_planera)
 
-lat resultat_inbadat = embed @default: "Det här är en mening"
-skriv("Dimensioner för INBÄDD:", langd(resultat_inbadat))
+lat resultat_inbadat = badda_in @default: "Det här är en mening"
+skriv("Dimensioner för BADDA_IN:", langd(resultat_inbadat))
 
 lat resultat_transkribera = transcribe @default: "fiktiva_ljuddata"
-skriv("TRANSKRIBERA:", resultat_transkribera)
+skriv("TRANSCRIBE:", resultat_transkribera)
 
-# Concurrency-nyckelord (v0.7.0) - PAR, KANAL, SPAWN
+# Concurrency-nyckelord (v0.7.0) - PARALLELLT, KANAL, STARTA
 definiera adderat_siffror(x, y):
     retur x + y
 
 definiera multiplicerat_siffror(x, y):
     retur x * y
 
-lat par_a, par_b = par [
+lat par_a, par_b = parallellt [
     adderat_siffror(5, 3),
     multiplicerat_siffror(4, 2)
 ]
-skriv("PAR-resultat:", par_a, par_b)
+skriv("PARALLELLT-resultat:", par_a, par_b)
 
-# Nästlad PAR
-lat resultat_par_nast = par [
-    par [1, 2, 3],
-    par [4, 5, 6]
+# Nästlad PARALLELLT
+lat resultat_par_nast = parallellt [
+    parallellt [1, 2, 3],
+    parallellt [4, 5, 6]
 ]
-skriv("Nästlad PAR:", resultat_par_nast)
+skriv("Nästlad PARALLELLT:", resultat_par_nast)
 
 # Kanal för kommunikation mellan uppgifter
-lat kanal_kom = channel()
+lat kanal_kom = kanal()
 skriv("Kanal skapad framgångsrikt")
 
-lat kanal_begransad = channel(capacity=10)
+lat kanal_begransad = kanal(capacity=10)
 skriv("Begränsad kanal skapad")
 
 # Flera AI-anrop i sekvens
-lat seq_1 = prompt @default: "Fråga 1"
-lat seq_2 = prompt @default: "Fråga 2"
-lat seq_3 = prompt @default: "Fråga 3"
+lat seq_1 = fraga @default: "Fråga 1"
+lat seq_2 = fraga @default: "Fråga 2"
+lat seq_3 = fraga @default: "Fråga 3"
 skriv("Sekventiella AI-anrop:", seq_1, seq_2, seq_3)
 
 # AI-nyckelord med variabler
 lat fragor_ai = "Vad är Python?"
-lat svar_ai = prompt @default: fragor_ai
+lat svar_ai = fraga @default: fragor_ai
 skriv("AI med variabler:", svar_ai)
 
 # AI i loopar
 lat resultat_loop_ai = []
 for index_ai i intervall(2):
-    lat svar_loop = prompt @default: f"Iteration {index_ai}"
+    lat svar_loop = fraga @default: f"Iteration {index_ai}"
     resultat_loop_ai.append(svar_loop)
 skriv("AI i loopar:", langd(resultat_loop_ai), "svar")
 
 # Multimodal-hantering (platshållare)
-lat resultat_multimodal = prompt @default: "Beskriv detta: <bild>"
+lat resultat_multimodal = fraga @default: "Beskriv detta: <bild>"
 skriv("Multimodal fråga:", resultat_multimodal)
 
 skriv("Alla AI- och concurrency-funktioner demonstrerade")

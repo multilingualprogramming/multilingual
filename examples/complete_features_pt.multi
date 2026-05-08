@@ -378,83 +378,83 @@ imprima(result_cadeia_m, result_nenhum, result_num_m, result_tuplo_m)
 imprima(resultado_async, resultado_async_para, resultado_async_com)
 
 # Palavras-chave de IA (v0.7.0) - funciona com MockProvider em testes
-seja resultado_pergunta = prompt @default: "Quanto é 2 + 2?"
-imprima("PERGUNTA:", resultado_pergunta)
+seja resultado_pergunta = perguntar @default: "Quanto é 2 + 2?"
+imprima("PERGUNTAR:", resultado_pergunta)
 
-seja resultado_gerar = generate @default: "Crie um objeto JSON simples"
+seja resultado_gerar = gerar @default: "Crie um objeto JSON simples"
 imprima("GERAR:", resultado_gerar)
 
-seja resultado_extrair = extract @default: "Extraia elementos de: maçã, banana, laranja"
+seja resultado_extrair = extrair @default: "Extraia elementos de: maçã, banana, laranja"
 imprima("EXTRAIR:", resultado_extrair)
 
-seja resultado_classificar = classify @default: "Isto é incrível!"
+seja resultado_classificar = classificar @default: "Isto é incrível!"
 imprima("CLASSIFICAR:", resultado_classificar)
 
-seja resultado_pensar = think @default: "Por que 42 é significativo?"
+seja resultado_pensar = pensar @default: "Por que 42 é significativo?"
 imprima("PENSAR:", resultado_pensar)
 
-seja resultado_fluxo = stream @default: "Conte uma história curta"
+seja resultado_fluxo = transmitir @default: "Conte uma história curta"
 seja conteudo_fluxo = ""
 para pedaco_fluxo em resultado_fluxo:
     conteudo_fluxo = conteudo_fluxo + cadeia(pedaco_fluxo)
-imprima("FLUXO:", conteudo_fluxo)
+imprima("TRANSMITIR:", conteudo_fluxo)
 
 seja resultado_planejar = plan @default: "Como fazer um bolo"
-imprima("PLANEJAR:", resultado_planejar)
+imprima("PLAN:", resultado_planejar)
 
-seja resultado_incorporar = embed @default: "Esta é uma sentença"
+seja resultado_incorporar = incorporar @default: "Esta é uma sentença"
 imprima("Dimensões de INCORPORAR:", comprimento(resultado_incorporar))
 
 seja resultado_transcrever = transcribe @default: "dados_audio_ficticios"
-imprima("TRANSCREVER:", resultado_transcrever)
+imprima("TRANSCRIBE:", resultado_transcrever)
 
-# Palavras-chave de concorrência (v0.7.0) - PAR, CANAL, SPAWN
+# Palavras-chave de concorrência (v0.7.0) - PARALELO, CANAL, INICIAR
 defina adicione_numeros(x, y):
     retorne x + y
 
 defina multiplique_numeros(x, y):
     retorne x * y
 
-seja par_a, par_b = par [
+seja par_a, par_b = paralelo [
     adicione_numeros(5, 3),
     multiplique_numeros(4, 2)
 ]
-imprima("Resultados PAR:", par_a, par_b)
+imprima("Resultados PARALELO:", par_a, par_b)
 
-# PAR aninhado
-seja resultado_par_aninhado = par [
-    par [1, 2, 3],
-    par [4, 5, 6]
+# PARALELO aninhado
+seja resultado_par_aninhado = paralelo [
+    paralelo [1, 2, 3],
+    paralelo [4, 5, 6]
 ]
-imprima("PAR aninhado:", resultado_par_aninhado)
+imprima("PARALELO aninhado:", resultado_par_aninhado)
 
 # Canal para comunicação entre tarefas
-seja canal_comunicacao = channel()
+seja canal_comunicacao = canal()
 imprima("Canal criado com sucesso")
 
-seja canal_limitado = channel(capacity=10)
+seja canal_limitado = canal(capacity=10)
 imprima("Canal limitado criado")
 
 # Múltiplas chamadas de IA em sequência
-seja seq_1 = prompt @default: "Pergunta 1"
-seja seq_2 = prompt @default: "Pergunta 2"
-seja seq_3 = prompt @default: "Pergunta 3"
+seja seq_1 = perguntar @default: "Pergunta 1"
+seja seq_2 = perguntar @default: "Pergunta 2"
+seja seq_3 = perguntar @default: "Pergunta 3"
 imprima("Chamadas de IA sequenciais:", seq_1, seq_2, seq_3)
 
 # Palavras-chave de IA com variáveis
 seja pergunta_ia = "O que é Python?"
-seja resposta_ia = prompt @default: pergunta_ia
+seja resposta_ia = perguntar @default: pergunta_ia
 imprima("IA com variáveis:", resposta_ia)
 
 # IA em loops
 seja resultados_loop_ia = []
 para indice_ia em intervalo(2):
-    seja resposta_loop = prompt @default: f"Iteração {indice_ia}"
+    seja resposta_loop = perguntar @default: f"Iteração {indice_ia}"
     resultados_loop_ia.append(resposta_loop)
 imprima("IA em loops:", comprimento(resultados_loop_ia), "respostas")
 
 # Manipulação multimodal (placeholders)
-seja resultado_multimodal = prompt @default: "Descreva isto: <imagem>"
+seja resultado_multimodal = perguntar @default: "Descreva isto: <imagem>"
 imprima("Pergunta multimodal:", resultado_multimodal)
 
 imprima("Todos os recursos de IA e concorrência demonstrados")

@@ -378,83 +378,83 @@ ausgeben(result_zeichen_m, result_nichts, result_zahl_m, result_tupel_m)
 ausgeben(async_ergebnis, async_fuer_ergebnis, async_mit_ergebnis)
 
 # KI-Schlüsselwörter (v0.7.0) - funktioniert mit MockProvider in Tests
-sei ergebnis_frage = prompt @default: "Was ist 2 + 2?"
-ausgeben("FRAGE:", ergebnis_frage)
+sei ergebnis_frage = abfragen @default: "Was ist 2 + 2?"
+ausgeben("ABFRAGEN:", ergebnis_frage)
 
-sei ergebnis_erzeugen = generate @default: "Ein einfaches JSON-Objekt erstellen"
-ausgeben("ERZEUGEN:", ergebnis_erzeugen)
+sei ergebnis_erzeugen = generieren @default: "Ein einfaches JSON-Objekt erstellen"
+ausgeben("GENERIEREN:", ergebnis_erzeugen)
 
-sei ergebnis_extrahieren = extract @default: "Elemente extrahieren aus: Apfel, Banane, Orange"
+sei ergebnis_extrahieren = extrahieren @default: "Elemente extrahieren aus: Apfel, Banane, Orange"
 ausgeben("EXTRAHIEREN:", ergebnis_extrahieren)
 
-sei ergebnis_klassifizieren = classify @default: "Das ist fantastisch!"
+sei ergebnis_klassifizieren = klassifizieren @default: "Das ist fantastisch!"
 ausgeben("KLASSIFIZIEREN:", ergebnis_klassifizieren)
 
-sei ergebnis_denken = think @default: "Warum ist 42 bedeutsam?"
+sei ergebnis_denken = denken @default: "Warum ist 42 bedeutsam?"
 ausgeben("DENKEN:", ergebnis_denken)
 
-sei ergebnis_stroem = stream @default: "Erzähle eine kurze Geschichte"
+sei ergebnis_stroem = streamen @default: "Erzähle eine kurze Geschichte"
 sei inhalt_stroem = ""
 für teil_stroem in ergebnis_stroem:
     inhalt_stroem = inhalt_stroem + text(teil_stroem)
-ausgeben("STROM:", inhalt_stroem)
+ausgeben("STREAMEN:", inhalt_stroem)
 
 sei ergebnis_planen = plan @default: "Wie man einen Kuchen backt"
-ausgeben("PLANEN:", ergebnis_planen)
+ausgeben("PLAN:", ergebnis_planen)
 
-sei ergebnis_einbetten = embed @default: "Dies ist ein Satz"
+sei ergebnis_einbetten = einbetten @default: "Dies ist ein Satz"
 ausgeben("Dimensionen von EINBETTEN:", laenge(ergebnis_einbetten))
 
 sei ergebnis_transkribieren = transcribe @default: "fiktive_audiodaten"
-ausgeben("TRANSKRIBIEREN:", ergebnis_transkribieren)
+ausgeben("TRANSCRIBE:", ergebnis_transkribieren)
 
-# Nebenläufigkeitsschlüsselwörter (v0.7.0) - PAR, KANAL, SPAWN
+# Nebenläufigkeitsschlüsselwörter (v0.7.0) - PARALLEL, KANAL, STARTEN
 def zahlen_addieren(x, y):
     rückgabe x + y
 
 def zahlen_multiplizieren(x, y):
     rückgabe x * y
 
-sei par_a, par_b = par [
+sei par_a, par_b = parallel [
     zahlen_addieren(5, 3),
     zahlen_multiplizieren(4, 2)
 ]
-ausgeben("PAR-Ergebnisse:", par_a, par_b)
+ausgeben("PARALLEL-Ergebnisse:", par_a, par_b)
 
-# Verschachtelter PAR
-sei ergebnis_par_verschachtelt = par [
-    par [1, 2, 3],
-    par [4, 5, 6]
+# Verschachtelter PARALLEL
+sei ergebnis_par_verschachtelt = parallel [
+    parallel [1, 2, 3],
+    parallel [4, 5, 6]
 ]
-ausgeben("Verschachtelter PAR:", ergebnis_par_verschachtelt)
+ausgeben("Verschachtelter PARALLEL:", ergebnis_par_verschachtelt)
 
 # Kanal für Aufgabenkommunikation
-sei kommunikationskanal = channel()
+sei kommunikationskanal = kanal()
 ausgeben("Kanal erfolgreich erstellt")
 
-sei begrenzter_kanal = channel(capacity=10)
+sei begrenzter_kanal = kanal(capacity=10)
 ausgeben("Begrenzter Kanal erstellt")
 
 # Mehrere KI-Aufrufe in Folge
-sei seq_1 = prompt @default: "Frage 1"
-sei seq_2 = prompt @default: "Frage 2"
-sei seq_3 = prompt @default: "Frage 3"
+sei seq_1 = abfragen @default: "Frage 1"
+sei seq_2 = abfragen @default: "Frage 2"
+sei seq_3 = abfragen @default: "Frage 3"
 ausgeben("Sequenzielle KI-Aufrufe:", seq_1, seq_2, seq_3)
 
 # KI-Schlüsselwörter mit Variablen
 sei ki_frage = "Was ist Python?"
-sei ki_antwort = prompt @default: ki_frage
+sei ki_antwort = abfragen @default: ki_frage
 ausgeben("KI mit Variablen:", ki_antwort)
 
 # KI in Schleifen
 sei ki_schleife_ergebnisse = []
 für ki_index in bereich(2):
-    sei ki_schleife_antwort = prompt @default: f"Iteration {ki_index}"
+    sei ki_schleife_antwort = abfragen @default: f"Iteration {ki_index}"
     ki_schleife_ergebnisse.append(ki_schleife_antwort)
 ausgeben("KI in Schleifen:", laenge(ki_schleife_ergebnisse), "Antworten")
 
 # Multimodale Handhabung (Platzhalter)
-sei ergebnis_multimodal = prompt @default: "Beschreibe dies: <Bild>"
+sei ergebnis_multimodal = abfragen @default: "Beschreibe dies: <Bild>"
 ausgeben("Multimodale Frage:", ergebnis_multimodal)
 
 ausgeben("Alle KI- und Nebenläufigkeitsfunktionen demonstriert")
