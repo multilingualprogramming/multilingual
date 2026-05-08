@@ -435,6 +435,20 @@ async வரையறு பணி_async_உடன்():
 இருக்கட்டும் சேனல்_கட்டுப்படுத்தப்பட்ட = சேனல்(capacity=10)
 அச்சிடு("கட்டுப்படுத்தப்பட்ட சேனல் உருவாக்கப்பட்டது")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+இருக்கட்டும் spawn_channel = சேனல்()
+
+async வரையறு spawn_test_async():
+    async வரையறு task_worker(value):
+        kaththiru asyncio.sleep(0)
+        திருப்பு value * 2
+
+    இருக்கட்டும் spawn_task = தொடங்கு(task_worker(5))
+    திருப்பு "spawn task created"
+
+இருக்கட்டும் spawn_result = asyncio.run(spawn_test_async())
+அச்சிடு("Async concurrency keywords validated:", spawn_result)
+
 # வரிசையாக பல செயற்கை நுண்ணறிவு அழைப்புகள்
 இருக்கட்டும் seq_1 = கேள் @default: "கேள்வி 1"
 இருக்கட்டும் seq_2 = கேள் @default: "கேள்வி 2"

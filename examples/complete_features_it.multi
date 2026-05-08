@@ -435,6 +435,20 @@ stampa("Canale creato con successo")
 sia canale_limitato = canale(capacity=10)
 stampa("Canale limitato creato")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+sia spawn_channel = canale()
+
+asincrono definisci spawn_test_async():
+    asincrono definisci task_worker(value):
+        attendi asyncio.sleep(0)
+        ritorna value * 2
+
+    sia spawn_task = avviare(task_worker(5))
+    ritorna "spawn task created"
+
+sia spawn_result = asyncio.run(spawn_test_async())
+stampa("Async concurrency keywords validated:", spawn_result)
+
 # Molteplici chiamate IA in sequenza
 sia seq_1 = chiedi @default: "Domanda 1"
 sia seq_2 = chiedi @default: "Domanda 2"

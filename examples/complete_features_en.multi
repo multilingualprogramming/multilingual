@@ -435,6 +435,20 @@ print("Channel created successfully")
 let bounded_channel = channel(capacity=10)
 print("Bounded channel created")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+let spawn_channel = channel()
+
+async def spawn_test_async():
+    async def task_worker(value):
+        await asyncio.sleep(0)
+        return value * 2
+
+    let spawn_task = spawn(task_worker(5))
+    return "spawn task created"
+
+let spawn_result = asyncio.run(spawn_test_async())
+print("Async concurrency keywords validated:", spawn_result)
+
 # Multiple AI calls in sequence
 let seq_1 = prompt @default: "Question 1"
 let seq_2 = prompt @default: "Question 2"

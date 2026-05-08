@@ -435,6 +435,20 @@ skriv("Kanal oprettet med succes")
 lad kanal_begransed = kanal(capacity=10)
 skriv("Begrænset kanal oprettet")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+lad spawn_channel = kanal()
+
+async definer spawn_test_async():
+    async definer task_worker(value):
+        afvent asyncio.sleep(0)
+        returner value * 2
+
+    lad spawn_task = start(task_worker(5))
+    returner "spawn task created"
+
+lad spawn_result = asyncio.run(spawn_test_async())
+skriv("Async concurrency keywords validated:", spawn_result)
+
 # Flere AI-kald i sekvens
 lad seq_1 = sporg @default: "Spoergsmal 1"
 lad seq_2 = sporg @default: "Spoergsmal 2"

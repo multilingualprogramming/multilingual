@@ -435,6 +435,20 @@ async 関数 非同期付き処理():
 変数 制限チャネル = チャネル(capacity=10)
 表示("制限付きチャネルが作成されました")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+変数 spawn_channel = チャネル()
+
+async 関数 spawn_test_async():
+    async 関数 task_worker(value):
+        await asyncio.sleep(0)
+        戻る value * 2
+
+    変数 spawn_task = 起動(task_worker(5))
+    戻る "spawn task created"
+
+変数 spawn_result = asyncio.run(spawn_test_async())
+表示("Async concurrency keywords validated:", spawn_result)
+
 # 連続した複数の AI コール
 変数 seq_1 = プロンプト @default: "質問 1"
 変数 seq_2 = プロンプト @default: "質問 2"

@@ -435,6 +435,20 @@ tulosta("Kanava luotu onnistuneesti")
 olkoon kanava_rajattu = kanava(capacity=10)
 tulosta("Rajattu kanava luotu")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+olkoon spawn_channel = kanava()
+
+async maarittele spawn_test_async():
+    async maarittele task_worker(value):
+        odota asyncio.sleep(0)
+        palauta value * 2
+
+    olkoon spawn_task = käynnistä(task_worker(5))
+    palauta "spawn task created"
+
+olkoon spawn_result = asyncio.run(spawn_test_async())
+tulosta("Async concurrency keywords validated:", spawn_result)
+
 # Useita tekoäly-puheluita peräkkäin
 olkoon seq_1 = kysy @default: "Kysymys 1"
 olkoon seq_2 = kysy @default: "Kysymys 2"

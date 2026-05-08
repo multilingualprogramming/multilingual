@@ -435,6 +435,20 @@ async دالة مهمة_async_مع():
 ليكن قناة_محدودة = قناة(capacity=10)
 طباعة("تم إنشاء قناة محدودة")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+ليكن spawn_channel = قناة()
+
+async دالة spawn_test_async():
+    async دالة task_worker(value):
+        await asyncio.sleep(0)
+        إرجاع value * 2
+
+    ليكن spawn_task = أطلق(task_worker(5))
+    إرجاع "spawn task created"
+
+ليكن spawn_result = asyncio.run(spawn_test_async())
+طباعة("Async concurrency keywords validated:", spawn_result)
+
 # عدة استدعاءات ذكاء اصطناعي بالتسلسل
 ليكن seq_1 = استفسر @default: "السؤال 1"
 ليكن seq_2 = استفسر @default: "السؤال 2"

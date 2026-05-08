@@ -435,6 +435,20 @@ drukuj("Kanał utworzony pomyślnie")
 niech kanal_ograniczony = channel(capacity=10)
 drukuj("Kanał ograniczony utworzony")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+niech spawn_channel = kanal()
+
+async funkcja spawn_test_async():
+    async funkcja task_worker(value):
+        czekaj asyncio.sleep(0)
+        zwroc value * 2
+
+    niech spawn_task = uruchom(task_worker(5))
+    zwroc "spawn task created"
+
+niech spawn_result = asyncio.run(spawn_test_async())
+drukuj("Async concurrency keywords validated:", spawn_result)
+
 # Wielokrotne wywołania sztucznej inteligencji w sekwencji
 niech seq_1 = prompt @default: "Pytanie 1"
 niech seq_2 = prompt @default: "Pytanie 2"

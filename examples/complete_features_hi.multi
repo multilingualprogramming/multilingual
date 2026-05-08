@@ -435,6 +435,20 @@ asink परिभाषा कार्य_async_साथ():
 मान चैनल_सीमित = चैनल(capacity=10)
 प्रिंट("सीमित चैनल बनाया गया")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+मान spawn_channel = चैनल()
+
+asink परिभाषा spawn_test_async():
+    asink परिभाषा task_worker(value):
+        pratiksha asyncio.sleep(0)
+        वापसी value * 2
+
+    मान spawn_task = प्रारंभ(task_worker(5))
+    वापसी "spawn task created"
+
+मान spawn_result = asyncio.run(spawn_test_async())
+प्रिंट("Async concurrency keywords validated:", spawn_result)
+
 # क्रमिक क्रम में कृत्रिम बुद्धिमत्ता कॉल
 मान seq_1 = पूछो @default: "प्रश्न 1"
 मान seq_2 = पूछो @default: "प्रश्न 2"

@@ -38,10 +38,6 @@ def _parse(code: str, lang: str):
     return Parser(tokens, source_language=lang).parse()
 
 
-@unittest.skipUnless(
-    importlib.util.find_spec("wasmtime") is not None,
-    "wasmtime not installed",
-)
 class CompleteFeaturesWasmExecutionSuite(unittest.TestCase):
     """Generate WAT/WASM artifacts and execute them for every language example."""
 

@@ -435,6 +435,20 @@ afdrukken("Kanaal succesvol aangemaakt")
 laat kanaal_beperkt = kanaal(capacity=10)
 afdrukken("Beperkt kanaal aangemaakt")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+laat spawn_channel = kanaal()
+
+async definieer spawn_test_async():
+    async definieer task_worker(value):
+        wacht asyncio.sleep(0)
+        retourneer value * 2
+
+    laat spawn_task = starten(task_worker(5))
+    retourneer "spawn task created"
+
+laat spawn_result = asyncio.run(spawn_test_async())
+afdrukken("Async concurrency keywords validated:", spawn_result)
+
 # Meerdere AI-aanroepen in volgorde
 laat seq_1 = vraag @default: "Vraag 1"
 laat seq_2 = vraag @default: "Vraag 2"

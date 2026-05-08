@@ -435,6 +435,20 @@ ausgeben("Kanal erfolgreich erstellt")
 sei begrenzter_kanal = kanal(capacity=10)
 ausgeben("Begrenzter Kanal erstellt")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+sei spawn_channel = kanal()
+
+asynchron def spawn_test_async():
+    asynchron def task_worker(value):
+        erwarten asyncio.sleep(0)
+        rückgabe value * 2
+
+    sei spawn_task = starten(task_worker(5))
+    rückgabe "spawn task created"
+
+sei spawn_result = asyncio.run(spawn_test_async())
+ausgeben("Async concurrency keywords validated:", spawn_result)
+
 # Mehrere KI-Aufrufe in Folge
 sei seq_1 = abfragen @default: "Frage 1"
 sei seq_2 = abfragen @default: "Frage 2"

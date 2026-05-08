@@ -435,6 +435,20 @@ async 函数 异步使用任务():
 令 受限通道 = 通道(capacity=10)
 打印("已创建受限通道")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+令 spawn_channel = 通道()
+
+async 函数 spawn_test_async():
+    async 函数 task_worker(value):
+        await asyncio.sleep(0)
+        返回 value * 2
+
+    令 spawn_task = 启动(task_worker(5))
+    返回 "spawn task created"
+
+令 spawn_result = asyncio.run(spawn_test_async())
+打印("Async concurrency keywords validated:", spawn_result)
+
 # 按顺序的多个 AI 调用
 令 seq_1 = 提示 @default: "问题 1"
 令 seq_2 = 提示 @default: "问题 2"

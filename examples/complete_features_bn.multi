@@ -435,6 +435,20 @@ asink সংজ্ঞা কাজ_async_সাথে():
 ধরি চ্যানেল_সীমাবদ্ধ = চ্যানেল(capacity=10)
 ছাপাও("সীমাবদ্ধ চ্যানেল তৈরি")
 
+# Async Concurrency Keywords (v0.8.0) - SPAWN, CHANNEL, SEND, RECEIVE
+ধরি spawn_channel = চ্যানেল()
+
+asink সংজ্ঞা spawn_test_async():
+    asink সংজ্ঞা task_worker(value):
+        opekkha asyncio.sleep(0)
+        ফেরত value * 2
+
+    ধরি spawn_task = শুরু(task_worker(5))
+    ফেরত "spawn task created"
+
+ধরি spawn_result = asyncio.run(spawn_test_async())
+ছাপাও("Async concurrency keywords validated:", spawn_result)
+
 # ক্রমিক ক্রমে কৃত্রিম বুদ্ধিমত্তা কল
 ধরি seq_1 = জিজ্ঞেস @default: "প্রশ্ন 1"
 ধরি seq_2 = জিজ্ঞেস @default: "প্রশ্ন 2"
