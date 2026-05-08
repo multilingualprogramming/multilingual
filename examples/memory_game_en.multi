@@ -20,7 +20,7 @@ fn memory_game() uses ui:
 
         if first_pick == -1:
             first_pick = index
-        else if first_pick != index:
+        elif first_pick != index:
             second_pick = index
             is_checking = true
 
@@ -68,7 +68,7 @@ fn memory_game() uses ui:
                             onclick=handle_card_click(i):
                         if matched[i]:
                             "✓"
-                        else if revealed[i]:
+                        elif revealed[i]:
                             str(cards[i])
                         else:
                             "?"

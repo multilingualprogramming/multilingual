@@ -51,8 +51,6 @@ jobs:
       - name: Build Memory Game demo for Pages (Reactive UI showcase)
         run: |
           mkdir -p docs/games/memory-game
-          python -m multilingualprogramming examples/memory_game_en.multi --target=wasm --output=docs/games/memory-game/memory_game_en.wasm
-          python -m multilingualprogramming examples/memory_game_fr.multi --target=wasm --output=docs/games/memory-game/memory_game_fr.wasm
           cp docs/memory-game-demo.html docs/games/memory-game/index.html
 
       - name: Stage root docs into docs_dir
