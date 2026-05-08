@@ -68,7 +68,7 @@ fn respond_and_enrich(query: str) -> str uses ai, net, fs:
 @agent(model=@claude-sonnet)
 fn fact_checker(claim: str) -> str uses ai:
     let result = think @claude-sonnet:
-        Verify this claim with step-by-step reasoning: claim
+        "Verify this claim with step-by-step reasoning: " + claim
     return result.conclusion
 
 @agent(model=@claude-sonnet)

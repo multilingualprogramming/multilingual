@@ -1,4 +1,4 @@
-# pylint: disable=trailing-newlines
+# pylint: disable=trailing-newlines,mixed-line-endings
 #
 
 # SPDX-FileCopyrightText: 2026 John Samuel <johnsamuelwrites@gmail.com>
@@ -326,6 +326,18 @@ def _should_skip_example(filename: str) -> tuple[bool, str]:
         "swarm_delegation_en.multi": (
 
             "Requires Ollama provider (set TEST_WITH_OLLAMA=1 to enable)"
+
+        ),
+
+        "multimodal_edge_en.multi": (
+
+            "Requires Ollama vision models (set TEST_WITH_OLLAMA=1 to enable)"
+
+        ),
+
+        "multimodal_edge_fr.multi": (
+
+            "Requires Ollama vision models (set TEST_WITH_OLLAMA=1 to enable)"
 
         ),
 

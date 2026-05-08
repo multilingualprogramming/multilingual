@@ -5,7 +5,7 @@
 #
 
 """Recursive-descent parser for the multilingual programming language."""
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines,mixed-line-endings
 
 from typing import NoReturn
 
@@ -2021,7 +2021,7 @@ class Parser:
                 tokens_for_parse = clean_tokens + [self.tokens[-1]]
                 template_parser = Parser(tokens_for_parse, source_language=self.source_language)
                 template_parser.pos = 0
-                return template_parser._parse_expression()
+                return template_parser.parse_expression_fragment()
             except Exception:
                 pass
 

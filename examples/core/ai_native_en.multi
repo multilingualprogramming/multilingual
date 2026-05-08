@@ -20,8 +20,8 @@ fn reason(problem: str) -> str uses ai:
 
 fn diagnose(symptoms: str) -> str uses ai:
     let plan = think @claude-sonnet:
-        Given these symptoms, reason step-by-step about possible causes.
-        symptoms: symptoms
+        "Given these symptoms, reason step-by-step about possible causes.\n"
+        + "Symptoms: " + symptoms
     return plan.conclusion
 
 # ── stream — streaming response, token by token ──────────────────────────────
@@ -52,8 +52,8 @@ fn generate_invoice(description: str) -> str uses ai:
 @agent(model=@claude-sonnet)
 fn code_reviewer(diff: str) -> str uses ai:
     let critique = think @claude-sonnet:
-        Review this code change for correctness, readability, and edge cases.
-        diff: diff
+        "Review this code change for correctness, readability, and edge cases.\n"
+        + "Diff: " + diff
     let verdict = prompt @claude-sonnet: "Summarise findings:\n" + critique.conclusion
     return verdict
 
