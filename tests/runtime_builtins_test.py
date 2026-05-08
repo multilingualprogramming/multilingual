@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 from multilingualprogramming.codegen.runtime_builtins import RuntimeBuiltins, _runtime_input
 from multilingualprogramming.keyword.keyword_registry import KeywordRegistry
+from multilingualprogramming.runtime.channel import Channel
+from multilingualprogramming.runtime.reactive import CanvasNode, Signal
 
 
 class RuntimeBuiltinsTestSuite(unittest.TestCase):
@@ -243,14 +245,12 @@ class ConcurrencyKeywordsTestSuite(unittest.TestCase):
 
     def test_channel_creation(self):
         """channel() should create a Channel instance."""
-        from multilingualprogramming.runtime.channel import Channel
         ns = RuntimeBuiltins("en").namespace()
         ch = ns["channel"]()
         self.assertIsInstance(ch, Channel)
 
     def test_channel_with_capacity(self):
         """channel(8) should create a bounded channel."""
-        from multilingualprogramming.runtime.channel import Channel
         ns = RuntimeBuiltins("en").namespace()
         ch = ns["channel"](8)
         self.assertIsInstance(ch, Channel)
@@ -293,7 +293,6 @@ class ReactiveUIKeywordsTestSuite(unittest.TestCase):
 
     def test_canvas_creation(self):
         """canvas() should create a CanvasNode instance."""
-        from multilingualprogramming.runtime.reactive import CanvasNode
         ns = RuntimeBuiltins("en").namespace()
         node = ns["canvas"]("mycanvas")
         self.assertIsInstance(node, CanvasNode)
@@ -322,7 +321,6 @@ class ReactiveUIKeywordsTestSuite(unittest.TestCase):
 
     def test_bind_signal_to_canvas(self):
         """bind() should attach signal to canvas slot."""
-        from multilingualprogramming.runtime.reactive import Signal
         ns = RuntimeBuiltins("en").namespace()
         canvas = ns["canvas"]("test")
         signal = Signal("count", 0)
@@ -332,7 +330,6 @@ class ReactiveUIKeywordsTestSuite(unittest.TestCase):
 
     def test_on_change_with_signal(self):
         """on_change() should register handler on signal."""
-        from multilingualprogramming.runtime.reactive import Signal
         ns = RuntimeBuiltins("en").namespace()
         signal = Signal("test", 0)
         called = []

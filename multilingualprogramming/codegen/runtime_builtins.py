@@ -21,6 +21,7 @@ from pathlib import Path
 from multilingualprogramming.keyword.keyword_registry import KeywordRegistry
 from multilingualprogramming.runtime.ai_runtime import AIRuntime
 from multilingualprogramming.runtime.ai_types import ModelRef
+from multilingualprogramming.runtime.channel import Channel
 from multilingualprogramming.runtime.multimodal_runtime import (
     AudioValue,
     DocumentValue,
@@ -36,7 +37,12 @@ from multilingualprogramming.runtime.numeric_primitives import (
     BoundedArray,
     MinDistanceAccumulator,
 )
-from multilingualprogramming.runtime.reactive import ReactiveEngine, Signal, stream_to_view
+from multilingualprogramming.runtime.reactive import (
+    CanvasNode,
+    ReactiveEngine,
+    Signal,
+    stream_to_view,
+)
 from multilingualprogramming.runtime.retrieval_runtime import (
     VectorIndex,
     format_context,
@@ -241,7 +247,6 @@ def _channel(capacity=0):
     Returns:
         A Channel[T] instance with send(), receive(), and close() methods.
     """
-    from multilingualprogramming.runtime.channel import Channel
     return Channel(capacity=capacity)
 
 
@@ -275,7 +280,6 @@ def _canvas(name="", children=None, bindings=None):
     Returns:
         A CanvasNode instance.
     """
-    from multilingualprogramming.runtime.reactive import CanvasNode
     return CanvasNode(name=name, children=children, bindings=bindings)
 
 

@@ -11,7 +11,6 @@ work correctly after recent fixes (commit 7e1fd50).
 """
 
 import unittest
-import asyncio
 
 from multilingualprogramming.codegen.executor import ProgramExecutor
 from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
