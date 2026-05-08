@@ -1432,7 +1432,7 @@
         "pl": "planuj",
         "nl": "plannen",
         "sv": "planera",
-        "da": "planl?g",
+        "da": "planlaeg",
         "fi": "suunnittele"
       },
       "TRANSCRIBE": {
@@ -1456,7 +1456,7 @@
       },
       "RETRIEVE": {
         "en": "retrieve",
-        "fr": "r?cup?rer",
+        "fr": "recuperer",
         "es": "recuperar",
         "de": "abrufen",
         "hi": "प्राप्त_करो",

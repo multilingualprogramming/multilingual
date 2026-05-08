@@ -78,6 +78,22 @@ class ParserExpressionTestSuite(unittest.TestCase):
         self.assertIsInstance(stmt.expression, Identifier)
         self.assertEqual(stmt.expression.name, "x")
 
+    def test_parse_bind_keyword_as_callable_in_expression(self):
+        prog = _parse(
+            "\u0644\u064a\u0643\u0646 pairs = \u0642\u0627\u0626\u0645\u0629("
+            "\u0627\u0631\u0628\u0637([1, 2], [3, 4]))\n",
+            language="ar",
+        )
+        stmt = prog.body[0]
+        self.assertIsInstance(stmt, VariableDeclaration)
+        self.assertIsInstance(stmt.value, CallExpr)
+        self.assertEqual(stmt.value.func.name, "\u0642\u0627\u0626\u0645\u0629")
+        self.assertEqual(len(stmt.value.args), 1)
+        inner = stmt.value.args[0]
+        self.assertIsInstance(inner, CallExpr)
+        self.assertIsInstance(inner.func, Identifier)
+        self.assertEqual(inner.func.name, "\u0627\u0631\u0628\u0637")
+
     def test_parse_parenthesized(self):
         prog = _parse("(42)\n")
         stmt = prog.body[0]

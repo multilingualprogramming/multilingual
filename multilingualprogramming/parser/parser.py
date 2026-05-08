@@ -85,6 +85,7 @@ _IDENTIFIER_LIKE_CONCEPTS = (
         "RETRIEVE",
         # Experimental/Core 1.0 soft keywords that currently lower
         # through ordinary identifier/call syntax in the parser.
+        "BIND",
         "PAR",
         "SPAWN",
         "CHANNEL",
