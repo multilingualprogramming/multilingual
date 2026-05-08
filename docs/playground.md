@@ -38,7 +38,7 @@ download required.
 multilingual build-wasm-bundle my_app.multi --out-dir dist/wasm
 ```
 
-Live demos using this approach are in [`browser demos`](_generated/examples/browser/README.md).
+Live demos using this approach are in [`browser demos`](browser/index.html).
 
 ## Core 1.0 example: the same agent in three languages
 
