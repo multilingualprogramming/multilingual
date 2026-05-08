@@ -30,7 +30,8 @@ from multilingualprogramming.parser.ast_nodes import (
     FStringLiteral, AssertStatement, ChainedAssignment, DictUnpackEntry,
     # Core 1.0 structured data and reactive
     EnumDecl, EnumVariant, RecordDecl, RecordField, ObserveDeclaration,
-    OnChangeStatement, CanvasBlock, RenderStatement, ViewBindingStatement,
+    OnChangeStatement, CanvasBlock, UIElement, RenderBlock,
+    RenderStatement, ViewBindingStatement,
 )
 from multilingualprogramming.parser.error_messages import ErrorMessageRegistry
 from multilingualprogramming.parser.surface_normalizer import (
@@ -158,6 +159,7 @@ class Parser:
         # Deep-nesting resilience: recursion depth management
         self._depth = 0
         self._max_depth = max_depth if max_depth is not None else DEFAULT_MAX_DEPTH
+        self._render_context_depth = 0
 
     # ------------------------------------------------------------------
     # Token navigation
@@ -339,6 +341,23 @@ class Parser:
         self._skip_newlines()
         tok = self._current()
 
+        if (
+            tok.type == TokenType.IDENTIFIER
+            and tok.value == "render"
+            and self._peek_non_layout(1).type == TokenType.DELIMITER
+            and self._peek_non_layout(1).value == ":"
+        ):
+            self._advance()
+            self._render_context_depth += 1
+            try:
+                body = self._parse_column_block(tok.column)
+            finally:
+                self._render_context_depth -= 1
+            return RenderBlock(body=body, line=tok.line, column=tok.column)
+
+        if self._render_context_depth > 0 and self._looks_like_ui_element():
+            return self._parse_ui_element()
+
         # Decorators: @expr before def/class
         if self._match_delimiter("@"):
             return self._parse_decorated()
@@ -483,6 +502,143 @@ class Parser:
             self._advance()
 
         return body
+
+    def _skip_layout_tokens(self):
+        """Skip layout-only tokens used by column-sensitive UI parsing."""
+        while self._current().type in {
+            TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT
+        }:
+            self._advance()
+
+    def _peek_non_layout(self, offset=0):
+        """Return the token after skipping NEWLINE/INDENT/DEDENT tokens."""
+        idx = self.pos
+        while idx < len(self.tokens):
+            tok = self.tokens[idx]
+            if tok.type not in {TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT}:
+                break
+            idx += 1
+        idx += offset
+        while idx < len(self.tokens):
+            tok = self.tokens[idx]
+            if tok.type not in {TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT}:
+                return tok
+            idx += 1
+        return self.tokens[-1]
+
+    def _parse_column_block(self, parent_column):
+        """Parse a layout block using source columns instead of INDENT tokens."""
+        self._expect_delimiter(":")
+        return self._parse_column_suite(parent_column)
+
+    def _parse_column_suite(self, parent_column):
+        """Parse the body of a layout block after the colon has been consumed."""
+        self._skip_layout_tokens()
+
+        body = []
+        while not self._at_end():
+            tok = self._peek_non_layout()
+            if tok.type == TokenType.EOF or tok.column <= parent_column:
+                break
+            self._skip_layout_tokens()
+            body.append(self._parse_statement())
+            self._skip_layout_tokens()
+        return body
+
+    def _looks_like_ui_attribute(self):
+        """Return True when the current token starts a UI attribute assignment."""
+        tok = self._current()
+        if tok.type not in {TokenType.IDENTIFIER, TokenType.KEYWORD}:
+            return False
+        nxt = self._peek_non_layout(1)
+        if nxt.type == TokenType.OPERATOR and nxt.value == "=":
+            return True
+        if nxt.type == TokenType.DELIMITER and nxt.value == ":":
+            nxt2 = self._peek_non_layout(2)
+            nxt3 = self._peek_non_layout(3)
+            return (
+                nxt2.type in {TokenType.IDENTIFIER, TokenType.KEYWORD}
+                and nxt3.type == TokenType.OPERATOR and nxt3.value == "="
+            )
+        return False
+
+    def _looks_like_ui_element(self):
+        """Return True when the current token begins a render-block UI element."""
+        tok = self._current()
+        if tok.type != TokenType.IDENTIFIER:
+            return False
+        nxt = self._peek_non_layout(1)
+        if nxt.type == TokenType.DELIMITER and nxt.value == ":":
+            return True
+        if nxt.type == TokenType.KEYWORD and nxt.concept == "COND_IF":
+            return True
+        if nxt.type in {TokenType.IDENTIFIER, TokenType.KEYWORD}:
+            return True
+        return self._looks_like_ui_attribute()
+
+    def _parse_ui_attribute_name(self):
+        """Parse an attribute name, including namespaced forms like class:active."""
+        tok = self._current()
+        if tok.type not in {TokenType.IDENTIFIER, TokenType.KEYWORD}:
+            self._error("UNEXPECTED_TOKEN", tok, token=tok.value)
+        name = self._advance().value
+        if self._match_delimiter(":"):
+            nxt = self._peek_non_layout(1)
+            if nxt.type in {TokenType.IDENTIFIER, TokenType.KEYWORD}:
+                self._advance()
+                name += f":{self._advance().value}"
+        return name
+
+    def _parse_ui_attribute(self):
+        """Parse a single UI element attribute assignment."""
+        name = self._parse_ui_attribute_name()
+        self._expect_operator("=")
+        value = self._parse_expression()
+        return (name, value)
+
+    def _parse_ui_inline_child(self):
+        """Parse an inline child expression after `tag:` on the same line."""
+        expr = self._parse_expression()
+        return ExpressionStatement(expr, line=expr.line, column=expr.column)
+
+    def _parse_ui_element(self):
+        """Parse a render-block UI element with attributes and nested children."""
+        tag_tok = self._advance()
+        attributes = []
+        children = []
+        condition = None
+
+        while not self._at_end():
+            tok = self._current()
+            if tok.type in {TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT}:
+                self._skip_layout_tokens()
+                continue
+            if tok.type == TokenType.KEYWORD and tok.concept == "COND_IF":
+                self._advance()
+                condition = self._parse_expression()
+                continue
+            if tok.type == TokenType.DELIMITER and tok.value == ":":
+                self._advance()
+                if self._current().type not in {
+                    TokenType.NEWLINE, TokenType.INDENT, TokenType.DEDENT, TokenType.EOF
+                }:
+                    children.append(self._parse_ui_inline_child())
+                else:
+                    children = self._parse_column_suite(tag_tok.column)
+                return UIElement(
+                    tag_tok.value,
+                    attributes=attributes,
+                    children=children,
+                    condition=condition,
+                    line=tag_tok.line,
+                    column=tag_tok.column,
+                )
+            if self._looks_like_ui_attribute():
+                attributes.append(self._parse_ui_attribute())
+                continue
+            self._error("UNEXPECTED_TOKEN", tok, token=tok.value)
+
+        self._error("UNEXPECTED_TOKEN", tag_tok, token=tag_tok.value)
 
     # ------------------------------------------------------------------
     # Variable declarations and assignments
@@ -716,8 +872,15 @@ class Parser:
         return CanvasBlock(name=name, body=body, line=tok.line, column=tok.column)
 
     def _parse_render_statement(self):
-        """Parse: render target with value."""
+        """Parse: render target with value  or  render: <ui-block>."""
         tok = self._advance()  # consume RENDER
+        if self._match_delimiter(":"):
+            self._render_context_depth += 1
+            try:
+                body = self._parse_column_block(tok.column)
+            finally:
+                self._render_context_depth -= 1
+            return RenderBlock(body=body, line=tok.line, column=tok.column)
         target = self._parse_expression()
         if self._match_concept("WITH"):
             self._advance()

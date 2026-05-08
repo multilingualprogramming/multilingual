@@ -548,6 +548,12 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
             else f"{target}.set({value}) if hasattr({target}, 'set') else print({value})"
         )
 
+    def visit_RenderBlock(self, _node):
+        self._emit("# render block omitted in Python backend")
+
+    def visit_UIElement(self, _node):
+        self._emit("# ui element omitted in Python backend")
+
     def visit_ViewBindingStatement(self, node):
         self._ensure_reactive_engine()
         signal = self._expr(node.signal)

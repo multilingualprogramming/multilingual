@@ -538,6 +538,23 @@ class CanvasBlock(ASTNode):
         self.body = body or []
 
 
+class UIElement(ASTNode):
+    """Nested UI/markup element inside a render block."""
+    def __init__(self, tag, attributes=None, children=None, condition=None, line=0, column=0):
+        super().__init__(line, column)
+        self.tag = tag
+        self.attributes = attributes or []
+        self.children = children or []
+        self.condition = condition
+
+
+class RenderBlock(ASTNode):
+    """Declarative render block: render: ..."""
+    def __init__(self, body=None, line=0, column=0):
+        super().__init__(line, column)
+        self.body = body or []
+
+
 class RenderStatement(ASTNode):
     """Render statement: render target with value."""
     def __init__(self, target, value, line=0, column=0):

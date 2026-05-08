@@ -21,6 +21,7 @@ from multilingualprogramming.parser.ast_nodes import (
     TryStatement, ExceptHandler, MatchStatement, AwaitExpr, NamedExpr,
     ChainedAssignment, TupleLiteral,
     WithStatement, ImportStatement, FromImportStatement,
+    RenderBlock, UIElement,
 )
 from multilingualprogramming.exceptions import ParseError
 
@@ -1245,6 +1246,84 @@ class ParserErrorTestSuite(unittest.TestCase):
     def test_error_elif_without_if(self):
         with self.assertRaises(ParseError):
             _parse("elif x:\n    pass\n", language="en")
+
+
+class ParserRenderBlockTestSuite(unittest.TestCase):
+    """Tests for render-block UI DSL parsing."""
+
+    def test_parse_render_block_with_inline_children(self):
+        prog = _parse(
+            "render:\n"
+            "    div class=\"status\":\n"
+            "        p: \"hello\"\n",
+            language="en",
+        )
+        stmt = prog.body[0]
+        self.assertIsInstance(stmt, RenderBlock)
+        self.assertEqual(len(stmt.body), 1)
+        root = stmt.body[0]
+        self.assertIsInstance(root, UIElement)
+        self.assertEqual(root.tag, "div")
+        self.assertEqual(root.attributes[0][0], "class")
+        self.assertEqual(root.children[0].tag, "p")
+
+    def test_parse_render_block_conditional_element(self):
+        prog = _parse(
+            "render:\n"
+            "    p if ready: \"done\"\n",
+            language="en",
+        )
+        node = prog.body[0].body[0]
+        self.assertIsInstance(node, UIElement)
+        self.assertEqual(node.tag, "p")
+        self.assertIsInstance(node.condition, Identifier)
+        self.assertEqual(node.condition.name, "ready")
+
+    def test_parse_render_block_multiline_attributes(self):
+        prog = _parse(
+            "render:\n"
+            "    button class=\"card\"\n"
+            "            class:revealed=(revealed[i])\n"
+            "            onclick=handle_card_click(i):\n"
+            "        \"?\"\n",
+            language="en",
+        )
+        node = prog.body[0].body[0]
+        self.assertIsInstance(node, UIElement)
+        self.assertEqual(node.tag, "button")
+        self.assertEqual(
+            [name for name, _ in node.attributes],
+            ["class", "class:revealed", "onclick"],
+        )
+        self.assertEqual(len(node.children), 1)
+
+    def test_parse_memory_game_render_block(self):
+        source = (
+            "fn memory_game() uses ui:\n"
+            "    observe var matched = [false, false]\n"
+            "    observe var revealed = [false, false]\n"
+            "    observe var is_checking = false\n"
+            "    render:\n"
+            "        div class=\"memory-game\":\n"
+            "            div class=\"game-board\":\n"
+            "                for i in range(2):\n"
+            "                    button class=\"card\"\n"
+            "                            class:matched=(matched[i])\n"
+            "                            class:revealed=(revealed[i])\n"
+            "                            disabled=(matched[i] or is_checking)\n"
+            "                            onclick=handle_card_click(i):\n"
+            "                        if matched[i]:\n"
+            "                            \"yes\"\n"
+            "                        elif revealed[i]:\n"
+            "                            \"no\"\n"
+            "                        else:\n"
+            "                            \"?\"\n"
+        )
+        prog = _parse(source, language="en")
+        fn = prog.body[0]
+        render_stmt = fn.body[-1]
+        self.assertIsInstance(render_stmt, RenderBlock)
+        self.assertEqual(render_stmt.body[0].tag, "div")
 
 
 if __name__ == "__main__":

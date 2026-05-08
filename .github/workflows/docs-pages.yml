@@ -21,6 +21,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check out tree-sitter-multilingual
+        uses: actions/checkout@v4
+        with:
+          repository: multilingualprogramming/tree-sitter-multilingual
+          path: tree-sitter-multilingual
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -36,6 +42,7 @@ jobs:
           python -m build --wheel
           mkdir -p docs/assets
           cp multilingualprogramming/resources/usm/keywords.json docs/assets/keywords.json
+          cp tree-sitter-multilingual/generated/monarch.json docs/assets/monarch.json
           WHEEL_FILE=$(ls dist/*.whl | head -n 1 | xargs basename)
           cp "dist/${WHEEL_FILE}" "docs/assets/${WHEEL_FILE}"
           echo "{\"wheel\": \"${WHEEL_FILE}\"}" > docs/assets/wheel_info.json
@@ -48,7 +55,7 @@ jobs:
           cp examples/browser/browser_runtime.js docs/browser/fibonacci/browser_runtime.js
           cp examples/browser/browser_runtime.js docs/browser/dom-demo/browser_runtime.js
 
-      - name: Build Memory Game demo for Pages (Reactive UI showcase)
+      - name: Stage Memory Game demo for Pages (Reactive UI showcase)
         run: |
           mkdir -p docs/browser/memory-game
           python -m multilingualprogramming build-wasm-bundle examples/memory_game_en.multi --lang en --out-dir docs/browser/memory-game
