@@ -366,10 +366,10 @@ python examples/memory_game_en.multi
 
 ## Documentation Links
 
-- [Reactive UI Keywords](AI_KEYWORDS.md) — Detailed API reference
+- [Frontend Contracts](frontend_contracts.md) — Detailed API reference
 - [WASM AI Integration](WASM_AI_INTEGRATION.md) — How to add AI to WASM apps
-- [Language Syntax Reference](../SYNTAX_REFERENCE.md) — All 17 language variants
-- [Release Notes v0.8.0](../RELEASE_NOTES.md) — What's new
+- [Language Reference](reference.md) — All 17 language variants
+- [Release Notes](_generated/RELEASE.md) — What's new
 
 ---
 
@@ -383,7 +383,7 @@ Want to add another game using the reactive pattern?
 4. Create demo HTML in `docs/your_game_demo.html`
 5. Submit PR with documentation
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
+See [Contributing Guide](_generated/CONTRIBUTING.md) for details.
 
 ---
 
@@ -391,4 +391,5 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for details.
 **Demo URL:** https://multilingual-programming.github.io/memory-game  
 **Last Updated:** 2026-05-08  
 **Maintainer:** Multilingual Programming Team
+
 

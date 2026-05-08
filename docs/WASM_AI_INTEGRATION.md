@@ -303,9 +303,9 @@ python -m multilingualprogramming ai_demo.multi --target=wasm -o ai_demo.wasm
 
 ## See Also
 
-- [WAT/WASM Backend Preparedness Report](../WAT_WASM_PREPAREDNESS_REPORT.md)
-- [Release Summary](../RELEASE_SUMMARY.md)
-- [Python AI Keywords Documentation](../docs/AI_KEYWORDS.md) (when available)
+- [WASM Architecture Overview](WASM_ARCHITECTURE_OVERVIEW.md)
+- [Release Notes](_generated/RELEASE.md)
+- [Frontend Contracts](frontend_contracts.md)
 
 ---
 
@@ -323,3 +323,4 @@ To improve this guide or add new AI integrations:
 **Generated:** 2026-05-08  
 **Maintainer:** Multilingual Programming Team  
 **License:** GPL-3.0-or-later
+

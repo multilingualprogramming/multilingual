@@ -86,7 +86,7 @@ Use for live editing, full interpreter behavior, IR inspection, and teaching.
 
 Use for ahead-of-time compilation to `module.wasm` and minimal JavaScript host.
 
-**[Open the Browser WASM Demo Hub](../browser/)**
+**[Open the Browser WASM Demo Hub](browser/index.html)**
 
 ## What each demo proves
 
@@ -98,3 +98,4 @@ Use for ahead-of-time compilation to `module.wasm` and minimal JavaScript host.
 | Semantic search (Japanese) | `~=` and `embed` across multilingual input |
 | Pyodide playground | Live browser compilation and IR inspection |
 | Browser WASM demo | Production-ready prebuilt artifact deployment |
+

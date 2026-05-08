@@ -38,7 +38,7 @@ download required.
 multilingual build-wasm-bundle my_app.multi --out-dir dist/wasm
 ```
 
-Live demos using this approach are in [`examples/browser`](../../examples/browser/).
+Live demos using this approach are in [`browser demos`](_generated/examples/browser/README.md).
 
 ## Core 1.0 example: the same agent in three languages
 
@@ -150,3 +150,4 @@ für i in bereich(1, 5):
 毎 i 中 範囲(1, 5):
     表示(i, "の2乗 =", i * i)
 ```
+

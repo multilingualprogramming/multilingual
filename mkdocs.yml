@@ -57,17 +57,25 @@ exclude_docs: |
 
 nav:
   - Home: index.md
-  - Demos: demos.md
+  - Demos:
+    - Overview: demos.md
+    - Memory Game: MEMORY_GAME_DEMO.md
   - Playground: playground.md
-  - Guide FR: fr/programmation.md
+  - Guide FR:
+    - Programmation: fr/programmation.md
+    - Modules: fr/modules.md
+    - Mots cles: fr/mots_cles.md
+    - WASM: fr/wasm.md
   - Project:
     - Release Notes: _generated/RELEASE.md
+    - Usage: _generated/USAGE.md
     - Changelog: CHANGELOG.md
     - Releasing: releasing.md
     - Development Guide: development.md
     - Backend Testing Quick Start: BACKEND_TESTING_QUICK_START.md
     - Backend Testing Strategy: BACKEND_TESTING_STRATEGY.md
-    - Contributing: development.md
+    - Contributing: _generated/CONTRIBUTING.md
+    - Examples: _generated/examples/README.md
   - Reference:
     - Detailed Reference: reference.md
     - Compatibility Matrix: compatibility_matrix.md
@@ -76,10 +84,14 @@ nav:
     - Language Onboarding: language_onboarding.md
   - Design:
     - Design Overview: design.md
+    - Vision: vision.md
     - Core Spec: core_spec.md
+    - Core 1.0 Spec: spec/core_1_0.md
     - Frontend Contracts: frontend_contracts.md
     - Evaluation Plan: evaluation_plan.md
     - Related Work: related_work.md
+    - WAT OOP Model: wat_oop_model.md
+    - Multilingual 1.0 Roadmap: roadmaps/multilingual_1_0.md
   - Localization:
     - Translation Guidelines: translation_guidelines.md
     - CNL Scope: cnl_scope.md
@@ -88,6 +100,8 @@ nav:
   - WASM:
     - Installation: WASM_INSTALLATION.md
     - Development: WASM_DEVELOPMENT.md
+    - ABI Manifest: WASM_ABI_MANIFEST.md
+    - AI Integration: WASM_AI_INTEGRATION.md
     - Performance Tuning: WASM_PERFORMANCE_TUNING.md
     - Troubleshooting: WASM_TROUBLESHOOTING.md
     - FAQ: WASM_FAQ.md
