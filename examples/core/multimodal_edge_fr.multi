@@ -2,6 +2,11 @@
 # Démontre: placement @local, analyse d'images avec modèles locaux,
 #           traitement de documents, mise en cache de l'inférence
 
+# Configuration: Enregistrer OllamaProvider pour se connecter à l'instance Ollama locale
+from multilingualprogramming.runtime.ai_runtime import AIRuntime
+from multilingualprogramming.runtime.ollama_provider import OllamaProvider
+AIRuntime.register(OllamaProvider())
+
 # ── Analyse d'images au bord ─────────────────────────────────────────────────
 @local
 def analyser_image(photo) -> str utilise ai:
@@ -10,7 +15,7 @@ def analyser_image(photo) -> str utilise ai:
 
 @local
 def classifier_scene(photo) -> str utilise ai:
-    soit scene = requête @mistral: "Type de scène:\n" + photo
+    soit scene = requête @magistral: "Type de scène:\n" + photo
     retour scene
 
 @local
@@ -21,19 +26,19 @@ def detecter_objets(photo) -> str utilise ai:
 # ── Traitement de documents ──────────────────────────────────────────────────
 @local
 def extraire_texte_doc(doc) -> str utilise ai:
-    soit texte = requête @phi3: "Extraire le texte:\n" + doc
+    soit texte = requête @gemma3: "Extraire le texte:\n" + doc
     retour texte
 
 @local
 def extraire_facture(facture_doc) -> str utilise ai:
-    soit articles = requête @mistral: "Articles de facture:\n" + facture_doc
+    soit articles = requête @magistral: "Articles de facture:\n" + facture_doc
     retour articles
 
 # ── Analyse multimodale parallèle ────────────────────────────────────────────
 def analyse_multi(photo) -> str utilise ai:
     soit analyse, scene, objets = parallele [
         requête @llama3: "Décrire:\n" + photo,
-        requête @mistral: "Type scène:\n" + photo,
+        requête @magistral: "Type scène:\n" + photo,
         requête @llama3: "Objets:\n" + photo
     ]
     soit synthese = requête @llama3:
@@ -58,7 +63,7 @@ def analyse_en_cache(photo) -> str utilise ai:
 def analyse_cout(photo) -> str utilise ai:
     soit avec_cout = cout(requête @llama3: "Analyser:\n" + photo)
     soit resultat, depense = avec_cout
-    imprimer("Coût (tokens):", depense)
+    afficher("Coût (tokens):", depense)
     retour resultat
 
 # ── Essaim multimodal ────────────────────────────────────────────────────────
@@ -68,14 +73,14 @@ def analyste(photo) -> str utilise ai:
     retour requête @llama3: "Analyser:\n" + photo
 
 @local
-@agent(model=@mistral)
+@agent(model=@magistral)
 def classifieur(photo) -> str utilise ai:
-    retour requête @mistral: "Classifier:\n" + photo
+    retour requête @magistral: "Classifier:\n" + photo
 
 @local
-@agent(model=@phi3)
+@agent(model=@gemma3)
 def extracteur(doc) -> str utilise ai:
-    retour requête @phi3: "Extraire:\n" + doc
+    retour requête @gemma3: "Extraire:\n" + doc
 
 @essaim(agents=[analyste, classifieur, extracteur])
 def equipe_media(entree) -> str utilise ai:
@@ -101,13 +106,13 @@ def equipe_media(entree) -> str utilise ai:
 def principal() utilise ai:
     soit photo = "image.jpg"
     soit res1 = analyser_image(photo)
-    imprimer("Analyse:", res1)
+    afficher("Analyse:", res1)
 
     soit doc = "document.pdf"
     soit res2 = extraire_texte_doc(doc)
-    imprimer("Extraction:", res2)
+    afficher("Extraction:", res2)
 
     soit res3 = analyse_multi(photo)
-    imprimer("Multi:", res3)
+    afficher("Multi:", res3)
 
 principal()

@@ -1,7 +1,12 @@
 # Core 1.0 Edge Computing with Local Ollama Models — English
-# Demonstrates: @local placement, @llama3/@mistral/@phi3 model refs,
+# Demonstrates: @local placement, @llama3/@magistral/@gemma3 model refs,
 #               par[...] parallel inference, memory(...) caching,
 #               trace/cost observability, @swarm with local agents
+
+# Setup: Register OllamaProvider to connect to local Ollama instance
+from multilingualprogramming.runtime.ai_runtime import AIRuntime
+from multilingualprogramming.runtime.ollama_provider import OllamaProvider
+AIRuntime.register(OllamaProvider())
 
 # ── Placement: @local signals compute stays on-device ────────────────────────
 @local
@@ -12,20 +17,20 @@ fn analyze_sensor_reading(reading: str) -> str uses ai:
 
 @local
 fn classify_device_status(data: str) -> str uses ai:
-    let status = classify @mistral: data -> DeviceStatus
+    let status = classify @magistral: data
     return status
 
 @local
 fn generate_alert(issue: str) -> str uses ai:
-    let alert = generate @phi3: "Create an alert for: " + issue
+    let alert = generate @gemma3: "Create an alert for: " + issue
     return alert
 
 # ── Parallel inference: multiple models in parallel ──────────────────────────
 fn multi_model_analysis(sensor_data: str) -> str uses ai:
     let analysis, classification, alert = par [
         prompt @llama3: "Analyze: " + sensor_data,
-        classify @mistral: sensor_data -> DeviceStatus,
-        generate @phi3: "Alert for: " + sensor_data
+        classify @magistral: sensor_data,
+        generate @gemma3: "Alert for: " + sensor_data
     ]
     let summary = prompt @llama3:
         "Synthesise these results:\n"
@@ -60,14 +65,14 @@ fn local_analyzer(data: str) -> str uses ai:
     return prompt @llama3: "Analyze this data:\n" + data
 
 @local
-@agent(model=@mistral)
+@agent(model=@magistral)
 fn local_classifier(data: str) -> str uses ai:
-    return classify @mistral: data -> Category
+    return classify @magistral: data
 
 @local
-@agent(model=@phi3)
+@agent(model=@gemma3)
 fn local_summarizer(text: str) -> str uses ai:
-    return prompt @phi3: "Summarize in one sentence:\n" + text
+    return prompt @gemma3: "Summarize in one sentence:\n" + text
 
 @swarm(agents=[local_analyzer, local_classifier, local_summarizer])
 fn edge_analytics_team(input_data: str) -> str uses ai:

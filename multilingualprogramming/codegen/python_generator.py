@@ -150,6 +150,8 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
             self._ensure_asyncio()
         if self._async_function_depth == 0 and self._ir_requires_sync_bridge(node):
             self._ensure_async_bridge()
+        if self._ir_requires_memory(node):
+            self._ensure_memory()
         return _IRExpressionGenerator(
             async_context=self._async_function_depth > 0
         ).render(node)
@@ -176,6 +178,10 @@ class PythonCodeGenerator:  # pylint: disable=too-many-instance-attributes
             ir.IRDelegateExpr,
         )
         return self._ir_contains_type(node, bridge_types)
+
+    def _ir_requires_memory(self, node):
+        """Return True when an IR subtree uses memory expressions."""
+        return self._ir_contains_type(node, (ir.IRMemoryExpr,))
 
     def _ir_contains_type(self, node, target_types):
         """Recursively scan an IR subtree for nodes of the given types."""

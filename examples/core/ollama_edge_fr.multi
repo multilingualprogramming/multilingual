@@ -1,7 +1,12 @@
 # Core 1.0 Informatique d'extrémité avec modèles locaux Ollama — Français
-# Démontre: placement @local, références de modèles @llama3/@mistral/@phi3,
+# Démontre: placement @local, références de modèles @llama3/@magistral/@gemma3,
 #           inférence parallèle par[...], mise en cache memoire(...),
 #           observabilité tracer/cout, @essaim avec agents locaux
+
+# Configuration: Enregistrer OllamaProvider pour se connecter à l'instance Ollama locale
+from multilingualprogramming.runtime.ai_runtime import AIRuntime
+from multilingualprogramming.runtime.ollama_provider import OllamaProvider
+AIRuntime.register(OllamaProvider())
 
 # ── Placement: @local signifie que le calcul reste sur l'appareil ──────────────
 @local
@@ -12,20 +17,20 @@ def analyser_capteur(donnees: str) -> str utilise ai:
 
 @local
 def classer_statut(donnees: str) -> str utilise ai:
-    soit statut = classer @mistral: donnees -> StatutDevice
+    soit statut = classer @magistral: donnees -> StatutDevice
     retour statut
 
 @local
 def generer_alerte(probleme: str) -> str utilise ai:
-    soit alerte = générer @phi3: "Créer une alerte pour: " + probleme
+    soit alerte = générer @gemma3: "Créer une alerte pour: " + probleme
     retour alerte
 
 # ── Inférence parallèle: plusieurs modèles en parallèle ─────────────────────
 def analyse_multi_modeles(donnees: str) -> str utilise ai:
     soit analyse, classification, alerte = parallèle [
         requête @llama3: "Analyser: " + donnees,
-        classer @mistral: donnees -> StatutDevice,
-        générer @phi3: "Alerte pour: " + donnees
+        classer @magistral: donnees -> StatutDevice,
+        générer @gemma3: "Alerte pour: " + donnees
     ]
     soit resume = requête @llama3:
         "Synthétiser ces résultats:\n"
@@ -60,14 +65,14 @@ def analyseur_local(donnees: str) -> str utilise ai:
     retour requête @llama3: "Analyser ces données:\n" + donnees
 
 @local
-@agent(model=@mistral)
+@agent(model=@magistral)
 def classificateur_local(donnees: str) -> str utilise ai:
-    retour classer @mistral: donnees -> Categorie
+    retour classer @magistral: donnees -> Categorie
 
 @local
-@agent(model=@phi3)
+@agent(model=@gemma3)
 def resumeur_local(texte: str) -> str utilise ai:
-    retour requête @phi3: "Résumer en une phrase:\n" + texte
+    retour requête @gemma3: "Résumer en une phrase:\n" + texte
 
 @essaim(agents=[analyseur_local, classificateur_local, resumeur_local])
 def equipe_analytique_perimetrale(donnees_entree: str) -> str utilise ai:

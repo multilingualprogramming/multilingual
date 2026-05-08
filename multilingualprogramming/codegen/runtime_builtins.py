@@ -40,6 +40,7 @@ from multilingualprogramming.runtime.retrieval_runtime import (
 )
 from multilingualprogramming.runtime.semantic_match import semantic_match
 from multilingualprogramming.runtime.tool_runtime import AgentLoop, get_registry, tool
+from multilingualprogramming.runtime.memory_store import ml_memory
 
 
 def _coerce_model(model):
@@ -337,14 +338,35 @@ class RuntimeBuiltins:
         "AIRuntime": AIRuntime,
         "ModelRef": ModelRef,
         "prompt": _prompt,
+        "requete": _prompt,
+        "requête": _prompt,
+        "pregunte": _prompt,
+        "pregunta": _prompt,
         "generate": _generate,
+        "generar": _generate,
+        "generer": _generate,
+        "générer": _generate,
         "think": _think,
+        "pensar": _think,
+        "penser": _think,
         "stream": _stream,
+        "flux": _stream,
+        "flujo": _stream,
         "embed": _embed,
+        "incrustacion": _embed,
+        "incorporer": _embed,
         "extract": _extract,
+        "extraire": _extract,
+        "extraer": _extract,
         "classify": _classify,
+        "clasificar": _classify,
+        "classer": _classify,
         "plan": _plan,
+        "planificar": _plan,
+        "planifier": _plan,
         "transcribe": _transcribe,
+        "transcribir": _transcribe,
+        "transcrire": _transcribe,
         "retrieve": _retrieve,
         "__ml_result_propagate": _result_propagate,
         "semantic_match": semantic_match,
@@ -366,6 +388,8 @@ class RuntimeBuiltins:
         "delegate": _delegate,
         "deleguer": _delegate,
         "get_tool_registry": get_registry,
+        "memory": ml_memory,
+        "memoire": ml_memory,
     }
 
     # Non-callable special values available in exec() namespace
