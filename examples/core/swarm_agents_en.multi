@@ -1,0 +1,92 @@
+# Core 1.0 Swarm Agents with Local Ollama Models — English
+# Demonstrates: @agent decorator, @swarm coordination, delegate(),
+#               agent specialization, parallel agent execution with par[]
+
+from multilingualprogramming.runtime.ai_runtime import AIRuntime
+from multilingualprogramming.runtime.ollama_provider import OllamaProvider
+AIRuntime.register(OllamaProvider())
+
+# ── Agent Definitions: Specialized roles for different tasks ─────────────────
+
+@agent(model=@llama3)
+fn security_analyst(incident: str) -> str uses ai:
+    let analysis = prompt @llama3:
+        "You are a security analyst. Analyze this incident and identify risks:\n" + incident
+    return analysis
+
+@agent(model=@llama3)
+fn performance_engineer(metrics: str) -> str uses ai:
+    let analysis = prompt @llama3:
+        "You are a performance engineer. Analyze these system metrics:\n" + metrics
+    return analysis
+
+@agent(model=@llama3)
+fn system_administrator(report: str) -> str uses ai:
+    let analysis = prompt @llama3:
+        "You are a system administrator. What operational actions are needed:\n" + report
+    return analysis
+
+# ── Swarm Coordinator: Orchestrate agents to work together ───────────────────
+
+@swarm(agents=[security_analyst, performance_engineer, system_administrator])
+fn incident_response_team(incident_data: str) -> str uses ai:
+    print("  [Swarm] Delegating to specialized agents...")
+
+    # Option 1: Sequential delegation (simpler, easier to debug)
+    let security_view = delegate(security_analyst, incident_data)
+    print("  ✓ Security analysis complete")
+
+    let perf_view = delegate(performance_engineer, incident_data)
+    print("  ✓ Performance analysis complete")
+
+    let ops_view = delegate(system_administrator, incident_data)
+    print("  ✓ Operational analysis complete")
+
+    # Synthesize all perspectives into coordinated response
+    let final_response = prompt @llama3:
+        "Coordinate these team reports into a single incident response plan:\n"
+        + "Security: " + security_view + "\n"
+        + "Performance: " + perf_view + "\n"
+        + "Operations: " + ops_view
+
+    return final_response
+
+# ── Parallel Agents: Run multiple agents concurrently ──────────────────────
+
+@swarm(agents=[security_analyst, performance_engineer, system_administrator])
+fn parallel_analysis(incident_data: str) -> str uses ai:
+    print("  [Swarm] Running agents in parallel...")
+
+    # Run three agents in parallel using par[...]
+    let security, performance, operations = par [
+        delegate(security_analyst, incident_data),
+        delegate(performance_engineer, incident_data),
+        delegate(system_administrator, incident_data)
+    ]
+
+    # Quick synthesis of parallel results
+    let summary = "Security: " + security + " | Performance: " + performance + " | Operations: " + operations
+    return summary
+
+# ── Main: Demonstrate swarm coordination ─────────────────────────────────────
+
+fn main() uses ai:
+    print("━━━ Swarm Agent Coordination ━━━")
+
+    let incident = "System experiencing 95% CPU, network latency spike, unauthorized access attempt detected"
+
+    # Test 1: Sequential delegation
+    print("\n→ Test 1: Sequential agent coordination...")
+    let response = incident_response_team(incident)
+    print("✓ Coordinated response:")
+    print(response)
+
+    # Test 2: Parallel agent execution
+    print("\n→ Test 2: Parallel agent execution...")
+    let parallel_result = parallel_analysis(incident)
+    print("✓ Parallel analysis complete:")
+    print(parallel_result)
+
+    print("\n━━━ Swarm Coordination Complete ━━━")
+
+main()
