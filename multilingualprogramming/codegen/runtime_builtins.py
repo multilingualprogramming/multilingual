@@ -336,6 +336,16 @@ class RuntimeBuiltins:
         "TYPE_BOOL": bool,
         "TYPE_LIST": list,
         "TYPE_DICT": dict,
+        "PROMPT": _prompt,
+        "THINK": _think,
+        "GENERATE": _generate,
+        "STREAM_KW": _stream,
+        "EMBED": _embed,
+        "EXTRACT": _extract,
+        "CLASSIFY": _classify,
+        "PLAN": _plan,
+        "TRANSCRIBE": _transcribe,
+        "RETRIEVE": _retrieve,
     }
 
     # Additional Python built-ins available in every language
