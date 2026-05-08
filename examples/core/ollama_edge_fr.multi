@@ -102,3 +102,5 @@ def principal() utilise ai:
     soit entree = "Système sous charge importante, vérifier diagnostics"
     soit resultat_equipe = equipe_analytique_perimetrale(entree)
     afficher("Analyse d'équipe:", resultat_equipe)
+
+principal()

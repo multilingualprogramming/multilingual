@@ -111,3 +111,5 @@ fn main() uses ai:
 
     let combined = multi_analysis(photo_data)
     print("Multi-modal analysis:", combined)
+
+main()

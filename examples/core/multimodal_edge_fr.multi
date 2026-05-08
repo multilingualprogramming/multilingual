@@ -109,3 +109,5 @@ def principal() utilise ai:
 
     soit res3 = analyse_multi(photo)
     imprimer("Multi:", res3)
+
+principal()

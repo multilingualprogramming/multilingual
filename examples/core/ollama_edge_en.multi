@@ -102,3 +102,5 @@ fn main() uses ai:
     let input = "System under heavy load, check diagnostics"
     let team_result = edge_analytics_team(input)
     print("Team analysis:", team_result)
+
+main()
