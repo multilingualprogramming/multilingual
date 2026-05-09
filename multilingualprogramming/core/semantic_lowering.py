@@ -1258,7 +1258,9 @@ class _LoweringContext:
             else:
                 children.append(self.lower(child))
 
-        children = self._fix_misplaced_ui_elements(children)
+        children, _ = self._normalize_ui_children(
+            children, parent_column=node.column or 0
+        )
 
         cond = self.lower(node.condition) if node.condition else None
         text_content = None
@@ -1272,46 +1274,50 @@ class _LoweringContext:
             line=node.line, column=node.column,
         )
 
-    def _fix_misplaced_ui_elements(self, children: list) -> list:
-        """Fix parser bug: move UI elements mistakenly nested in for loops back to parent level.
+    def _normalize_ui_children(self, children: list, parent_column: int) -> tuple[list, list]:
+        """Lift parser-misnested UI children back to the correct column scope.
 
-        When a for loop contains UI elements that shouldn't be there (past the main loop body),
-        this method extracts them to be siblings of the for loop instead.
-        Keep the first N elements in the loop (actual loop content) but extract trailing elements.
+        The render parser can attach siblings to the most recent nested UI element.
+        We use source columns to bubble those outdented children back to the first
+        ancestor whose column is less than theirs. Any stray expressions lifted to
+        the render root are dropped later by UI lowering if they are just entry calls.
         """
         if not children:
-            return children
+            return [], []
 
-        result = []
+        kept: list = []
+        spilled: list = []
+
         for child in children:
-            if isinstance(child, IRForLoop) and child.body and len(child.body) > 1:
-                loop_body = list(child.body) if child.body else []
-                extracted = []
-
-                while len(loop_body) > 1:
-                    last = loop_body[-1]
-                    if (
-                        isinstance(last, IRUIElement)
-                        or (
-                            hasattr(last, "__class__")
-                            and "Expr" in last.__class__.__name__
-                        )
-                    ):
-                        extracted.insert(0, last)
-                        loop_body.pop()
-                    else:
-                        break
-
-                if extracted:
-                    child.body = loop_body
-                    result.append(child)
-                    result.extend(extracted)
+            if isinstance(child, IRUIElement):
+                child.children, child_spilled = self._normalize_ui_children(
+                    list(child.children or []),
+                    parent_column=child.column or parent_column,
+                )
+                if (child.column or 0) <= parent_column:
+                    spilled.append(child)
+                    spilled.extend(child_spilled)
                 else:
-                    result.append(child)
-            else:
-                result.append(child)
+                    kept.append(child)
+                    kept.extend(child_spilled)
+                continue
 
-        return result
+            if isinstance(child, IRForLoop):
+                body_kept, body_spilled = self._normalize_ui_children(
+                    list(child.body or []),
+                    parent_column=child.column or parent_column,
+                )
+                child.body = body_kept
+                kept.append(child)
+                kept.extend(body_spilled)
+                continue
+
+            if (getattr(child, "column", 0) or 0) <= parent_column:
+                spilled.append(child)
+            else:
+                kept.append(child)
+
+        return kept, spilled
 
     def _lower_FunctionDef(
         self, node: ast.FunctionDef

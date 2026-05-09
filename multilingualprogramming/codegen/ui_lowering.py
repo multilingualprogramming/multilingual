@@ -10,7 +10,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from multilingualprogramming.core.ir_nodes import (
     IRAwaitExpr,
@@ -39,6 +41,40 @@ from multilingualprogramming.core.ir_nodes import (
     IRUnaryOp,
     IRViewBinding,
 )
+
+_USM_DIR = Path(__file__).parent.parent / "resources" / "usm"
+with (_USM_DIR / "builtins_aliases.json").open(encoding="utf-8") as _f:
+    _BUILTINS_ALIASES: dict = json.load(_f)["aliases"]
+with (_USM_DIR / "keywords.json").open(encoding="utf-8") as _f:
+    _KEYWORDS: dict = json.load(_f)["categories"]
+
+
+def _builtin_aliases_for(canonical: str) -> frozenset[str]:
+    names = {canonical}
+    for lang_aliases in _BUILTINS_ALIASES.get(canonical, {}).values():
+        names.update(lang_aliases)
+    return frozenset(names)
+
+
+def _keyword_aliases_for(category: str, concept: str) -> frozenset[str]:
+    names: set[str] = set()
+    entry = _KEYWORDS.get(category, {}).get(concept, {})
+    for surface in entry.values():
+        if isinstance(surface, str):
+            names.add(surface)
+            names.add(surface.lower())
+        elif isinstance(surface, list):
+            for item in surface:
+                if isinstance(item, str):
+                    names.add(item)
+                    names.add(item.lower())
+    return frozenset(names)
+
+
+_RANGE_NAMES = _builtin_aliases_for("range")
+_STR_NAMES = _builtin_aliases_for("str")
+_TRUE_NAMES = _keyword_aliases_for("logical", "TRUE")
+_FALSE_NAMES = _keyword_aliases_for("logical", "FALSE")
 
 
 @dataclass
@@ -70,6 +106,7 @@ class UILoweringPass:
         self._render_roots: list[str] = []
         self._canvas_names: list[str] = []
         self._functions: list[str] = []
+        self._ui_function_names: set[str] = set()
         self._render_function = ""
         self._preamble = ""
 
@@ -115,6 +152,7 @@ class UILoweringPass:
             if node.is_async:
                 self._lower_function(node)
             else:
+                self._ui_function_names.add(node.name)
                 for child in node.body:
                     self._lower_node(child)
 
@@ -194,6 +232,33 @@ function streamToView(source, target) {
   source.on_change((value) => {
     target.textContent = value == null ? '' : String(value);
   });
+}
+
+function intervalle(...args) {
+  let start = 0;
+  let stop = 0;
+  let step = 1;
+  if (args.length === 1) {
+    stop = Number(args[0] ?? 0);
+  } else if (args.length >= 2) {
+    start = Number(args[0] ?? 0);
+    stop = Number(args[1] ?? 0);
+    step = Number(args[2] ?? 1);
+  }
+  if (!Number.isFinite(step) || step === 0) {
+    step = 1;
+  }
+  const result = [];
+  if (step > 0) {
+    for (let i = start; i < stop; i += step) {
+      result.push(i);
+    }
+  } else {
+    for (let i = start; i > stop; i += step) {
+      result.push(i);
+    }
+  }
+  return result;
 }
 
 const _engine = new ReactiveEngine();
@@ -522,7 +587,7 @@ const __ml_signals = _engine.signals;"""
             return [self._if_render_to_js(child, parent_var, indent)]
         if isinstance(child, IRExprStatement):
             if isinstance(child.expression, IRCallExpr):
-                if self._call_name(child.expression.func) == "memory_game":
+                if self._call_name(child.expression.func) in self._ui_function_names:
                     return []
             value = self._expr_to_js(child.expression)
             return [f"{pad}{parent_var}.appendChild(document.createTextNode(String({value})));"]
@@ -591,6 +656,10 @@ const __ml_signals = _engine.signals;"""
         if isinstance(node, IRListLiteral):
             return "[" + ", ".join(self._expr_to_js(item) for item in node.elements) + "]"
         if isinstance(node, IRIdentifier):
+            if node.name in _TRUE_NAMES:
+                return "true"
+            if node.name in _FALSE_NAMES:
+                return "false"
             if node.name in self._signal_names:
                 return f"_engine.get('{node.name}').get()"
             return node.name
@@ -613,7 +682,7 @@ const __ml_signals = _engine.signals;"""
                 current_left = right_js
             return " && ".join(parts) if parts else left
         if isinstance(node, IRUnaryOp):
-            if node.op == "not":
+            if node.op in ("NOT", "not", "!"):
                 return f"(!{self._expr_to_js(node.operand)})"
             return f"({node.op}{self._expr_to_js(node.operand)})"
         if isinstance(node, IRConditionalExpr):
@@ -625,8 +694,10 @@ const __ml_signals = _engine.signals;"""
         if isinstance(node, IRCallExpr):
             call_name = self._call_name(node.func)
             args = ", ".join(self._expr_to_js(arg) for arg in (node.args or []))
-            if call_name == "str":
+            if call_name in _STR_NAMES:
                 return f"String({args})"
+            if call_name in _RANGE_NAMES:
+                return f"intervalle({args})"
             if call_name == "len":
                 return f"({self._expr_to_js(node.args[0])}).length" if node.args else "0"
             if call_name == "asyncio.sleep":
