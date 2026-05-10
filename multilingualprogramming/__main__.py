@@ -42,6 +42,7 @@ from multilingualprogramming.keyword.language_pack_validator import (
 from multilingualprogramming.exceptions import UnsupportedLanguageError
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
+from multilingualprogramming.parser.ast_nodes import ImportStatement, FromImportStatement, Program
 from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
 from multilingualprogramming.source_extensions import (
     find_package_init,
@@ -102,6 +103,77 @@ def _parse_program_from_file(path: str, lang: str | None):
     detected_lang = lexer.language or lang or "en"
     parser = Parser(tokens, source_language=detected_lang)
     return parser.parse()
+
+
+def _resolve_module_path(module_name: str, base_dir: Path) -> Path | None:
+    """Resolve a module name (e.g., 'ui.composants.barre_recherche') to a file path."""
+    # Convert dot notation to file path
+    parts = module_name.split(".")
+    # Try relative to base directory first
+    candidate = base_dir / "/".join(parts) + ".multi"
+    if candidate.exists():
+        return candidate
+    # Try one level up (in case we're in a subdirectory)
+    candidate = base_dir.parent / "/".join(parts) + ".multi"
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def _merge_programs(main_program: Program, imported_program: Program) -> Program:
+    """Merge imported program statements into main program."""
+    # Combine statements, removing duplicate imports
+    seen_imports = set()
+    merged_statements = []
+
+    # Add unique imports from both programs
+    for stmt in main_program.statements + imported_program.statements:
+        if isinstance(stmt, (ImportStatement, FromImportStatement)):
+            # Create a unique key for the import
+            key = (type(stmt).__name__, getattr(stmt, 'module', ''))
+            if key not in seen_imports:
+                seen_imports.add(key)
+                merged_statements.append(stmt)
+        else:
+            merged_statements.append(stmt)
+
+    # Create new program with merged statements
+    new_program = Program(merged_statements)
+    return new_program
+
+
+def _parse_program_with_dependencies(path: str, lang: str | None) -> Program:
+    """Parse a program and recursively include all imported modules."""
+    main_program = _parse_program_from_file(path, lang)
+    base_dir = Path(path).resolve().parent
+    processed = set()
+
+    def _collect_imports(program: Program, current_dir: Path) -> Program:
+        """Recursively collect imports and merge programs."""
+        result = program
+
+        for stmt in program.statements:
+            if isinstance(stmt, ImportStatement) and stmt.module:
+                # Skip if already processed
+                if stmt.module in processed:
+                    continue
+                processed.add(stmt.module)
+
+                # Resolve module path
+                module_path = _resolve_module_path(stmt.module, current_dir)
+                if module_path:
+                    try:
+                        imported_program = _parse_program_from_file(str(module_path), lang)
+                        # Recursively collect dependencies of imported module
+                        imported_program = _collect_imports(imported_program, module_path.parent)
+                        # Merge into result
+                        result = _merge_programs(result, imported_program)
+                    except Exception as e:
+                        print(f"[WARN] Failed to import {stmt.module}: {e}")
+
+        return result
+
+    return _collect_imports(main_program, base_dir)
 
 
 def cmd_run(args):
@@ -284,7 +356,7 @@ def cmd_build_wasm_bundle(args):
 
 def cmd_build_ui_bundle(args):
     """Build a self-contained reactive UI bundle (HTML + JS)."""
-    program = _parse_program_from_file(args.file, args.lang)
+    program = _parse_program_with_dependencies(args.file, args.lang)
     ir = lower_to_semantic_ir(program, args.lang or "en")
     result = lower_to_ui(ir)
 
