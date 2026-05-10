@@ -200,6 +200,14 @@ class ASTNodeConstructionTestSuite(unittest.TestCase):
         body = [ExpressionStatement(NumeralLiteral("1"))]
         node = Program(body, line=1, column=1)
         self.assertEqual(len(node.body), 1)
+        self.assertIs(node.statements, node.body)
+
+    def test_program_statements_alias_updates_body(self):
+        node = Program([ExpressionStatement(NumeralLiteral("1"))], line=1, column=1)
+        replacement = [ExpressionStatement(NumeralLiteral("2"))]
+        node.statements = replacement
+        self.assertIs(node.body, replacement)
+        self.assertEqual(node.body[0].expression.value, "2")
 
     def test_line_column_preserved(self):
         node = Identifier("test", line=42, column=13)
