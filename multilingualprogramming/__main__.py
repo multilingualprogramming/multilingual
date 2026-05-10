@@ -110,11 +110,11 @@ def _resolve_module_path(module_name: str, base_dir: Path) -> Path | None:
     # Convert dot notation to file path
     parts = module_name.split(".")
     # Try relative to base directory first
-    candidate = base_dir / "/".join(parts) + ".multi"
+    candidate = base_dir.joinpath(*parts).with_suffix(".multi")
     if candidate.exists():
         return candidate
     # Try one level up (in case we're in a subdirectory)
-    candidate = base_dir.parent / "/".join(parts) + ".multi"
+    candidate = base_dir.parent.joinpath(*parts).with_suffix(".multi")
     if candidate.exists():
         return candidate
     return None
@@ -127,7 +127,7 @@ def _merge_programs(main_program: Program, imported_program: Program) -> Program
     merged_statements = []
 
     # Add unique imports from both programs
-    for stmt in main_program.statements + imported_program.statements:
+    for stmt in main_program.body + imported_program.body:
         if isinstance(stmt, (ImportStatement, FromImportStatement)):
             # Create a unique key for the import
             key = (type(stmt).__name__, getattr(stmt, 'module', ''))
@@ -152,7 +152,7 @@ def _parse_program_with_dependencies(path: str, lang: str | None) -> Program:
         """Recursively collect imports and merge programs."""
         result = program
 
-        for stmt in program.statements:
+        for stmt in program.body:
             if isinstance(stmt, ImportStatement) and stmt.module:
                 # Skip if already processed
                 if stmt.module in processed:
