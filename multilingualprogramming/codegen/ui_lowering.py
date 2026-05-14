@@ -21,14 +21,17 @@ from multilingualprogramming.core.ir_nodes import (
     IRBooleanOp,
     IRCallExpr,
     IRCanvasBlock,
+    IRClassDecl,
     IRCompareOp,
     IRConditionalExpr,
+    IRDelStatement,
     IRDictLiteral,
     IRExprStatement,
     IRForLoop,
     IRFunction,
     IRIdentifier,
     IRIfStatement,
+    IRImportStatement,
     IRIndexAccess,
     IRLiteral,
     IRListLiteral,
@@ -36,12 +39,16 @@ from multilingualprogramming.core.ir_nodes import (
     IRObserveBinding,
     IROnChange,
     IRProgram,
+    IRRaiseStatement,
     IRRenderBlock,
     IRReturnStatement,
+    IRSetLiteral,
+    IRSliceExpr,
     IRTryStatement,
     IRUIElement,
     IRUnaryOp,
     IRViewBinding,
+    IRWhileLoop,
 )
 
 _USM_DIR = Path(__file__).parent.parent / "resources" / "usm"
@@ -75,6 +82,12 @@ def _keyword_aliases_for(category: str, concept: str) -> frozenset[str]:
 
 _RANGE_NAMES = _builtin_aliases_for("range")
 _STR_NAMES = _builtin_aliases_for("str")
+_LIST_NAMES = _builtin_aliases_for("list")
+_NUMBER_NAMES = (
+    _builtin_aliases_for("number")
+    | _builtin_aliases_for("int")
+    | _builtin_aliases_for("float")
+)
 _TRUE_NAMES = _keyword_aliases_for("logical", "TRUE")
 _FALSE_NAMES = _keyword_aliases_for("logical", "FALSE")
 
@@ -155,7 +168,7 @@ class UILoweringPass:
             exported_names = [
                 node.name
                 for node in module_program.body
-                if isinstance(node, IRFunction) and node.is_async
+                if isinstance(node, (IRClassDecl, IRFunction))
             ]
             if not exported_names:
                 continue
@@ -185,6 +198,9 @@ class UILoweringPass:
         if isinstance(node, IRCanvasBlock):
             self._lower_canvas(node)
             return
+        if isinstance(node, IRClassDecl):
+            self._lower_class(node)
+            return
         if isinstance(node, IRViewBinding):
             self._lower_view_binding(node)
             return
@@ -192,9 +208,8 @@ class UILoweringPass:
             self._lower_render_block(node)
             return
         if isinstance(node, IRFunction):
-            if node.is_async:
-                self._lower_function(node)
-            else:
+            self._lower_function(node)
+            if not node.is_async:
                 self._ui_function_names.add(node.name)
                 for child in node.body:
                     self._lower_node(child)
@@ -304,6 +319,42 @@ function intervalle(...args) {
   return result;
 }
 
+function __ml_contains(container, item) {
+  if (container instanceof Set) {
+    return container.has(item);
+  }
+  if (Array.isArray(container) || typeof container === 'string') {
+    return container.includes(item);
+  }
+  if (container && typeof container === 'object') {
+    return item in container;
+  }
+  return false;
+}
+
+function __ml_add(container, item) {
+  if (container instanceof Set) {
+    container.add(item);
+    return container;
+  }
+  if (Array.isArray(container)) {
+    container.push(item);
+    return container;
+  }
+  return container;
+}
+
+function __ml_extend(container, values) {
+  for (const value of values || []) {
+    __ml_add(container, value);
+  }
+  return container;
+}
+
+function __ml_slice(start, stop, step) {
+  return { start, stop, step };
+}
+
 const _engine = new ReactiveEngine();
 const __ml_signals = _engine.signals;"""
 
@@ -341,6 +392,22 @@ const __ml_signals = _engine.signals;"""
         params = ", ".join(param.name for param in (node.parameters or []))
         body = "\n".join(self._stmt_to_js(stmt, 1) for stmt in (node.body or []))
         self._functions.append(f"{keyword} {node.name}({params}) {{\n{body}\n}}")
+
+    def _lower_class(self, node: IRClassDecl) -> None:
+        lines = [f"class {node.name} {{"]
+        for child in node.body or []:
+            if not isinstance(child, IRFunction):
+                continue
+            name = "constructor" if child.name == "__init__" else child.name
+            keyword = "async " if child.is_async else ""
+            params = ", ".join(param.name for param in (child.parameters or []))
+            body = "\n".join(self._stmt_to_js(stmt, 2) for stmt in (child.body or []))
+            lines.append(f"  {keyword}{name}({params}) {{")
+            if body:
+                lines.append(body)
+            lines.append("  }")
+        lines.append("}")
+        self._functions.append("\n".join(lines))
 
     def _lower_render_block(self, node: IRRenderBlock) -> None:
         self._has_render_root = True
@@ -496,10 +563,20 @@ const __ml_signals = _engine.signals;"""
             if stmt.value is None:
                 return f"{pad}return;"
             return f"{pad}return {self._expr_to_js(stmt.value)};"
+        if isinstance(stmt, IRRaiseStatement):
+            if stmt.value is None:
+                return f"{pad}throw new Error();"
+            return f"{pad}throw {self._expr_to_js(stmt.value)};"
+        if isinstance(stmt, IRImportStatement):
+            return ""
+        if isinstance(stmt, IRDelStatement):
+            return f"{pad}delete {self._expr_to_js(stmt.target)};"
         if isinstance(stmt, IRIfStatement):
             return self._if_to_js(stmt, indent)
         if isinstance(stmt, IRForLoop):
             return self._for_to_js(stmt, indent)
+        if isinstance(stmt, IRWhileLoop):
+            return self._while_to_js(stmt, indent)
         if isinstance(stmt, IRTryStatement):
             return self._try_to_js(stmt, indent)
         if isinstance(stmt, IRExprStatement):
@@ -520,7 +597,7 @@ const __ml_signals = _engine.signals;"""
             signal_name = self._signal_name(target.obj)
             index = self._expr_to_js(target.index)
             rendered = self._expr_to_js(value)
-            if signal_name:
+            if signal_name and signal_name in self._signal_names:
                 return (
                     f"{pad}_engine.get('{signal_name}').setIndex({index}, {rendered});"
                 )
@@ -599,6 +676,13 @@ const __ml_signals = _engine.signals;"""
             return "\n".join(lines)
         iterable_js = self._expr_to_js(iterable)
         lines = [f"{pad}for (const {target} of {iterable_js}) {{"]
+        lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+    def _while_to_js(self, node: IRWhileLoop, indent: int) -> str:
+        pad = "  " * indent
+        lines = [f"{pad}while ({self._expr_to_js(node.condition)}) {{"]
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
         lines.append(f"{pad}}}")
         return "\n".join(lines)
@@ -725,6 +809,8 @@ const __ml_signals = _engine.signals;"""
             return str(node.value)
         if isinstance(node, IRListLiteral):
             return "[" + ", ".join(self._expr_to_js(item) for item in node.elements) + "]"
+        if isinstance(node, IRSetLiteral):
+            return "new Set([" + ", ".join(self._expr_to_js(item) for item in node.elements) + "])"
         if isinstance(node, IRDictLiteral):
             entries = []
             for entry in node.entries:
@@ -735,6 +821,8 @@ const __ml_signals = _engine.signals;"""
                     entries.append(f"[{rendered_key}]: {rendered_value}")
             return "{" + ", ".join(entries) + "}"
         if isinstance(node, IRIdentifier):
+            if node.name == "self":
+                return "this"
             if node.name in _TRUE_NAMES:
                 return "true"
             if node.name in _FALSE_NAMES:
@@ -743,13 +831,23 @@ const __ml_signals = _engine.signals;"""
                 return f"_engine.get('{node.name}').get()"
             return node.name
         if isinstance(node, IRIndexAccess):
+            if isinstance(node.index, IRSliceExpr):
+                start = self._expr_to_js(node.index.start) if node.index.start is not None else "undefined"
+                stop = self._expr_to_js(node.index.stop) if node.index.stop is not None else "undefined"
+                return f"{self._expr_to_js(node.obj)}.slice({start}, {stop})"
             return f"{self._expr_to_js(node.obj)}[{self._expr_to_js(node.index)}]"
+        if isinstance(node, IRSliceExpr):
+            start = self._expr_to_js(node.start) if node.start is not None else "undefined"
+            stop = self._expr_to_js(node.stop) if node.stop is not None else "undefined"
+            if node.step is not None:
+                return f"__ml_slice({start}, {stop}, {self._expr_to_js(node.step)})"
+            return f"__ml_slice({start}, {stop})"
         if isinstance(node, IRAttributeAccess):
             return f"{self._expr_to_js(node.obj)}.{node.attr}"
         if isinstance(node, IRBinaryOp):
             return f"({self._expr_to_js(node.left)} {node.op} {self._expr_to_js(node.right)})"
         if isinstance(node, IRBooleanOp):
-            op = " && " if node.op == "and" else " || "
+            op = " && " if node.op in ("and", "et", "&&") else " || "
             return "(" + op.join(self._expr_to_js(value) for value in node.values) + ")"
         if isinstance(node, IRCompareOp):
             left = self._expr_to_js(node.left)
@@ -757,7 +855,12 @@ const __ml_signals = _engine.signals;"""
             current_left = left
             for op, right in node.comparators:
                 right_js = self._expr_to_js(right)
-                parts.append(f"({current_left} {op} {right_js})")
+                if op in ("in", "dans"):
+                    parts.append(f"__ml_contains({right_js}, {current_left})")
+                elif op in ("not in", "non dans"):
+                    parts.append(f"(!__ml_contains({right_js}, {current_left}))")
+                else:
+                    parts.append(f"({current_left} {op} {right_js})")
                 current_left = right_js
             return " && ".join(parts) if parts else left
         if isinstance(node, IRUnaryOp):
@@ -778,6 +881,10 @@ const __ml_signals = _engine.signals;"""
                 return localized_method
             if call_name in _STR_NAMES:
                 return f"String({args})"
+            if call_name in _LIST_NAMES:
+                return f"Array.from({args})" if args else "[]"
+            if call_name in _NUMBER_NAMES:
+                return f"Number({args})"
             if call_name in _RANGE_NAMES:
                 return f"intervalle({args})"
             if call_name == "len":
@@ -804,14 +911,21 @@ const __ml_signals = _engine.signals;"""
             default = args[1] if len(args) > 1 else "undefined"
             return f"(({obj})?.[{key}] ?? {default})"
         if attr in {"ajouter", "append"}:
-            return f"{obj}.push({', '.join(args)})"
+            value = args[0] if args else "undefined"
+            return f"__ml_add({obj}, {value})"
         if attr in {"etendre", "extend"}:
             values = args[0] if args else "[]"
-            return f"{obj}.push(...({values} || []))"
+            return f"__ml_extend({obj}, {values})"
         if attr in {"minuscule", "lower"}:
             return f"String({obj}).toLowerCase()"
         if attr in {"remplacer", "replace"}:
             return f"{obj}.replace({', '.join(args)})"
+        if attr == "items":
+            return f"Object.entries({obj})"
+        if attr == "keys":
+            return f"Object.keys({obj})"
+        if attr == "pop" and args and args[0] == "0":
+            return f"{obj}.shift()"
         return None
 
     def _identifier_name(self, node: IRNode | None) -> str | None:

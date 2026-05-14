@@ -795,6 +795,9 @@
       "da": ["flydende"],
       "fi": ["liukuluku"]
     },
+    "number": {
+      "fr": ["nombre"]
+    },
     "str": {
       "fr": ["chaine", "chaîne"],
       "es": ["cadena"],
