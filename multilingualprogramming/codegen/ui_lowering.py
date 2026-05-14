@@ -23,6 +23,7 @@ from multilingualprogramming.core.ir_nodes import (
     IRCanvasBlock,
     IRCompareOp,
     IRConditionalExpr,
+    IRDictLiteral,
     IRExprStatement,
     IRForLoop,
     IRFunction,
@@ -37,6 +38,7 @@ from multilingualprogramming.core.ir_nodes import (
     IRProgram,
     IRRenderBlock,
     IRReturnStatement,
+    IRTryStatement,
     IRUIElement,
     IRUnaryOp,
     IRViewBinding,
@@ -106,18 +108,21 @@ class UILoweringPass:
         self._has_render_root = False
         self._canvas_names: list[str] = []
         self._functions: list[str] = []
+        self._module_parts: list[str] = []
         self._ui_function_names: set[str] = set()
         self._render_function = ""
 
-    def lower(self, program: IRProgram) -> UILoweringResult:
+    def lower(self, program: IRProgram, modules: dict[str, IRProgram] | None = None) -> UILoweringResult:
         """Lower an IRProgram to UI output."""
         preamble = self._emit_preamble()
+        self._lower_imported_modules(modules or {})
         for node in program.body:
             self._lower_node(node)
 
         self._wire_render_updates()
 
         js_parts = [preamble]
+        js_parts.extend(self._module_parts)
         js_parts.extend(self._result.js_signals)
         js_parts.extend(self._functions)
         js_parts.extend(self._result.js_handlers)
@@ -129,6 +134,45 @@ class UILoweringPass:
         self._result.js = "\n\n".join(part for part in js_parts if part)
         self._result.html = self._emit_html()
         return self._result
+
+    def _lower_imported_modules(self, modules: dict[str, IRProgram]) -> None:
+        for module_name, module_program in modules.items():
+            module_pass = UILoweringPass()
+            module_result = module_pass.lower(module_program)
+            module_parts = []
+            module_parts.extend(module_result.js_signals)
+            module_parts.extend(module_pass._functions)  # pylint: disable=protected-access
+            module_parts.extend(module_result.js_handlers)
+            module_parts.extend(module_result.js_bindings)
+            module_js = "\n\n".join(part for part in module_parts if part)
+
+            if "unsupported" in module_js or "null /*" in module_js:
+                self._result.diagnostics.append(
+                    f"Skipped UI module {module_name}: unsupported lowering output"
+                )
+                continue
+
+            exported_names = [
+                node.name
+                for node in module_program.body
+                if isinstance(node, IRFunction) and node.is_async
+            ]
+            if not exported_names:
+                continue
+
+            namespace_js = self._namespace_assignment_js(module_name, exported_names)
+            self._module_parts.append("\n\n".join([module_js, namespace_js]))
+
+    def _namespace_assignment_js(self, module_name: str, names: list[str]) -> str:
+        parts = module_name.split(".")
+        lines = ["window." + parts[0] + " = window." + parts[0] + " || {};"]
+        current = "window." + parts[0]
+        for part in parts[1:]:
+            current = current + "." + part
+            lines.append(f"{current} = {current} || {{}};")
+        exports = ", ".join(f"{name}: {name}" for name in names)
+        lines.append(f"Object.assign({current}, {{{exports}}});")
+        return "\n".join(lines)
 
     def _lower_node(self, node: IRNode) -> None:
         """Lower one node, descending into wrapper functions when useful."""
@@ -456,6 +500,8 @@ const __ml_signals = _engine.signals;"""
             return self._if_to_js(stmt, indent)
         if isinstance(stmt, IRForLoop):
             return self._for_to_js(stmt, indent)
+        if isinstance(stmt, IRTryStatement):
+            return self._try_to_js(stmt, indent)
         if isinstance(stmt, IRExprStatement):
             return f"{pad}{self._expr_to_js(stmt.expression)};"
         if isinstance(stmt, IRCallExpr):
@@ -505,6 +551,27 @@ const __ml_signals = _engine.signals;"""
             lines.extend(
                 self._stmt_to_js(stmt, indent + 1) for stmt in (node.else_body or [])
             )
+            lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+    def _try_to_js(self, node: IRTryStatement, indent: int) -> str:
+        pad = "  " * indent
+        lines = [f"{pad}try {{"]
+        lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
+        if not node.body:
+            lines.append(f"{pad}  return undefined;")
+        lines.append(f"{pad}}}")
+
+        handler = node.handlers[0] if node.handlers else None
+        error_name = getattr(handler, "name", None) or "error"
+        lines[-1] += f" catch ({error_name}) {{"
+        handler_body = getattr(handler, "body", []) if handler else []
+        lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in handler_body)
+        lines.append(f"{pad}}}")
+
+        if node.finally_body:
+            lines[-1] += " finally {"
+            lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in node.finally_body)
             lines.append(f"{pad}}}")
         return "\n".join(lines)
 
@@ -658,6 +725,15 @@ const __ml_signals = _engine.signals;"""
             return str(node.value)
         if isinstance(node, IRListLiteral):
             return "[" + ", ".join(self._expr_to_js(item) for item in node.elements) + "]"
+        if isinstance(node, IRDictLiteral):
+            entries = []
+            for entry in node.entries:
+                if isinstance(entry, tuple) and len(entry) == 2:
+                    key, value = entry
+                    rendered_key = self._expr_to_js(key)
+                    rendered_value = self._expr_to_js(value)
+                    entries.append(f"[{rendered_key}]: {rendered_value}")
+            return "{" + ", ".join(entries) + "}"
         if isinstance(node, IRIdentifier):
             if node.name in _TRUE_NAMES:
                 return "true"
@@ -697,6 +773,9 @@ const __ml_signals = _engine.signals;"""
         if isinstance(node, IRCallExpr):
             call_name = self._call_name(node.func)
             args = ", ".join(self._expr_to_js(arg) for arg in (node.args or []))
+            localized_method = self._localized_method_call_to_js(node)
+            if localized_method is not None:
+                return localized_method
             if call_name in _STR_NAMES:
                 return f"String({args})"
             if call_name in _RANGE_NAMES:
@@ -711,6 +790,29 @@ const __ml_signals = _engine.signals;"""
         if isinstance(node, IRAwaitExpr):
             return f"await {self._expr_to_js(node.value)}"
         return f"null /* {type(node).__name__} */"
+
+    def _localized_method_call_to_js(self, node: IRCallExpr) -> str | None:
+        if not isinstance(node.func, IRAttributeAccess):
+            return None
+
+        obj = self._expr_to_js(node.func.obj)
+        attr = node.func.attr
+        args = [self._expr_to_js(arg) for arg in (node.args or [])]
+
+        if attr in {"obtenir", "get"}:
+            key = args[0] if args else "undefined"
+            default = args[1] if len(args) > 1 else "undefined"
+            return f"(({obj})?.[{key}] ?? {default})"
+        if attr in {"ajouter", "append"}:
+            return f"{obj}.push({', '.join(args)})"
+        if attr in {"etendre", "extend"}:
+            values = args[0] if args else "[]"
+            return f"{obj}.push(...({values} || []))"
+        if attr in {"minuscule", "lower"}:
+            return f"String({obj}).toLowerCase()"
+        if attr in {"remplacer", "replace"}:
+            return f"{obj}.replace({', '.join(args)})"
+        return None
 
     def _identifier_name(self, node: IRNode | None) -> str | None:
         return node.name if isinstance(node, IRIdentifier) else None
@@ -730,6 +832,6 @@ const __ml_signals = _engine.signals;"""
         return None
 
 
-def lower_to_ui(program: IRProgram) -> UILoweringResult:
+def lower_to_ui(program: IRProgram, modules: dict[str, IRProgram] | None = None) -> UILoweringResult:
     """Lower an IRProgram to a browser preview bundle."""
-    return UILoweringPass().lower(program)
+    return UILoweringPass().lower(program, modules=modules)

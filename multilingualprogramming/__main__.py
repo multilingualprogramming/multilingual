@@ -34,6 +34,7 @@ from multilingualprogramming.codegen.python_generator import PythonCodeGenerator
 from multilingualprogramming.codegen.repl import REPL
 from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
 from multilingualprogramming.codegen.ui_lowering import lower_to_ui  # pylint: disable=unused-import
+from multilingualprogramming.core.ir_nodes import IRImportStatement
 from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir  # pylint: disable=unused-import
 from multilingualprogramming.core.validators import validate_all  # pylint: disable=unused-import
 from multilingualprogramming.keyword.language_pack_validator import (
@@ -44,6 +45,7 @@ from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
 from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
 from multilingualprogramming.source_extensions import (
+    find_module_source,
     find_package_init,
     has_source_extension,
 )
@@ -102,6 +104,62 @@ def _parse_program_from_file(path: str, lang: str | None):
     detected_lang = lexer.language or lang or "en"
     parser = Parser(tokens, source_language=detected_lang)
     return parser.parse()
+
+
+def _parse_ir_from_file(path: str | Path, lang: str | None):
+    resolved = Path(path)
+    source = _read_source_file(str(resolved))
+    lexer = Lexer(source, language=lang)
+    tokens = lexer.tokenize()
+    detected_lang = lexer.language or lang or "en"
+    parser = Parser(tokens, source_language=detected_lang)
+    program = parser.parse()
+    return lower_to_semantic_ir(program, detected_lang)
+
+
+def _resolve_absolute_module_source(entry_file: Path, module_name: str) -> Path | None:
+    parts = module_name.split(".")
+    search_root = entry_file.resolve().parent
+    while True:
+        base = search_root.joinpath(*parts[:-1]) if len(parts) > 1 else search_root
+        candidate = find_module_source(base, parts[-1])
+        if candidate is not None:
+            return candidate
+        package_dir = search_root.joinpath(*parts)
+        package_init = find_package_init(package_dir)
+        if package_init is not None:
+            return package_init
+        if search_root.parent == search_root:
+            return None
+        search_root = search_root.parent
+
+
+def _collect_ui_import_modules(entry_file: Path, root_ir, lang: str | None):
+    modules = {}
+    warnings = []
+    visited = {entry_file.resolve()}
+
+    def visit(ir_program, current_file: Path):
+        for node in ir_program.body:
+            if not isinstance(node, IRImportStatement):
+                continue
+            module_path = _resolve_absolute_module_source(current_file, node.module)
+            if module_path is None:
+                continue
+            resolved = module_path.resolve()
+            if resolved in visited:
+                continue
+            visited.add(resolved)
+            try:
+                imported_ir = _parse_ir_from_file(resolved, None)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                warnings.append(f"Skipped UI import {node.module}: {exc}")
+                continue
+            modules[node.module] = imported_ir
+            visit(imported_ir, resolved)
+
+    visit(root_ir, entry_file.resolve())
+    return modules, warnings
 
 
 def cmd_run(args):
@@ -284,9 +342,11 @@ def cmd_build_wasm_bundle(args):
 
 def cmd_build_ui_bundle(args):
     """Build a self-contained reactive UI bundle (HTML + JS)."""
-    program = _parse_program_from_file(args.file, args.lang)
-    ir = lower_to_semantic_ir(program, args.lang or "en")
-    result = lower_to_ui(ir)
+    entry_file = Path(args.file)
+    ir = _parse_ir_from_file(entry_file, args.lang)
+    modules, import_warnings = _collect_ui_import_modules(entry_file, ir, args.lang)
+    result = lower_to_ui(ir, modules=modules)
+    result.diagnostics.extend(import_warnings)
 
     # Create output directory
     out_dir = Path(args.out_dir)
