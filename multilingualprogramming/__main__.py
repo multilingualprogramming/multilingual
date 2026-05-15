@@ -43,6 +43,7 @@ from multilingualprogramming.keyword.language_pack_validator import (
 from multilingualprogramming.exceptions import UnsupportedLanguageError
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
+from multilingualprogramming.parser.ast_nodes import ImportStatement, FromImportStatement, Program
 from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
 from multilingualprogramming.source_extensions import (
     find_module_source,
@@ -106,60 +107,75 @@ def _parse_program_from_file(path: str, lang: str | None):
     return parser.parse()
 
 
-def _parse_ir_from_file(path: str | Path, lang: str | None):
-    resolved = Path(path)
-    source = _read_source_file(str(resolved))
-    lexer = Lexer(source, language=lang)
-    tokens = lexer.tokenize()
-    detected_lang = lexer.language or lang or "en"
-    parser = Parser(tokens, source_language=detected_lang)
-    program = parser.parse()
-    return lower_to_semantic_ir(program, detected_lang)
-
-
-def _resolve_absolute_module_source(entry_file: Path, module_name: str) -> Path | None:
+def _resolve_module_path(module_name: str, base_dir: Path) -> Path | None:
+    """Resolve a module name (e.g., 'ui.composants.barre_recherche') to a file path."""
+    # Convert dot notation to file path
     parts = module_name.split(".")
-    search_root = entry_file.resolve().parent
-    while True:
-        base = search_root.joinpath(*parts[:-1]) if len(parts) > 1 else search_root
-        candidate = find_module_source(base, parts[-1])
-        if candidate is not None:
-            return candidate
-        package_dir = search_root.joinpath(*parts)
-        package_init = find_package_init(package_dir)
-        if package_init is not None:
-            return package_init
-        if search_root.parent == search_root:
-            return None
-        search_root = search_root.parent
+    # Try relative to base directory first
+    candidate = base_dir.joinpath(*parts).with_suffix(".multi")
+    if candidate.exists():
+        return candidate
+    # Try one level up (in case we're in a subdirectory)
+    candidate = base_dir.parent.joinpath(*parts).with_suffix(".multi")
+    if candidate.exists():
+        return candidate
+    return None
 
 
-def _collect_ui_import_modules(entry_file: Path, root_ir, lang: str | None):
-    modules = {}
-    warnings = []
-    visited = {entry_file.resolve()}
+def _merge_programs(main_program: Program, imported_program: Program) -> Program:
+    """Merge imported program statements into main program."""
+    # Combine statements, removing duplicate imports
+    seen_imports = set()
+    merged_statements = []
 
-    def visit(ir_program, current_file: Path):
-        for node in ir_program.body:
-            if not isinstance(node, IRImportStatement):
-                continue
-            module_path = _resolve_absolute_module_source(current_file, node.module)
-            if module_path is None:
-                continue
-            resolved = module_path.resolve()
-            if resolved in visited:
-                continue
-            visited.add(resolved)
-            try:
-                imported_ir = _parse_ir_from_file(resolved, lang)
-            except Exception as exc:  # pylint: disable=broad-exception-caught
-                warnings.append(f"Skipped UI import {node.module}: {exc}")
-                continue
-            visit(imported_ir, resolved)
-            modules[node.module] = imported_ir
+    # Add unique imports from both programs
+    for stmt in main_program.body + imported_program.body:
+        if isinstance(stmt, (ImportStatement, FromImportStatement)):
+            # Create a unique key for the import
+            key = (type(stmt).__name__, getattr(stmt, 'module', ''))
+            if key not in seen_imports:
+                seen_imports.add(key)
+                merged_statements.append(stmt)
+        else:
+            merged_statements.append(stmt)
 
-    visit(root_ir, entry_file.resolve())
-    return modules, warnings
+    # Create new program with merged statements
+    new_program = Program(merged_statements)
+    return new_program
+
+
+def _parse_program_with_dependencies(path: str, lang: str | None) -> Program:
+    """Parse a program and recursively include all imported modules."""
+    main_program = _parse_program_from_file(path, lang)
+    base_dir = Path(path).resolve().parent
+    processed = set()
+
+    def _collect_imports(program: Program, current_dir: Path) -> Program:
+        """Recursively collect imports and merge programs."""
+        result = program
+
+        for stmt in program.body:
+            if isinstance(stmt, ImportStatement) and stmt.module:
+                # Skip if already processed
+                if stmt.module in processed:
+                    continue
+                processed.add(stmt.module)
+
+                # Resolve module path
+                module_path = _resolve_module_path(stmt.module, current_dir)
+                if module_path:
+                    try:
+                        imported_program = _parse_program_from_file(str(module_path), lang)
+                        # Recursively collect dependencies of imported module
+                        imported_program = _collect_imports(imported_program, module_path.parent)
+                        # Merge into result
+                        result = _merge_programs(result, imported_program)
+                    except Exception as e:
+                        print(f"[WARN] Failed to import {stmt.module}: {e}")
+
+        return result
+
+    return _collect_imports(main_program, base_dir)
 
 
 def cmd_run(args):
@@ -342,11 +358,9 @@ def cmd_build_wasm_bundle(args):
 
 def cmd_build_ui_bundle(args):
     """Build a self-contained reactive UI bundle (HTML + JS)."""
-    entry_file = Path(args.file)
-    ir = _parse_ir_from_file(entry_file, args.lang)
-    modules, import_warnings = _collect_ui_import_modules(entry_file, ir, args.lang)
-    result = lower_to_ui(ir, modules=modules)
-    result.diagnostics.extend(import_warnings)
+    program = _parse_program_with_dependencies(args.file, args.lang)
+    ir = lower_to_semantic_ir(program, args.lang or "en")
+    result = lower_to_ui(ir)
 
     # Create output directory
     out_dir = Path(args.out_dir)

@@ -6,6 +6,6 @@
 
 """Datetime subpackage for multilingual programming."""
 
-from multilingualprogramming.datetime.mp_date import MPDate
-from multilingualprogramming.datetime.mp_time import MPTime
-from multilingualprogramming.datetime.mp_datetime import MPDatetime
+from .mp_date import MPDate
+from .mp_time import MPTime
+from .mp_datetime import MPDatetime

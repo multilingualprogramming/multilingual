@@ -22,6 +22,15 @@ class Program(ASTNode):
     def __init__(self, body, line=0, column=0):
         super().__init__(line, column)
         self.body = body
+
+    @property
+    def statements(self):
+        """Backward-compatible alias for older code that expects ``.statements``."""
+        return self.body
+
+    @statements.setter
+    def statements(self, value):
+        self.body = value
 # ---------------------------------------------------------------------------
 # Literal nodes
 # ---------------------------------------------------------------------------
