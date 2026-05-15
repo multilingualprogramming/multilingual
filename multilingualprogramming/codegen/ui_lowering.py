@@ -180,7 +180,8 @@ class UILoweringPass:
                 continue
 
             namespace_js = self._namespace_assignment_js(module_name, exported_names)
-            self._module_parts.append("\n\n".join([module_js, namespace_js]))
+            wrapped_js = "\n\n".join([module_js, namespace_js])
+            self._module_parts.append(f"(() => {{\n{wrapped_js}\n}})();")
 
     def _namespace_assignment_js(self, module_name: str, names: list[str]) -> str:
         parts = module_name.split(".")
@@ -929,6 +930,9 @@ const __ml_signals = _engine.signals;"""
                 delay = self._expr_to_js(node.args[0]) if node.args else "0"
                 return f"new Promise((resolve) => setTimeout(resolve, {delay} * 1000))"
             func_js = self._expr_to_js(node.func)
+            constructor_name = call_name.rsplit(".", 1)[-1] if call_name else ""
+            if constructor_name[:1].isupper():
+                return f"new {func_js}({args})"
             return f"{func_js}({args})"
         if isinstance(node, IRAwaitExpr):
             return f"await {self._expr_to_js(node.value)}"

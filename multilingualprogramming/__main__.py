@@ -155,8 +155,8 @@ def _collect_ui_import_modules(entry_file: Path, root_ir, lang: str | None):
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 warnings.append(f"Skipped UI import {node.module}: {exc}")
                 continue
-            modules[node.module] = imported_ir
             visit(imported_ir, resolved)
+            modules[node.module] = imported_ir
 
     visit(root_ir, entry_file.resolve())
     return modules, warnings
