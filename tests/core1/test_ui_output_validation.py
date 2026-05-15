@@ -92,6 +92,14 @@ def test_memory_game_js_no_undefined_calls():
     assert "class undefined" not in js
 
 
+def test_memory_game_js_has_no_unsupported_placeholders():
+    """Generated JS should not include unsupported placeholder comments."""
+    ui_result = _load_memory_game_ui()
+    js = ui_result.emit_js()
+
+    assert "unsupported" not in js
+
+
 def test_memory_game_js_has_render_initialization():
     """Generated JS initializes render on page load."""
     ui_result = _load_memory_game_ui()
