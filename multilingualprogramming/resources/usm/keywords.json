@@ -758,7 +758,10 @@
       },
       "NONE": {
         "en": "None",
-        "fr": "Rien",
+        "fr": [
+          "Rien",
+          "Nul"
+        ],
         "es": "Nada",
         "de": "Nichts",
         "hi": "कुछनहीं",

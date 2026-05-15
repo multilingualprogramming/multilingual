@@ -91,6 +91,7 @@ _NUMBER_NAMES = (
 )
 _TRUE_NAMES = _keyword_aliases_for("logical", "TRUE")
 _FALSE_NAMES = _keyword_aliases_for("logical", "FALSE")
+_NONE_NAMES = _keyword_aliases_for("logical", "NONE")
 
 
 @dataclass
@@ -844,6 +845,8 @@ const __ml_signals = _engine.signals;"""
                 return "true"
             if node.name in _FALSE_NAMES:
                 return "false"
+            if node.name in _NONE_NAMES:
+                return "null"
             if node.name in self._signal_names:
                 return f"_engine.get('{node.name}').get()"
             return node.name
@@ -884,6 +887,10 @@ const __ml_signals = _engine.signals;"""
                     parts.append(f"__ml_contains({right_js}, {current_left})")
                 elif op in ("not in", "non dans"):
                     parts.append(f"(!__ml_contains({right_js}, {current_left}))")
+                elif op in ("is", "est"):
+                    parts.append(f"({current_left} === {right_js})")
+                elif op in ("is not", "n'est pas", "nest pas"):
+                    parts.append(f"({current_left} !== {right_js})")
                 else:
                     parts.append(f"({current_left} {op} {right_js})")
                 current_left = right_js
@@ -912,6 +919,10 @@ const __ml_signals = _engine.signals;"""
                 return f"Number({args})"
             if call_name in _RANGE_NAMES:
                 return f"intervalle({args})"
+            if call_name == "Exception":
+                return f"new Error({args})"
+            if call_name == "json.dumps":
+                return f"JSON.stringify({args})"
             if call_name == "len":
                 return f"({self._expr_to_js(node.args[0])}).length" if node.args else "0"
             if call_name == "asyncio.sleep":
