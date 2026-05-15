@@ -249,7 +249,7 @@
       },
       "PASS": {
         "en": "pass",
-        "fr": "passer",
+        "fr": ["passer", "passe"],
         "es": "pasar",
         "de": "pass",
         "hi": "छोड़ो",

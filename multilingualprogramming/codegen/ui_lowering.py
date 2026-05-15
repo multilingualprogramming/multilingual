@@ -21,6 +21,7 @@ from multilingualprogramming.core.ir_nodes import (
     IRBinaryOp,
     IRBooleanOp,
     IRBreakStatement,
+    IRPassStatement,
     IRCallExpr,
     IRCanvasBlock,
     IRClassDecl,
@@ -381,6 +382,17 @@ function __ml_truthy(value) {
   return Boolean(value);
 }
 
+function __ml_iterate(obj) {
+  if (obj == null) return [];
+  if (Array.isArray(obj) || obj instanceof Set || obj instanceof Map || typeof obj === 'string') {
+    return obj;
+  }
+  if (typeof obj === 'object') {
+    return Object.keys(obj);
+  }
+  return obj;
+}
+
 function __ml_add(container, item) {
   if (container instanceof Set) {
     container.add(item);
@@ -629,6 +641,8 @@ const __ml_signals = _engine.signals;"""
             return f"{pad}break;"
         if isinstance(stmt, IRContinueStatement):
             return f"{pad}continue;"
+        if isinstance(stmt, IRPassStatement):
+            return ""
         if isinstance(stmt, IRImportStatement):
             return ""
         if isinstance(stmt, IRDelStatement):
@@ -751,7 +765,7 @@ const __ml_signals = _engine.signals;"""
             lines.append(f"{pad}}}")
             return "\n".join(lines)
         iterable_js = self._expr_to_js(iterable)
-        lines = [f"{pad}for (const {target} of {iterable_js}) {{"]
+        lines = [f"{pad}for (const {target} of __ml_iterate({iterable_js})) {{"]
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
         lines.append(f"{pad}}}")
         return "\n".join(lines)
@@ -884,7 +898,7 @@ const __ml_signals = _engine.signals;"""
             )
         else:
             iterable_js = self._expr_to_js(iterable)
-            lines.append(f"{pad}for (const {target} of {iterable_js}) {{")
+            lines.append(f"{pad}for (const {target} of __ml_iterate({iterable_js})) {{")
         for stmt in (node.body or []):
             lines.extend(self._render_child(stmt, parent_var, indent + 1))
         lines.append(f"{pad}}}")
