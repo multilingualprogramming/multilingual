@@ -136,7 +136,10 @@
       },
       "LOOP_BREAK": {
         "en": "break",
-        "fr": "arrêter",
+        "fr": [
+          "arrêter",
+          "pause"
+        ],
         "es": "romper",
         "de": "abbrechen",
         "hi": "रोको",

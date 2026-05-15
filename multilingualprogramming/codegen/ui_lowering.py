@@ -20,11 +20,13 @@ from multilingualprogramming.core.ir_nodes import (
     IRAttributeAccess,
     IRBinaryOp,
     IRBooleanOp,
+    IRBreakStatement,
     IRCallExpr,
     IRCanvasBlock,
     IRClassDecl,
     IRCompareOp,
     IRConditionalExpr,
+    IRContinueStatement,
     IRDelStatement,
     IRDictLiteral,
     IRExprStatement,
@@ -46,6 +48,7 @@ from multilingualprogramming.core.ir_nodes import (
     IRSetLiteral,
     IRSliceExpr,
     IRTryStatement,
+    IRTupleLiteral,
     IRUIElement,
     IRUnaryOp,
     IRViewBinding,
@@ -591,6 +594,10 @@ const __ml_signals = _engine.signals;"""
             if stmt.value is None:
                 return f"{pad}throw new Error();"
             return f"{pad}throw {self._expr_to_js(stmt.value)};"
+        if isinstance(stmt, IRBreakStatement):
+            return f"{pad}break;"
+        if isinstance(stmt, IRContinueStatement):
+            return f"{pad}continue;"
         if isinstance(stmt, IRImportStatement):
             return ""
         if isinstance(stmt, IRDelStatement):
@@ -692,7 +699,7 @@ const __ml_signals = _engine.signals;"""
 
     def _for_to_js(self, node: IRForLoop, indent: int) -> str:
         pad = "  " * indent
-        target = self._identifier_name(node.target) or "i"
+        target = self._loop_target_to_js(node.target) or "i"
         iterable = node.iterable
         if isinstance(iterable, IRCallExpr) and self._call_name(iterable.func) == "range":
             args = iterable.args or []
@@ -717,6 +724,15 @@ const __ml_signals = _engine.signals;"""
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
         lines.append(f"{pad}}}")
         return "\n".join(lines)
+
+    def _loop_target_to_js(self, target: IRNode | None) -> str | None:
+        if isinstance(target, IRIdentifier):
+            return target.name
+        if isinstance(target, IRTupleLiteral):
+            names = [self._identifier_name(element) for element in target.elements]
+            if all(names):
+                return "[" + ", ".join(name for name in names if name) + "]"
+        return None
 
     def _while_to_js(self, node: IRWhileLoop, indent: int) -> str:
         pad = "  " * indent
@@ -979,6 +995,9 @@ const __ml_signals = _engine.signals;"""
             return f"String({obj}).toLowerCase()"
         if attr in {"remplacer", "replace"}:
             return f"{obj}.replace({', '.join(args)})"
+        if attr in {"joindre", "join"}:
+            values = args[0] if args else "[]"
+            return f"({values}).join({obj})"
         if attr == "items":
             return f"Object.entries({obj})"
         if attr == "keys":
