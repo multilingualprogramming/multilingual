@@ -93,7 +93,7 @@ jobs:
     - name: Compile generated Rust to WASM
       if: matrix.backend == 'wasm'
       run: |
-        pytest tests/wasm_codegen_poc_test.py -k rust_compiles_to_wasm -v --tb=short --timeout=120
+        pytest tests/wasm_codegen_poc_test.py -v --tb=short --timeout=120
 
     - name: Run fallback-specific tests
       if: matrix.backend == 'fallback'
