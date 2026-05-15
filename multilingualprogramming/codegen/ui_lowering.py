@@ -126,6 +126,7 @@ class UILoweringPass:
         self._module_parts: list[str] = []
         self._ui_function_names: set[str] = set()
         self._render_function = ""
+        self._local_scopes: list[set[str]] = []
 
     def lower(
         self,
@@ -409,7 +410,9 @@ const __ml_signals = _engine.signals;"""
     def _lower_function(self, node: IRFunction) -> None:
         keyword = "async function" if node.is_async else "function"
         params = ", ".join(param.name for param in (node.parameters or []))
+        self._local_scopes.append({param.name for param in (node.parameters or [])})
         body = "\n".join(self._stmt_to_js(stmt, 1) for stmt in (node.body or []))
+        self._local_scopes.pop()
         self._functions.append(f"{keyword} {node.name}({params}) {{\n{body}\n}}")
 
     def _lower_class(self, node: IRClassDecl) -> None:
@@ -420,7 +423,9 @@ const __ml_signals = _engine.signals;"""
             name = "constructor" if child.name == "__init__" else child.name
             keyword = "async " if child.is_async else ""
             params = ", ".join(param.name for param in (child.parameters or []))
+            self._local_scopes.append({param.name for param in (child.parameters or [])})
             body = "\n".join(self._stmt_to_js(stmt, 2) for stmt in (child.body or []))
+            self._local_scopes.pop()
             lines.append(f"  {keyword}{name}({params}) {{")
             if body:
                 lines.append(body)
@@ -626,6 +631,9 @@ const __ml_signals = _engine.signals;"""
             rendered = self._expr_to_js(value)
             if target.name in self._signal_names:
                 return f"{pad}_engine.get('{target.name}').set({rendered});"
+            if self._local_scopes and target.name not in self._local_scopes[-1]:
+                self._local_scopes[-1].add(target.name)
+                return f"{pad}var {target.name} = {rendered};"
             return f"{pad}{target.name} = {rendered};"
         rendered_target = self._expr_to_js(target)
         rendered_value = self._expr_to_js(value)
@@ -659,7 +667,7 @@ const __ml_signals = _engine.signals;"""
         lines.append(f"{pad}}}")
 
         handler = node.handlers[0] if node.handlers else None
-        error_name = getattr(handler, "name", None) or "error"
+        error_name = self._exception_handler_name(handler)
         lines[-1] += f" catch ({error_name}) {{"
         handler_body = getattr(handler, "body", []) if handler else []
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in handler_body)
@@ -670,6 +678,17 @@ const __ml_signals = _engine.signals;"""
             lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in node.finally_body)
             lines.append(f"{pad}}}")
         return "\n".join(lines)
+
+    def _exception_handler_name(self, handler: IRNode | None) -> str:
+        if handler is None:
+            return "error"
+        explicit_name = getattr(handler, "name", None)
+        if explicit_name:
+            return explicit_name
+        exc_type = getattr(handler, "exc_type", None)
+        if isinstance(exc_type, IRIdentifier) and not exc_type.name[:1].isupper():
+            return exc_type.name
+        return "error"
 
     def _for_to_js(self, node: IRForLoop, indent: int) -> str:
         pad = "  " * indent
