@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from multilingualprogramming.core.ir_nodes import (
     IRAttributeAccess,
     IRBinaryOp,
     IRBooleanOp,
+    IRBinding,
     IRBreakStatement,
     IRPassStatement,
     IRCallExpr,
@@ -88,6 +90,7 @@ def _keyword_aliases_for(category: str, concept: str) -> frozenset[str]:
 _RANGE_NAMES = _builtin_aliases_for("range")
 _STR_NAMES = _builtin_aliases_for("str")
 _LIST_NAMES = _builtin_aliases_for("list")
+_SET_NAMES = _builtin_aliases_for("set")
 _NUMBER_NAMES = (
     _builtin_aliases_for("number")
     | _builtin_aliases_for("int")
@@ -96,6 +99,44 @@ _NUMBER_NAMES = (
 _TRUE_NAMES = _keyword_aliases_for("logical", "TRUE")
 _FALSE_NAMES = _keyword_aliases_for("logical", "FALSE")
 _NONE_NAMES = _keyword_aliases_for("logical", "NONE")
+_PY_STRING_ESCAPE_RE = re.compile(
+    r"\\(U[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)",
+    re.DOTALL,
+)
+_SIMPLE_STRING_ESCAPES = {
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+}
+
+
+def _decode_python_string_escapes(value: str) -> str:
+    """Decode Python-style string escapes before emitting JavaScript."""
+
+    def replace(match: re.Match[str]) -> str:
+        escape = match.group(1)
+        if escape.startswith("U") and len(escape) == 9:
+            return chr(int(escape[1:], 16))
+        if escape.startswith("u") and len(escape) == 5:
+            return chr(int(escape[1:], 16))
+        if escape.startswith("x") and len(escape) == 3:
+            return chr(int(escape[1:], 16))
+        return _SIMPLE_STRING_ESCAPES.get(escape, "\\" + escape)
+
+    return _PY_STRING_ESCAPE_RE.sub(replace, value)
+
+
+def _js_string_literal(value: str) -> str:
+    """Return a valid JavaScript string literal for a Multilingual string."""
+    decoded = _decode_python_string_escapes(value)
+    return json.dumps(decoded, ensure_ascii=False)
 
 
 @dataclass
@@ -228,6 +269,9 @@ class UILoweringPass:
                     self._lower_node(child)
                 return
             self._lower_function(node)
+            return
+        if isinstance(node, IRBinding):
+            self._functions.append(self._binding_to_js(node, 0))
             return
         if hasattr(node, "target") and hasattr(node, "value"):
             self._functions.append(self._assignment_to_js(node, 0))
@@ -410,6 +454,24 @@ function __ml_extend(container, values) {
     __ml_add(container, value);
   }
   return container;
+}
+
+function __ml_set(value) {
+  return new Set(__ml_iterate(value));
+}
+
+function __ml_set_intersection(left, right) {
+  const rightSet = right instanceof Set ? right : __ml_set(right);
+  return new Set(Array.from(__ml_set(left)).filter((item) => rightSet.has(item)));
+}
+
+function __ml_set_difference(left, right) {
+  const rightSet = right instanceof Set ? right : __ml_set(right);
+  return new Set(Array.from(__ml_set(left)).filter((item) => !rightSet.has(item)));
+}
+
+function __ml_set_union(left, right) {
+  return new Set([...__ml_set(left), ...__ml_set(right)]);
 }
 
 function __ml_slice(start, stop, step) {
@@ -645,6 +707,8 @@ const __ml_signals = _engine.signals;"""
             return ""
         if isinstance(stmt, IRImportStatement):
             return ""
+        if isinstance(stmt, IRBinding):
+            return self._binding_to_js(stmt, indent)
         if isinstance(stmt, IRDelStatement):
             return f"{pad}delete {self._expr_to_js(stmt.target)};"
         if isinstance(stmt, IRIfStatement):
@@ -664,6 +728,16 @@ const __ml_signals = _engine.signals;"""
         if hasattr(stmt, "target") and hasattr(stmt, "value"):
             return self._assignment_to_js(stmt, indent)
         return f"{pad}// unsupported {type(stmt).__name__}"
+
+    def _binding_to_js(self, stmt: IRBinding, indent: int) -> str:
+        pad = "  " * indent
+        rendered = self._expr_to_js(stmt.value)
+        if stmt.name in self._signal_names:
+            return f"{pad}_engine.get('{stmt.name}').set({rendered});"
+        if self._local_scopes:
+            self._local_scopes[-1].add(stmt.name)
+        keyword = "let" if stmt.binding_kind in {"let", "const"} else "var"
+        return f"{pad}{keyword} {stmt.name} = {rendered};"
 
     def _assignment_to_js(self, stmt: IRNode, indent: int) -> str:
         pad = "  " * indent
@@ -909,7 +983,7 @@ const __ml_signals = _engine.signals;"""
             return "null"
         if isinstance(node, IRLiteral):
             if node.kind == "string":
-                return repr(str(node.value))
+                return _js_string_literal(str(node.value))
             if node.kind == "bool":
                 return "true" if bool(node.value) else "false"
             if node.kind == "none":
@@ -1006,6 +1080,8 @@ const __ml_signals = _engine.signals;"""
                 return f"String({args})"
             if call_name in _LIST_NAMES:
                 return f"Array.from({args})" if args else "[]"
+            if call_name in _SET_NAMES:
+                return f"__ml_set({args})" if args else "new Set()"
             if call_name in _NUMBER_NAMES:
                 return f"Number({args})"
             if call_name in _RANGE_NAMES:
@@ -1046,6 +1122,15 @@ const __ml_signals = _engine.signals;"""
         if attr in {"etendre", "extend"}:
             values = args[0] if args else "[]"
             return f"__ml_extend({obj}, {values})"
+        if attr == "intersection":
+            other = args[0] if args else "[]"
+            return f"__ml_set_intersection({obj}, {other})"
+        if attr == "difference":
+            other = args[0] if args else "[]"
+            return f"__ml_set_difference({obj}, {other})"
+        if attr == "union":
+            other = args[0] if args else "[]"
+            return f"__ml_set_union({obj}, {other})"
         if attr in {"minuscule", "lower"}:
             return f"String({obj}).toLowerCase()"
         if attr in {"remplacer", "replace"}:

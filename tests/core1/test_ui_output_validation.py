@@ -19,6 +19,16 @@ def _load_memory_game_ui():
     return lower_to_ui(ir_program)
 
 
+def _compile_ui(source, language="en"):
+    """Compile a source snippet with the UI lowering pipeline."""
+    lexer = Lexer(source, lang=language)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, lang=language)
+    program = parser.parse()
+    ir_program = lower_to_semantic_ir(program, lang=language)
+    return lower_to_ui(ir_program)
+
+
 def test_memory_game_html_has_required_structure():
     """Generated HTML has all required structural elements."""
     ui_result = _load_memory_game_ui()
@@ -186,3 +196,69 @@ def test_memory_game_js_event_handlers():
 
     # Check for reset button handler
     assert "reset_game" in js
+
+
+def test_ui_js_for_loop_wraps_dict_iteration():
+    """French for-loops over dict objects use the safe UI iterator helper."""
+    source = (
+        "déf parcourir():\n"
+        "    soit d = {'a': 1}\n"
+        "    pour x dans d:\n"
+        "        passer\n"
+    )
+    js = _compile_ui(source, "fr").emit_js()
+
+    assert "function __ml_iterate(obj)" in js
+    assert 'let d = {["a"]: 1};' in js
+    assert "for (const x of __ml_iterate(d))" in js
+    assert "for (const x of d)" not in js
+    assert "unsupported IRBinding" not in js
+
+
+def test_ui_js_french_passe_lowers_to_empty_statement():
+    """Both French pass aliases are accepted and not emitted as identifiers."""
+    source = (
+        "déf gerer():\n"
+        "    essayer:\n"
+        "        passer\n"
+        "    sauf erreur:\n"
+        "        passe\n"
+    )
+    js = _compile_ui(source, "fr").emit_js()
+
+    assert "catch (erreur)" in js
+    assert "passe;" not in js
+    assert "passer;" not in js
+
+
+def test_ui_js_decodes_python_string_escapes():
+    """Python-style escapes become valid JavaScript string literals."""
+    source = (
+        "déf texte():\n"
+        "    retour '\\U0001f3db'\n"
+        "déf titre():\n"
+        "    retour 'Trajectoire d\\'influence'\n"
+    )
+    js = _compile_ui(source, "fr").emit_js()
+
+    assert 'return "🏛";' in js
+    assert 'return "Trajectoire d\\\'influence";' not in js
+    assert 'return "Trajectoire d\'influence";' in js
+
+
+def test_ui_js_localized_set_constructor_and_methods():
+    """French ensemble() and standard set methods lower to JavaScript Sets."""
+    source = (
+        "déf ensembles(liste):\n"
+        "    soit a = ensemble(liste)\n"
+        "    soit b = a.intersection([2])\n"
+        "    soit c = a.difference([3])\n"
+        "    retour c.union(b)\n"
+    )
+    js = _compile_ui(source, "fr").emit_js()
+
+    assert "let a = __ml_set(liste);" in js
+    assert "let b = __ml_set_intersection(a, [2]);" in js
+    assert "let c = __ml_set_difference(a, [3]);" in js
+    assert "return __ml_set_union(c, b);" in js
+    assert "ensemble(" not in js
