@@ -911,7 +911,8 @@ const __ml_signals = _engine.signals;"""
         if isinstance(node, IRBinaryOp):
             return f"({self._expr_to_js(node.left)} {node.op} {self._expr_to_js(node.right)})"
         if isinstance(node, IRBooleanOp):
-            op = " && " if node.op in ("and", "et", "&&") else " || "
+            op_name = str(node.op).lower()
+            op = " && " if op_name in ("and", "et", "&&") else " || "
             return "(" + op.join(self._expr_to_js(value) for value in node.values) + ")"
         if isinstance(node, IRCompareOp):
             left = self._expr_to_js(node.left)
