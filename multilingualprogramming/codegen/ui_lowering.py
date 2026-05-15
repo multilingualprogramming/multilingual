@@ -227,10 +227,6 @@ class UILoweringPass:
                     self._lower_node(child)
                 return
             self._lower_function(node)
-            if not node.is_async:
-                self._ui_function_names.add(node.name)
-                for child in node.body:
-                    self._lower_node(child)
             return
         if hasattr(node, "target") and hasattr(node, "value"):
             self._functions.append(self._assignment_to_js(node, 0))
@@ -358,6 +354,22 @@ function __ml_contains(container, item) {
     return item in container;
   }
   return false;
+}
+
+function __ml_truthy(value) {
+  if (value == null || value === false) {
+    return false;
+  }
+  if (Array.isArray(value) || typeof value === 'string') {
+    return value.length > 0;
+  }
+  if (value instanceof Set || value instanceof Map) {
+    return value.size > 0;
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value).length > 0;
+  }
+  return Boolean(value);
 }
 
 function __ml_add(container, item) {
@@ -658,11 +670,11 @@ const __ml_signals = _engine.signals;"""
 
     def _if_to_js(self, node: IRIfStatement, indent: int) -> str:
         pad = "  " * indent
-        lines = [f"{pad}if ({self._expr_to_js(node.condition)}) {{"]
+        lines = [f"{pad}if ({self._condition_to_js(node.condition)}) {{"]
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
         lines.append(f"{pad}}}")
         for clause in (node.elif_clauses or []):
-            lines.append(f"{pad}else if ({self._expr_to_js(clause.condition)}) {{")
+            lines.append(f"{pad}else if ({self._condition_to_js(clause.condition)}) {{")
             lines.extend(
                 self._stmt_to_js(stmt, indent + 1) for stmt in (clause.body or [])
             )
@@ -746,10 +758,19 @@ const __ml_signals = _engine.signals;"""
 
     def _while_to_js(self, node: IRWhileLoop, indent: int) -> str:
         pad = "  " * indent
-        lines = [f"{pad}while ({self._expr_to_js(node.condition)}) {{"]
+        lines = [f"{pad}while ({self._condition_to_js(node.condition)}) {{"]
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
         lines.append(f"{pad}}}")
         return "\n".join(lines)
+
+    def _condition_to_js(self, node: IRNode | None) -> str:
+        if isinstance(node, IRBooleanOp):
+            op_name = str(node.op).lower()
+            op = " && " if op_name in ("and", "et", "&&") else " || "
+            return "(" + op.join(self._condition_to_js(value) for value in node.values) + ")"
+        if isinstance(node, IRUnaryOp) and node.op in ("NOT", "not", "!"):
+            return f"(!{self._condition_to_js(node.operand)})"
+        return f"__ml_truthy({self._expr_to_js(node)})"
 
     def _element_to_js(self, elem: IRUIElement, parent_var: str, indent: int) -> list[str]:
         pad = "  " * indent
@@ -944,11 +965,11 @@ const __ml_signals = _engine.signals;"""
             return " && ".join(parts) if parts else left
         if isinstance(node, IRUnaryOp):
             if node.op in ("NOT", "not", "!"):
-                return f"(!{self._expr_to_js(node.operand)})"
+                return f"(!{self._condition_to_js(node.operand)})"
             return f"({node.op}{self._expr_to_js(node.operand)})"
         if isinstance(node, IRConditionalExpr):
             return (
-                f"({self._expr_to_js(node.condition)}"
+                f"({self._condition_to_js(node.condition)}"
                 f" ? {self._expr_to_js(node.true_expr)}"
                 f" : {self._expr_to_js(node.false_expr)})"
             )
