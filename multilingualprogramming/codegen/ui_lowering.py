@@ -7,10 +7,12 @@
 """Lower reactive Core IR into a self-contained HTML/JavaScript preview."""
 
 # pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-instance-attributes,too-many-locals,too-many-statements
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,15 +21,23 @@ from multilingualprogramming.core.ir_nodes import (
     IRAttributeAccess,
     IRBinaryOp,
     IRBooleanOp,
+    IRBinding,
+    IRBreakStatement,
+    IRPassStatement,
     IRCallExpr,
     IRCanvasBlock,
+    IRClassDecl,
     IRCompareOp,
     IRConditionalExpr,
+    IRContinueStatement,
+    IRDelStatement,
+    IRDictLiteral,
     IRExprStatement,
     IRForLoop,
     IRFunction,
     IRIdentifier,
     IRIfStatement,
+    IRImportStatement,
     IRIndexAccess,
     IRLiteral,
     IRListLiteral,
@@ -35,11 +45,17 @@ from multilingualprogramming.core.ir_nodes import (
     IRObserveBinding,
     IROnChange,
     IRProgram,
+    IRRaiseStatement,
     IRRenderBlock,
     IRReturnStatement,
+    IRSetLiteral,
+    IRSliceExpr,
+    IRTryStatement,
+    IRTupleLiteral,
     IRUIElement,
     IRUnaryOp,
     IRViewBinding,
+    IRWhileLoop,
 )
 
 _USM_DIR = Path(__file__).parent.parent / "resources" / "usm"
@@ -73,8 +89,54 @@ def _keyword_aliases_for(category: str, concept: str) -> frozenset[str]:
 
 _RANGE_NAMES = _builtin_aliases_for("range")
 _STR_NAMES = _builtin_aliases_for("str")
+_LIST_NAMES = _builtin_aliases_for("list")
+_SET_NAMES = _builtin_aliases_for("set")
+_NUMBER_NAMES = (
+    _builtin_aliases_for("number")
+    | _builtin_aliases_for("int")
+    | _builtin_aliases_for("float")
+)
 _TRUE_NAMES = _keyword_aliases_for("logical", "TRUE")
 _FALSE_NAMES = _keyword_aliases_for("logical", "FALSE")
+_NONE_NAMES = _keyword_aliases_for("logical", "NONE")
+_PY_STRING_ESCAPE_RE = re.compile(
+    r"\\(U[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)",
+    re.DOTALL,
+)
+_SIMPLE_STRING_ESCAPES = {
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+}
+
+
+def _decode_python_string_escapes(value: str) -> str:
+    """Decode Python-style string escapes before emitting JavaScript."""
+
+    def replace(match: re.Match[str]) -> str:
+        escape = match.group(1)
+        if escape.startswith("U") and len(escape) == 9:
+            return chr(int(escape[1:], 16))
+        if escape.startswith("u") and len(escape) == 5:
+            return chr(int(escape[1:], 16))
+        if escape.startswith("x") and len(escape) == 3:
+            return chr(int(escape[1:], 16))
+        return _SIMPLE_STRING_ESCAPES.get(escape, "\\" + escape)
+
+    return _PY_STRING_ESCAPE_RE.sub(replace, value)
+
+
+def _js_string_literal(value: str) -> str:
+    """Return a valid JavaScript string literal for a Multilingual string."""
+    decoded = _decode_python_string_escapes(value)
+    return json.dumps(decoded, ensure_ascii=False)
 
 
 @dataclass
@@ -106,18 +168,28 @@ class UILoweringPass:
         self._has_render_root = False
         self._canvas_names: list[str] = []
         self._functions: list[str] = []
+        self._module_parts: list[str] = []
         self._ui_function_names: set[str] = set()
         self._render_function = ""
+        self._local_scopes: list[set[str]] = []
 
-    def lower(self, program: IRProgram) -> UILoweringResult:
+    def lower(
+        self,
+        program: IRProgram,
+        modules: dict[str, IRProgram] | None = None,
+    ) -> UILoweringResult:
         """Lower an IRProgram to UI output."""
         preamble = self._emit_preamble()
+        self._lower_imported_modules(modules or {})
+        self._local_scopes.append(set())
         for node in program.body:
             self._lower_node(node)
+        self._local_scopes.pop()
 
         self._wire_render_updates()
 
         js_parts = [preamble]
+        js_parts.extend(self._module_parts)
         js_parts.extend(self._result.js_signals)
         js_parts.extend(self._functions)
         js_parts.extend(self._result.js_handlers)
@@ -130,6 +202,46 @@ class UILoweringPass:
         self._result.html = self._emit_html()
         return self._result
 
+    def _lower_imported_modules(self, modules: dict[str, IRProgram]) -> None:
+        for module_name, module_program in modules.items():
+            module_pass = UILoweringPass()
+            module_result = module_pass.lower(module_program)
+            module_parts = []
+            module_parts.extend(module_result.js_signals)
+            module_parts.extend(module_pass._functions)  # pylint: disable=protected-access
+            module_parts.extend(module_result.js_handlers)
+            module_parts.extend(module_result.js_bindings)
+            module_js = "\n\n".join(part for part in module_parts if part)
+
+            if "unsupported" in module_js or "null /*" in module_js:
+                self._result.diagnostics.append(
+                    f"Skipped UI module {module_name}: unsupported lowering output"
+                )
+                continue
+
+            exported_names = [
+                node.name
+                for node in module_program.body
+                if isinstance(node, (IRClassDecl, IRFunction))
+            ]
+            if not exported_names:
+                continue
+
+            namespace_js = self._namespace_assignment_js(module_name, exported_names)
+            wrapped_js = "\n\n".join([module_js, namespace_js])
+            self._module_parts.append(f"(() => {{\n{wrapped_js}\n}})();")
+
+    def _namespace_assignment_js(self, module_name: str, names: list[str]) -> str:
+        parts = module_name.split(".")
+        lines = ["window." + parts[0] + " = window." + parts[0] + " || {};"]
+        current = "window." + parts[0]
+        for part in parts[1:]:
+            current = current + "." + part
+            lines.append(f"{current} = {current} || {{}};")
+        exports = ", ".join(f"{name}: {name}" for name in names)
+        lines.append(f"Object.assign({current}, {{{exports}}});")
+        return "\n".join(lines)
+
     def _lower_node(self, node: IRNode) -> None:
         """Lower one node, descending into wrapper functions when useful."""
         if isinstance(node, IRObserveBinding):
@@ -141,6 +253,9 @@ class UILoweringPass:
         if isinstance(node, IRCanvasBlock):
             self._lower_canvas(node)
             return
+        if isinstance(node, IRClassDecl):
+            self._lower_class(node)
+            return
         if isinstance(node, IRViewBinding):
             self._lower_view_binding(node)
             return
@@ -148,12 +263,25 @@ class UILoweringPass:
             self._lower_render_block(node)
             return
         if isinstance(node, IRFunction):
-            if node.is_async:
-                self._lower_function(node)
-            else:
+            if self._is_ui_entry_function(node):
                 self._ui_function_names.add(node.name)
                 for child in node.body:
                     self._lower_node(child)
+                return
+            self._lower_function(node)
+            return
+        if isinstance(node, IRBinding):
+            self._functions.append(self._binding_to_js(node, 0))
+            return
+        if hasattr(node, "target") and hasattr(node, "value"):
+            self._functions.append(self._assignment_to_js(node, 0))
+
+    def _is_ui_entry_function(self, node: IRFunction) -> bool:
+        """Return True for functions that serve as reactive UI entry containers."""
+        effects = getattr(node, "effects", None)
+        if effects is None or not hasattr(effects, "names"):
+            return False
+        return "ui" in effects.names()
 
     def _emit_preamble(self) -> str:
         return """// Generated by Multilingual UI lowering
@@ -167,6 +295,15 @@ class ReactiveSignal {
     this._value = value;
     for (const handler of this._handlers) {
       handler(value);
+    }
+  }
+  setIndex(index, value) {
+    if (this._value == null || typeof this._value !== 'object') {
+      this._value = {};
+    }
+    this._value[index] = value;
+    for (const handler of this._handlers) {
+      handler(this._value);
     }
   }
   on_change(handler) {
@@ -260,6 +397,87 @@ function intervalle(...args) {
   return result;
 }
 
+function __ml_contains(container, item) {
+  if (container instanceof Set) {
+    return container.has(item);
+  }
+  if (Array.isArray(container) || typeof container === 'string') {
+    return container.includes(item);
+  }
+  if (container && typeof container === 'object') {
+    return item in container;
+  }
+  return false;
+}
+
+function __ml_truthy(value) {
+  if (value == null || value === false) {
+    return false;
+  }
+  if (Array.isArray(value) || typeof value === 'string') {
+    return value.length > 0;
+  }
+  if (value instanceof Set || value instanceof Map) {
+    return value.size > 0;
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value).length > 0;
+  }
+  return Boolean(value);
+}
+
+function __ml_iterate(obj) {
+  if (obj == null) return [];
+  if (Array.isArray(obj) || obj instanceof Set || obj instanceof Map || typeof obj === 'string') {
+    return obj;
+  }
+  if (typeof obj === 'object') {
+    return Object.keys(obj);
+  }
+  return obj;
+}
+
+function __ml_add(container, item) {
+  if (container instanceof Set) {
+    container.add(item);
+    return container;
+  }
+  if (Array.isArray(container)) {
+    container.push(item);
+    return container;
+  }
+  return container;
+}
+
+function __ml_extend(container, values) {
+  for (const value of values || []) {
+    __ml_add(container, value);
+  }
+  return container;
+}
+
+function __ml_set(value) {
+  return new Set(__ml_iterate(value));
+}
+
+function __ml_set_intersection(left, right) {
+  const rightSet = right instanceof Set ? right : __ml_set(right);
+  return new Set(Array.from(__ml_set(left)).filter((item) => rightSet.has(item)));
+}
+
+function __ml_set_difference(left, right) {
+  const rightSet = right instanceof Set ? right : __ml_set(right);
+  return new Set(Array.from(__ml_set(left)).filter((item) => !rightSet.has(item)));
+}
+
+function __ml_set_union(left, right) {
+  return new Set([...__ml_set(left), ...__ml_set(right)]);
+}
+
+function __ml_slice(start, stop, step) {
+  return { start, stop, step };
+}
+
 const _engine = new ReactiveEngine();
 const __ml_signals = _engine.signals;"""
 
@@ -294,9 +512,34 @@ const __ml_signals = _engine.signals;"""
 
     def _lower_function(self, node: IRFunction) -> None:
         keyword = "async function" if node.is_async else "function"
-        params = ", ".join(param.name for param in (node.parameters or []))
+        params = ", ".join(self._param_to_js(param) for param in (node.parameters or []))
+        self._local_scopes.append({param.name for param in (node.parameters or [])})
         body = "\n".join(self._stmt_to_js(stmt, 1) for stmt in (node.body or []))
+        self._local_scopes.pop()
         self._functions.append(f"{keyword} {node.name}({params}) {{\n{body}\n}}")
+
+    def _lower_class(self, node: IRClassDecl) -> None:
+        lines = [f"class {node.name} {{"]
+        for child in node.body or []:
+            if not isinstance(child, IRFunction):
+                continue
+            name = "constructor" if child.name == "__init__" else child.name
+            keyword = "async " if child.is_async else ""
+            params = ", ".join(self._param_to_js(param) for param in (child.parameters or []))
+            self._local_scopes.append({param.name for param in (child.parameters or [])})
+            body = "\n".join(self._stmt_to_js(stmt, 2) for stmt in (child.body or []))
+            self._local_scopes.pop()
+            lines.append(f"  {keyword}{name}({params}) {{")
+            if body:
+                lines.append(body)
+            lines.append("  }")
+        lines.append("}")
+        self._functions.append("\n".join(lines))
+
+    def _param_to_js(self, param) -> str:
+        if getattr(param, "default", None) is None:
+            return param.name
+        return f"{param.name} = {self._expr_to_js(param.default)}"
 
     def _lower_render_block(self, node: IRRenderBlock) -> None:
         self._has_render_root = True
@@ -452,10 +695,30 @@ const __ml_signals = _engine.signals;"""
             if stmt.value is None:
                 return f"{pad}return;"
             return f"{pad}return {self._expr_to_js(stmt.value)};"
+        if isinstance(stmt, IRRaiseStatement):
+            if stmt.value is None:
+                return f"{pad}throw new Error();"
+            return f"{pad}throw {self._expr_to_js(stmt.value)};"
+        if isinstance(stmt, IRBreakStatement):
+            return f"{pad}break;"
+        if isinstance(stmt, IRContinueStatement):
+            return f"{pad}continue;"
+        if isinstance(stmt, IRPassStatement):
+            return ""
+        if isinstance(stmt, IRImportStatement):
+            return ""
+        if isinstance(stmt, IRBinding):
+            return self._binding_to_js(stmt, indent)
+        if isinstance(stmt, IRDelStatement):
+            return f"{pad}delete {self._expr_to_js(stmt.target)};"
         if isinstance(stmt, IRIfStatement):
             return self._if_to_js(stmt, indent)
         if isinstance(stmt, IRForLoop):
             return self._for_to_js(stmt, indent)
+        if isinstance(stmt, IRWhileLoop):
+            return self._while_to_js(stmt, indent)
+        if isinstance(stmt, IRTryStatement):
+            return self._try_to_js(stmt, indent)
         if isinstance(stmt, IRExprStatement):
             return f"{pad}{self._expr_to_js(stmt.expression)};"
         if isinstance(stmt, IRCallExpr):
@@ -466,6 +729,16 @@ const __ml_signals = _engine.signals;"""
             return self._assignment_to_js(stmt, indent)
         return f"{pad}// unsupported {type(stmt).__name__}"
 
+    def _binding_to_js(self, stmt: IRBinding, indent: int) -> str:
+        pad = "  " * indent
+        rendered = self._expr_to_js(stmt.value)
+        if stmt.name in self._signal_names:
+            return f"{pad}_engine.get('{stmt.name}').set({rendered});"
+        if self._local_scopes:
+            self._local_scopes[-1].add(stmt.name)
+        keyword = "let" if stmt.binding_kind in {"let", "const"} else "var"
+        return f"{pad}{keyword} {stmt.name} = {rendered};"
+
     def _assignment_to_js(self, stmt: IRNode, indent: int) -> str:
         pad = "  " * indent
         target = getattr(stmt, "target", None)
@@ -474,7 +747,7 @@ const __ml_signals = _engine.signals;"""
             signal_name = self._signal_name(target.obj)
             index = self._expr_to_js(target.index)
             rendered = self._expr_to_js(value)
-            if signal_name:
+            if signal_name and signal_name in self._signal_names:
                 return (
                     f"{pad}_engine.get('{signal_name}').setIndex({index}, {rendered});"
                 )
@@ -484,6 +757,9 @@ const __ml_signals = _engine.signals;"""
             rendered = self._expr_to_js(value)
             if target.name in self._signal_names:
                 return f"{pad}_engine.get('{target.name}').set({rendered});"
+            if self._local_scopes and target.name not in self._local_scopes[-1]:
+                self._local_scopes[-1].add(target.name)
+                return f"{pad}var {target.name} = {rendered};"
             return f"{pad}{target.name} = {rendered};"
         rendered_target = self._expr_to_js(target)
         rendered_value = self._expr_to_js(value)
@@ -491,11 +767,11 @@ const __ml_signals = _engine.signals;"""
 
     def _if_to_js(self, node: IRIfStatement, indent: int) -> str:
         pad = "  " * indent
-        lines = [f"{pad}if ({self._expr_to_js(node.condition)}) {{"]
+        lines = [f"{pad}if ({self._condition_to_js(node.condition)}) {{"]
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
         lines.append(f"{pad}}}")
         for clause in (node.elif_clauses or []):
-            lines.append(f"{pad}else if ({self._expr_to_js(clause.condition)}) {{")
+            lines.append(f"{pad}else if ({self._condition_to_js(clause.condition)}) {{")
             lines.extend(
                 self._stmt_to_js(stmt, indent + 1) for stmt in (clause.body or [])
             )
@@ -508,9 +784,41 @@ const __ml_signals = _engine.signals;"""
             lines.append(f"{pad}}}")
         return "\n".join(lines)
 
+    def _try_to_js(self, node: IRTryStatement, indent: int) -> str:
+        pad = "  " * indent
+        lines = [f"{pad}try {{"]
+        lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
+        if not node.body:
+            lines.append(f"{pad}  return undefined;")
+        lines.append(f"{pad}}}")
+
+        handler = node.handlers[0] if node.handlers else None
+        error_name = self._exception_handler_name(handler)
+        lines[-1] += f" catch ({error_name}) {{"
+        handler_body = getattr(handler, "body", []) if handler else []
+        lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in handler_body)
+        lines.append(f"{pad}}}")
+
+        if node.finally_body:
+            lines[-1] += " finally {"
+            lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in node.finally_body)
+            lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+    def _exception_handler_name(self, handler: IRNode | None) -> str:
+        if handler is None:
+            return "error"
+        explicit_name = getattr(handler, "name", None)
+        if explicit_name:
+            return explicit_name
+        exc_type = getattr(handler, "exc_type", None)
+        if isinstance(exc_type, IRIdentifier) and not exc_type.name[:1].isupper():
+            return exc_type.name
+        return "error"
+
     def _for_to_js(self, node: IRForLoop, indent: int) -> str:
         pad = "  " * indent
-        target = self._identifier_name(node.target) or "i"
+        target = self._loop_target_to_js(node.target) or "i"
         iterable = node.iterable
         if isinstance(iterable, IRCallExpr) and self._call_name(iterable.func) == "range":
             args = iterable.args or []
@@ -531,10 +839,35 @@ const __ml_signals = _engine.signals;"""
             lines.append(f"{pad}}}")
             return "\n".join(lines)
         iterable_js = self._expr_to_js(iterable)
-        lines = [f"{pad}for (const {target} of {iterable_js}) {{"]
+        lines = [f"{pad}for (const {target} of __ml_iterate({iterable_js})) {{"]
         lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
         lines.append(f"{pad}}}")
         return "\n".join(lines)
+
+    def _loop_target_to_js(self, target: IRNode | None) -> str | None:
+        if isinstance(target, IRIdentifier):
+            return target.name
+        if isinstance(target, IRTupleLiteral):
+            names = [self._identifier_name(element) for element in target.elements]
+            if all(names):
+                return "[" + ", ".join(name for name in names if name) + "]"
+        return None
+
+    def _while_to_js(self, node: IRWhileLoop, indent: int) -> str:
+        pad = "  " * indent
+        lines = [f"{pad}while ({self._condition_to_js(node.condition)}) {{"]
+        lines.extend(self._stmt_to_js(stmt, indent + 1) for stmt in (node.body or []))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+    def _condition_to_js(self, node: IRNode | None) -> str:
+        if isinstance(node, IRBooleanOp):
+            op_name = str(node.op).lower()
+            op = " && " if op_name in ("and", "et", "&&") else " || "
+            return "(" + op.join(self._condition_to_js(value) for value in node.values) + ")"
+        if isinstance(node, IRUnaryOp) and node.op in ("NOT", "not", "!"):
+            return f"(!{self._condition_to_js(node.operand)})"
+        return f"__ml_truthy({self._expr_to_js(node)})"
 
     def _element_to_js(self, elem: IRUIElement, parent_var: str, indent: int) -> list[str]:
         pad = "  " * indent
@@ -639,7 +972,7 @@ const __ml_signals = _engine.signals;"""
             )
         else:
             iterable_js = self._expr_to_js(iterable)
-            lines.append(f"{pad}for (const {target} of {iterable_js}) {{")
+            lines.append(f"{pad}for (const {target} of __ml_iterate({iterable_js})) {{")
         for stmt in (node.body or []):
             lines.extend(self._render_child(stmt, parent_var, indent + 1))
         lines.append(f"{pad}}}")
@@ -650,7 +983,7 @@ const __ml_signals = _engine.signals;"""
             return "null"
         if isinstance(node, IRLiteral):
             if node.kind == "string":
-                return repr(str(node.value))
+                return _js_string_literal(str(node.value))
             if node.kind == "bool":
                 return "true" if bool(node.value) else "false"
             if node.kind == "none":
@@ -658,22 +991,56 @@ const __ml_signals = _engine.signals;"""
             return str(node.value)
         if isinstance(node, IRListLiteral):
             return "[" + ", ".join(self._expr_to_js(item) for item in node.elements) + "]"
+        if isinstance(node, IRSetLiteral):
+            return "new Set([" + ", ".join(self._expr_to_js(item) for item in node.elements) + "])"
+        if isinstance(node, IRDictLiteral):
+            entries = []
+            for entry in node.entries:
+                if isinstance(entry, tuple) and len(entry) == 2:
+                    key, value = entry
+                    rendered_key = self._expr_to_js(key)
+                    rendered_value = self._expr_to_js(value)
+                    entries.append(f"[{rendered_key}]: {rendered_value}")
+            return "{" + ", ".join(entries) + "}"
         if isinstance(node, IRIdentifier):
+            if node.name == "self":
+                return "this"
             if node.name in _TRUE_NAMES:
                 return "true"
             if node.name in _FALSE_NAMES:
                 return "false"
+            if node.name in _NONE_NAMES:
+                return "null"
             if node.name in self._signal_names:
                 return f"_engine.get('{node.name}').get()"
             return node.name
         if isinstance(node, IRIndexAccess):
+            if isinstance(node.index, IRSliceExpr):
+                start = (
+                    self._expr_to_js(node.index.start)
+                    if node.index.start is not None
+                    else "undefined"
+                )
+                stop = (
+                    self._expr_to_js(node.index.stop)
+                    if node.index.stop is not None
+                    else "undefined"
+                )
+                return f"{self._expr_to_js(node.obj)}.slice({start}, {stop})"
             return f"{self._expr_to_js(node.obj)}[{self._expr_to_js(node.index)}]"
+        if isinstance(node, IRSliceExpr):
+            start = self._expr_to_js(node.start) if node.start is not None else "undefined"
+            stop = self._expr_to_js(node.stop) if node.stop is not None else "undefined"
+            if node.step is not None:
+                return f"__ml_slice({start}, {stop}, {self._expr_to_js(node.step)})"
+            return f"__ml_slice({start}, {stop})"
         if isinstance(node, IRAttributeAccess):
             return f"{self._expr_to_js(node.obj)}.{node.attr}"
         if isinstance(node, IRBinaryOp):
             return f"({self._expr_to_js(node.left)} {node.op} {self._expr_to_js(node.right)})"
         if isinstance(node, IRBooleanOp):
-            op = " && " if node.op == "and" else " || "
+            op_name = str(node.op).lower()
+            op = " && " if op_name in ("and", "et", "&&") else " || "
             return "(" + op.join(self._expr_to_js(value) for value in node.values) + ")"
         if isinstance(node, IRCompareOp):
             left = self._expr_to_js(node.left)
@@ -681,36 +1048,103 @@ const __ml_signals = _engine.signals;"""
             current_left = left
             for op, right in node.comparators:
                 right_js = self._expr_to_js(right)
-                parts.append(f"({current_left} {op} {right_js})")
+                if op in ("in", "dans"):
+                    parts.append(f"__ml_contains({right_js}, {current_left})")
+                elif op in ("not in", "non dans"):
+                    parts.append(f"(!__ml_contains({right_js}, {current_left}))")
+                elif op in ("is", "est"):
+                    parts.append(f"({current_left} === {right_js})")
+                elif op in ("is not", "n'est pas", "nest pas"):
+                    parts.append(f"({current_left} !== {right_js})")
+                else:
+                    parts.append(f"({current_left} {op} {right_js})")
                 current_left = right_js
             return " && ".join(parts) if parts else left
         if isinstance(node, IRUnaryOp):
             if node.op in ("NOT", "not", "!"):
-                return f"(!{self._expr_to_js(node.operand)})"
+                return f"(!{self._condition_to_js(node.operand)})"
             return f"({node.op}{self._expr_to_js(node.operand)})"
         if isinstance(node, IRConditionalExpr):
             return (
-                f"({self._expr_to_js(node.condition)}"
+                f"({self._condition_to_js(node.condition)}"
                 f" ? {self._expr_to_js(node.true_expr)}"
                 f" : {self._expr_to_js(node.false_expr)})"
             )
         if isinstance(node, IRCallExpr):
             call_name = self._call_name(node.func)
             args = ", ".join(self._expr_to_js(arg) for arg in (node.args or []))
+            localized_method = self._localized_method_call_to_js(node)
+            if localized_method is not None:
+                return localized_method
             if call_name in _STR_NAMES:
                 return f"String({args})"
+            if call_name in _LIST_NAMES:
+                return f"Array.from({args})" if args else "[]"
+            if call_name in _SET_NAMES:
+                return f"__ml_set({args})" if args else "new Set()"
+            if call_name in _NUMBER_NAMES:
+                return f"Number({args})"
             if call_name in _RANGE_NAMES:
                 return f"intervalle({args})"
+            if call_name == "Exception":
+                return f"new Error({args})"
+            if call_name == "json.dumps":
+                return f"JSON.stringify({args})"
             if call_name == "len":
                 return f"({self._expr_to_js(node.args[0])}).length" if node.args else "0"
             if call_name == "asyncio.sleep":
                 delay = self._expr_to_js(node.args[0]) if node.args else "0"
                 return f"new Promise((resolve) => setTimeout(resolve, {delay} * 1000))"
             func_js = self._expr_to_js(node.func)
+            constructor_name = call_name.rsplit(".", 1)[-1] if call_name else ""
+            if constructor_name[:1].isupper():
+                return f"new {func_js}({args})"
             return f"{func_js}({args})"
         if isinstance(node, IRAwaitExpr):
             return f"await {self._expr_to_js(node.value)}"
         return f"null /* {type(node).__name__} */"
+
+    def _localized_method_call_to_js(self, node: IRCallExpr) -> str | None:
+        if not isinstance(node.func, IRAttributeAccess):
+            return None
+
+        obj = self._expr_to_js(node.func.obj)
+        attr = node.func.attr
+        args = [self._expr_to_js(arg) for arg in (node.args or [])]
+
+        if attr in {"obtenir", "get"}:
+            key = args[0] if args else "undefined"
+            default = args[1] if len(args) > 1 else "undefined"
+            return f"(({obj})?.[{key}] ?? {default})"
+        if attr in {"ajouter", "append"}:
+            value = args[0] if args else "undefined"
+            return f"__ml_add({obj}, {value})"
+        if attr in {"etendre", "extend"}:
+            values = args[0] if args else "[]"
+            return f"__ml_extend({obj}, {values})"
+        if attr == "intersection":
+            other = args[0] if args else "[]"
+            return f"__ml_set_intersection({obj}, {other})"
+        if attr == "difference":
+            other = args[0] if args else "[]"
+            return f"__ml_set_difference({obj}, {other})"
+        if attr == "union":
+            other = args[0] if args else "[]"
+            return f"__ml_set_union({obj}, {other})"
+        if attr in {"minuscule", "lower"}:
+            return f"String({obj}).toLowerCase()"
+        if attr in {"remplacer", "replace"}:
+            return f"{obj}.replace({', '.join(args)})"
+        if attr in {"joindre", "join"}:
+            values = args[0] if args else "[]"
+            return f"({values}).join({obj})"
+        if attr == "items":
+            return f"Object.entries({obj})"
+        if attr == "keys":
+            return f"Object.keys({obj})"
+        if attr == "pop" and args and args[0] == "0":
+            return f"{obj}.shift()"
+        return None
 
     def _identifier_name(self, node: IRNode | None) -> str | None:
         return node.name if isinstance(node, IRIdentifier) else None
@@ -730,6 +1164,9 @@ const __ml_signals = _engine.signals;"""
         return None
 
 
-def lower_to_ui(program: IRProgram) -> UILoweringResult:
+def lower_to_ui(
+    program: IRProgram,
+    modules: dict[str, IRProgram] | None = None,
+) -> UILoweringResult:
     """Lower an IRProgram to a browser preview bundle."""
-    return UILoweringPass().lower(program)
+    return UILoweringPass().lower(program, modules=modules)

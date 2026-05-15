@@ -16,12 +16,14 @@ Tests that:
 
 from multilingualprogramming.core.ir_nodes import (
     IRCanvasBlock,
+    IRFunction,
     IRIdentifier,
     IRLiteral,
     IRObserveBinding,
     IROnChange,
     IRProgram,
     IRRenderExpr,
+    IRReturnStatement,
     IRViewBinding,
 )
 from multilingualprogramming.codegen.ui_lowering import lower_to_ui
@@ -181,3 +183,41 @@ class TestUILoweringResult:
     def test_empty_program_no_diagnostics(self):
         result = lower_to_ui(_prog())
         assert not result.diagnostics
+
+
+# ===========================================================================
+# UILoweringPass: imported modules
+# ===========================================================================
+
+class TestUILoweringImportedModules:
+    def test_imported_async_functions_are_exposed_as_namespace(self):
+        module_ir = IRProgram(
+            body=[
+                IRFunction(
+                    name="answer",
+                    is_async=True,
+                    body=[IRReturnStatement(value=IRLiteral(value=42, kind="int"))],
+                )
+            ],
+            source_language="en",
+        )
+
+        result = lower_to_ui(_prog(), modules={"util": module_ir})
+        js = result.emit_js()
+
+        assert "async function answer" in js
+        assert "window.util = window.util || {};" in js
+        assert "Object.assign(window.util, {answer: answer});" in js
+        assert not result.diagnostics
+
+    def test_unsupported_imported_module_is_skipped(self):
+        module_ir = IRProgram(
+            body=[IRFunction(name="broken", is_async=True, body=[IRProgram()])],
+            source_language="en",
+        )
+
+        result = lower_to_ui(_prog(), modules={"broken": module_ir})
+        js = result.emit_js()
+
+        assert "Object.assign(window.broken" not in js
+        assert result.diagnostics

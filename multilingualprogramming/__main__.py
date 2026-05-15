@@ -34,6 +34,7 @@ from multilingualprogramming.codegen.python_generator import PythonCodeGenerator
 from multilingualprogramming.codegen.repl import REPL
 from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
 from multilingualprogramming.codegen.ui_lowering import lower_to_ui  # pylint: disable=unused-import
+from multilingualprogramming.core.ir_nodes import IRImportStatement
 from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir  # pylint: disable=unused-import
 from multilingualprogramming.core.validators import validate_all  # pylint: disable=unused-import
 from multilingualprogramming.keyword.language_pack_validator import (
@@ -45,6 +46,7 @@ from multilingualprogramming.parser.parser import Parser
 from multilingualprogramming.parser.ast_nodes import ImportStatement, FromImportStatement, Program
 from multilingualprogramming.runtime.ai_runtime import AIRuntime, MockProvider
 from multilingualprogramming.source_extensions import (
+    find_module_source,
     find_package_init,
     has_source_extension,
 )

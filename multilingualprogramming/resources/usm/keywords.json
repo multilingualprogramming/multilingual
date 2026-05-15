@@ -136,7 +136,10 @@
       },
       "LOOP_BREAK": {
         "en": "break",
-        "fr": "arrêter",
+        "fr": [
+          "arrêter",
+          "pause"
+        ],
         "es": "romper",
         "de": "abbrechen",
         "hi": "रोको",
@@ -246,7 +249,7 @@
       },
       "PASS": {
         "en": "pass",
-        "fr": "passer",
+        "fr": ["passer", "passe"],
         "es": "pasar",
         "de": "pass",
         "hi": "छोड़ो",
@@ -758,7 +761,10 @@
       },
       "NONE": {
         "en": "None",
-        "fr": "Rien",
+        "fr": [
+          "Rien",
+          "Nul"
+        ],
         "es": "Nada",
         "de": "Nichts",
         "hi": "कुछनहीं",
