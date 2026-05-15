@@ -252,6 +252,15 @@ class ReactiveSignal {
       handler(value);
     }
   }
+  setIndex(index, value) {
+    if (this._value == null || typeof this._value !== 'object') {
+      this._value = {};
+    }
+    this._value[index] = value;
+    for (const handler of this._handlers) {
+      handler(this._value);
+    }
+  }
   on_change(handler) {
     this._handlers.push(handler);
   }
