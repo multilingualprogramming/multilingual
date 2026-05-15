@@ -139,8 +139,10 @@ class UILoweringPass:
         """Lower an IRProgram to UI output."""
         preamble = self._emit_preamble()
         self._lower_imported_modules(modules or {})
+        self._local_scopes.append(set())
         for node in program.body:
             self._lower_node(node)
+        self._local_scopes.pop()
 
         self._wire_render_updates()
 
@@ -229,6 +231,9 @@ class UILoweringPass:
                 self._ui_function_names.add(node.name)
                 for child in node.body:
                     self._lower_node(child)
+            return
+        if hasattr(node, "target") and hasattr(node, "value"):
+            self._functions.append(self._assignment_to_js(node, 0))
 
     def _is_ui_entry_function(self, node: IRFunction) -> bool:
         """Return True for functions that serve as reactive UI entry containers."""
@@ -412,7 +417,7 @@ const __ml_signals = _engine.signals;"""
 
     def _lower_function(self, node: IRFunction) -> None:
         keyword = "async function" if node.is_async else "function"
-        params = ", ".join(param.name for param in (node.parameters or []))
+        params = ", ".join(self._param_to_js(param) for param in (node.parameters or []))
         self._local_scopes.append({param.name for param in (node.parameters or [])})
         body = "\n".join(self._stmt_to_js(stmt, 1) for stmt in (node.body or []))
         self._local_scopes.pop()
@@ -425,7 +430,7 @@ const __ml_signals = _engine.signals;"""
                 continue
             name = "constructor" if child.name == "__init__" else child.name
             keyword = "async " if child.is_async else ""
-            params = ", ".join(param.name for param in (child.parameters or []))
+            params = ", ".join(self._param_to_js(param) for param in (child.parameters or []))
             self._local_scopes.append({param.name for param in (child.parameters or [])})
             body = "\n".join(self._stmt_to_js(stmt, 2) for stmt in (child.body or []))
             self._local_scopes.pop()
@@ -435,6 +440,11 @@ const __ml_signals = _engine.signals;"""
             lines.append("  }")
         lines.append("}")
         self._functions.append("\n".join(lines))
+
+    def _param_to_js(self, param) -> str:
+        if getattr(param, "default", None) is None:
+            return param.name
+        return f"{param.name} = {self._expr_to_js(param.default)}"
 
     def _lower_render_block(self, node: IRRenderBlock) -> None:
         self._has_render_root = True
