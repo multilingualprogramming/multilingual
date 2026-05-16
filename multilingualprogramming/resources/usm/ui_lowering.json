@@ -12,17 +12,20 @@
   "runtime": {
     "range_helper": "__ml_range",
     "type_names": {
-      "none": "none",
-      "string": "str",
-      "list": "list",
-      "number": "number",
-      "boolean": "bool",
-      "dict": "dict"
+      "none": "nul",
+      "string": "chaine",
+      "list": "liste",
+      "number": "nombre",
+      "boolean": "booleen",
+      "dict": "dictionnaire"
     },
     "type_aliases": {
-      "str": ["str"],
-      "list": ["list"],
-      "dict": ["dict"]
+      "chaine": ["chaine", "str", "string"],
+      "liste": ["liste", "list"],
+      "dictionnaire": ["dictionnaire", "dict"],
+      "nombre": ["nombre"],
+      "booleen": ["booleen", "bool"],
+      "nul": ["nul"]
     }
   },
   "comparison_aliases": {
