@@ -262,3 +262,13 @@ def test_ui_js_localized_set_constructor_and_methods():
     assert "let c = __ml_set_difference(a, [3]);" in js
     assert "return __ml_set_union(c, b);" in js
     assert "ensemble(" not in js
+
+
+def test_ui_js_range_helper_is_internal_not_localized():
+    """Localized range aliases lower to the configured internal JS helper."""
+    source = "déf tailles():\n    retour intervalle(3)\n"
+    js = _compile_ui(source, "fr").emit_js()
+
+    assert "function __ml_range(...args)" in js
+    assert "return __ml_range(3);" in js
+    assert "function intervalle(" not in js
