@@ -478,6 +478,19 @@ function __ml_slice(start, stop, step) {
   return { start, stop, step };
 }
 
+function __ml_type(v) {
+  if (v === null || v === undefined) return "nul";
+  if (typeof v === "string") return "chaine";
+  if (Array.isArray(v)) return "liste";
+  if (typeof v === "number") return "nombre";
+  if (typeof v === "boolean") return "booleen";
+  return "dictionnaire";
+}
+const type = __ml_type;
+const chaine = "chaine";
+const liste = "liste";
+const dictionnaire = "dictionnaire";
+
 const _engine = new ReactiveEngine();
 const __ml_signals = _engine.signals;"""
 
