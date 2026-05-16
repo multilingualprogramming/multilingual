@@ -138,11 +138,13 @@ _RANGE_NAMES = _builtin_aliases_for("range")
 _STR_NAMES = _builtin_aliases_for("str")
 _LIST_NAMES = _builtin_aliases_for("list")
 _SET_NAMES = _builtin_aliases_for("set")
-_NUMBER_NAMES = (
-    _builtin_aliases_for("number")
-    | _builtin_aliases_for("int")
-    | _builtin_aliases_for("float")
-)
+_INT_NAMES = _builtin_aliases_for("int")
+_FLOAT_NAMES = _builtin_aliases_for("float")
+_NUMBER_NAMES = _builtin_aliases_for("number") | _FLOAT_NAMES
+_ABS_NAMES = _builtin_aliases_for("abs")
+_MIN_NAMES = _builtin_aliases_for("min")
+_MAX_NAMES = _builtin_aliases_for("max")
+_ROUND_NAMES = _builtin_aliases_for("round")
 _TRUE_NAMES = _keyword_aliases_for("logical", "TRUE")
 _FALSE_NAMES = _keyword_aliases_for("logical", "FALSE")
 _NONE_NAMES = _keyword_aliases_for("logical", "NONE")
@@ -303,22 +305,45 @@ class UILoweringPass:
                 for node in module_program.body
                 if isinstance(node, (IRClassDecl, IRFunction))
             ]
-            if not exported_names:
+            exported_signals = [
+                node.name for node in module_program.body if isinstance(node, IRObserveBinding)
+            ]
+            if not exported_names and not exported_signals:
                 continue
 
-            namespace_js = self._namespace_assignment_js(module_name, exported_names)
+            namespace_js = self._namespace_assignment_js(
+                module_name, exported_names, exported_signals
+            )
             wrapped_js = "\n\n".join([module_js, namespace_js])
             self._module_parts.append(f"(() => {{\n{wrapped_js}\n}})();")
 
-    def _namespace_assignment_js(self, module_name: str, names: list[str]) -> str:
+    def _namespace_assignment_js(
+        self,
+        module_name: str,
+        names: list[str],
+        signal_names: list[str] | None = None,
+    ) -> str:
         parts = module_name.split(".")
         lines = ["window." + parts[0] + " = window." + parts[0] + " || {};"]
         current = "window." + parts[0]
         for part in parts[1:]:
             current = current + "." + part
             lines.append(f"{current} = {current} || {{}};")
-        exports = ", ".join(f"{name}: {name}" for name in names)
-        lines.append(f"Object.assign({current}, {{{exports}}});")
+        if names:
+            exports = ", ".join(f"{name}: {name}" for name in names)
+            lines.append(f"Object.assign({current}, {{{exports}}});")
+        if signal_names:
+            descriptors = []
+            for name in signal_names:
+                encoded_name = json.dumps(name, ensure_ascii=False)
+                descriptors.append(
+                    f"[{encoded_name}]: {{"
+                    f"get() {{ return _engine.get({encoded_name}).get(); }}, "
+                    f"set(value) {{ _engine.get({encoded_name}).set(value); }}, "
+                    "enumerable: true"
+                    "}"
+                )
+            lines.append(f"Object.defineProperties({current}, {{{', '.join(descriptors)}}});")
         return "\n".join(lines)
 
     def _lower_node(self, node: IRNode) -> None:
@@ -403,7 +428,7 @@ class ReactiveList {
     this._value = Array.from(value || []);
     this._handlers = [];
   }
-  get() { return this._value.slice(); }
+  get() { return this._value; }
   set(value) {
     this._value = Array.from(value || []);
     this._notify();
@@ -416,7 +441,7 @@ class ReactiveList {
     this._handlers.push(handler);
   }
   _notify() {
-    const snapshot = this.get();
+    const snapshot = this._value.slice();
     for (const handler of this._handlers) {
       handler(snapshot);
     }
@@ -584,6 +609,7 @@ const floor = Math.floor;
 const cos = Math.cos;
 const sin = Math.sin;
 const pi = Math.PI;
+const int = Math.trunc;
 
 const _engine = new ReactiveEngine();
 const __ml_signals = _engine.signals;"""
@@ -1212,8 +1238,22 @@ const __ml_signals = _engine.signals;"""
                 return f"Array.from({args})" if args else "[]"
             if call_name in _SET_NAMES:
                 return f"__ml_set({args})" if args else "new Set()"
+            if call_name in _INT_NAMES:
+                return f"Math.trunc({args})" if args else "0"
             if call_name in _NUMBER_NAMES:
                 return f"Number({args})"
+            if call_name in _ABS_NAMES:
+                return f"Math.abs({args})"
+            if call_name in _MIN_NAMES:
+                return f"Math.min({args})"
+            if call_name in _MAX_NAMES:
+                return f"Math.max({args})"
+            if call_name in _ROUND_NAMES:
+                return f"Math.round({args})"
+            if call_name in {"ceil", "floor", "cos", "sin"}:
+                return f"Math.{call_name}({args})"
+            if call_name == "pi":
+                return "Math.PI"
             if call_name in _RANGE_NAMES:
                 return f"{_UI_RANGE_HELPER}({args})"
             if call_name == "Exception":

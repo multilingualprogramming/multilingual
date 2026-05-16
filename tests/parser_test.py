@@ -272,6 +272,37 @@ class ParserExpressionTestSuite(unittest.TestCase):
         self.assertIsInstance(expr, AttributeAccess)
         self.assertEqual(expr.attr, "method")
 
+    def test_parse_keyword_named_attribute_access(self):
+        prog = _parse("self.rendre()\n", language="fr")
+        expr = prog.body[0].expression
+        self.assertIsInstance(expr, CallExpr)
+        self.assertIsInstance(expr.func, AttributeAccess)
+        self.assertEqual(expr.func.attr, "rendre")
+
+    def test_parse_keyword_named_method_definition(self):
+        prog = _parse("classe Vue:\n    déf rendre(self):\n        passe\n", language="fr")
+        self.assertIsInstance(prog.body[0], ClassDef)
+        self.assertEqual(prog.body[0].body[0].name, "rendre")
+
+    def test_french_tant_que_alias_parses_as_while(self):
+        prog = _parse("tant que Vrai:\n    passe\n", language="fr")
+        self.assertIsInstance(prog.body[0], WhileLoop)
+
+    def test_french_chercher_exception_aliases_parse_as_try(self):
+        prog = _parse(
+            "chercher:\n"
+            "    passe\n"
+            "exception:\n"
+            "    passe\n",
+            language="fr",
+        )
+        self.assertIsInstance(prog.body[0], TryStatement)
+        self.assertEqual(len(prog.body[0].handlers), 1)
+
+    def test_observer_attribute_assignment_has_clear_error(self):
+        with self.assertRaisesRegex(ParseError, "observer is only valid at module scope"):
+            _parse("déf init():\n    observer self.items = []\n", language="fr")
+
     def test_parse_chained_calls(self):
         prog = _parse("a.b().c\n")
         expr = prog.body[0].expression

@@ -73,6 +73,7 @@ _IDENTIFIER_LIKE_CONCEPTS = (
         "TYPE_DECL",
         "ENUM",
         "OBSERVE",
+        "RENDER",
         "USES",
         "PROMPT",
         "THINK",
@@ -828,6 +829,12 @@ class Parser:
         elif cur.type == TokenType.IDENTIFIER and cur.value == "var":
             self._advance()
         name_tok = self._expect_identifier()
+        if self._match_delimiter("."):
+            raise ParseError(
+                "observer is only valid at module scope; use a plain assignment inside methods",
+                self._current().line,
+                self._current().column,
+            )
         annotation = None
         if self._match_delimiter(":"):
             self._advance()
