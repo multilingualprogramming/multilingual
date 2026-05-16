@@ -287,3 +287,4 @@ def test_ui_lowering_config_uses_usm_language_maps():
         for aliases_by_language in config[section].values():
             assert isinstance(aliases_by_language, dict)
             assert set(aliases_by_language).issubset(languages)
+            assert languages.issubset(aliases_by_language)
