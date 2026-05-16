@@ -62,7 +62,12 @@ _USM_DIR = Path(__file__).parent.parent / "resources" / "usm"
 with (_USM_DIR / "builtins_aliases.json").open(encoding="utf-8") as _f:
     _BUILTINS_ALIASES: dict = json.load(_f)["aliases"]
 with (_USM_DIR / "keywords.json").open(encoding="utf-8") as _f:
-    _KEYWORDS: dict = json.load(_f)["categories"]
+    _KEYWORDS_DATA: dict = json.load(_f)
+    _KEYWORDS: dict = _KEYWORDS_DATA["categories"]
+with (_USM_DIR / "ui_lowering.json").open(encoding="utf-8") as _f:
+    _UI_LOWERING_CONFIG: dict = json.load(_f)
+
+_SUPPORTED_LANGUAGES = frozenset(_KEYWORDS_DATA.get("languages", []))
 
 
 def _builtin_aliases_for(canonical: str) -> frozenset[str]:
@@ -87,18 +92,94 @@ def _keyword_aliases_for(category: str, concept: str) -> frozenset[str]:
     return frozenset(names)
 
 
+def _keyword_aliases_from_any_category(concept: str) -> frozenset[str]:
+    names: set[str] = set()
+    for category in _KEYWORDS:
+        names.update(_keyword_aliases_for(category, concept))
+    return frozenset(names)
+
+
+def _combined_aliases(left: frozenset[str], right: frozenset[str]) -> frozenset[str]:
+    names: set[str] = set()
+    for left_item in left:
+        for right_item in right:
+            names.add(f"{left_item} {right_item}")
+            names.add(f"{left_item}_{right_item}")
+    return frozenset(names)
+
+
+def _method_aliases_for(concept: str) -> frozenset[str]:
+    names: set[str] = set()
+    aliases_by_lang = _UI_LOWERING_CONFIG.get("method_aliases", {}).get(concept, {})
+    for language, aliases in aliases_by_lang.items():
+        if _SUPPORTED_LANGUAGES and language not in _SUPPORTED_LANGUAGES:
+            continue
+        if isinstance(aliases, str):
+            names.add(aliases)
+        else:
+            names.update(alias for alias in aliases if isinstance(alias, str))
+    return frozenset(names)
+
+
+def _ui_aliases_for(section: str, concept: str) -> frozenset[str]:
+    names: set[str] = set()
+    aliases_by_lang = _UI_LOWERING_CONFIG.get(section, {}).get(concept, {})
+    for language, aliases in aliases_by_lang.items():
+        if _SUPPORTED_LANGUAGES and language not in _SUPPORTED_LANGUAGES:
+            continue
+        if isinstance(aliases, str):
+            names.add(aliases)
+        else:
+            names.update(alias for alias in aliases if isinstance(alias, str))
+    return frozenset(names)
+
+
 _RANGE_NAMES = _builtin_aliases_for("range")
 _STR_NAMES = _builtin_aliases_for("str")
 _LIST_NAMES = _builtin_aliases_for("list")
 _SET_NAMES = _builtin_aliases_for("set")
-_NUMBER_NAMES = (
-    _builtin_aliases_for("number")
-    | _builtin_aliases_for("int")
-    | _builtin_aliases_for("float")
-)
+_INT_NAMES = _builtin_aliases_for("int")
+_FLOAT_NAMES = _builtin_aliases_for("float")
+_NUMBER_NAMES = _builtin_aliases_for("number") | _FLOAT_NAMES
+_ABS_NAMES = _builtin_aliases_for("abs")
+_MIN_NAMES = _builtin_aliases_for("min")
+_MAX_NAMES = _builtin_aliases_for("max")
+_ROUND_NAMES = _builtin_aliases_for("round")
 _TRUE_NAMES = _keyword_aliases_for("logical", "TRUE")
 _FALSE_NAMES = _keyword_aliases_for("logical", "FALSE")
 _NONE_NAMES = _keyword_aliases_for("logical", "NONE")
+_AND_NAMES = _keyword_aliases_from_any_category("AND") | frozenset({"&&"})
+_NOT_NAMES = _keyword_aliases_from_any_category("NOT") | frozenset({"NOT", "!"})
+_IN_NAMES = _keyword_aliases_from_any_category("IN")
+_NOT_IN_NAMES = _keyword_aliases_from_any_category("NOT_IN")
+_IS_NAMES = _keyword_aliases_from_any_category("IS")
+_IS_NOT_NAMES = _keyword_aliases_from_any_category("IS_NOT") | _combined_aliases(
+    _NOT_NAMES, _IS_NAMES
+)
+_IS_NOT_NAMES |= _combined_aliases(_IS_NAMES, _NOT_NAMES) | _ui_aliases_for(
+    "comparison_aliases", "is_not"
+)
+_UI_HTML_CONFIG = _UI_LOWERING_CONFIG.get("html", {})
+_UI_RUNTIME_CONFIG = _UI_LOWERING_CONFIG.get("runtime", {})
+_UI_TYPE_NAMES = _UI_RUNTIME_CONFIG.get("type_names", {})
+_UI_RANGE_HELPER = _UI_RUNTIME_CONFIG.get("range_helper", "__ml_range")
+_TYPE_ALIAS_NAMES = {
+    "str": _STR_NAMES,
+    "list": _LIST_NAMES,
+    "dict": _builtin_aliases_for("dict"),
+}
+_DICT_GET_METHODS = _method_aliases_for("dict_get")
+_COLLECTION_APPEND_METHODS = _method_aliases_for("collection_append")
+_COLLECTION_EXTEND_METHODS = _method_aliases_for("collection_extend")
+_SET_INTERSECTION_METHODS = _method_aliases_for("set_intersection")
+_SET_DIFFERENCE_METHODS = _method_aliases_for("set_difference")
+_SET_UNION_METHODS = _method_aliases_for("set_union")
+_STRING_LOWER_METHODS = _method_aliases_for("string_lower")
+_STRING_REPLACE_METHODS = _method_aliases_for("string_replace")
+_STRING_JOIN_METHODS = _method_aliases_for("string_join")
+_DICT_ITEMS_METHODS = _method_aliases_for("dict_items")
+_DICT_KEYS_METHODS = _method_aliases_for("dict_keys")
+_COLLECTION_POP_METHODS = _method_aliases_for("collection_pop")
 _PY_STRING_ESCAPE_RE = re.compile(
     r"\\(U[0-9a-fA-F]{8}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)",
     re.DOTALL,
@@ -224,22 +305,45 @@ class UILoweringPass:
                 for node in module_program.body
                 if isinstance(node, (IRClassDecl, IRFunction))
             ]
-            if not exported_names:
+            exported_signals = [
+                node.name for node in module_program.body if isinstance(node, IRObserveBinding)
+            ]
+            if not exported_names and not exported_signals:
                 continue
 
-            namespace_js = self._namespace_assignment_js(module_name, exported_names)
+            namespace_js = self._namespace_assignment_js(
+                module_name, exported_names, exported_signals
+            )
             wrapped_js = "\n\n".join([module_js, namespace_js])
             self._module_parts.append(f"(() => {{\n{wrapped_js}\n}})();")
 
-    def _namespace_assignment_js(self, module_name: str, names: list[str]) -> str:
+    def _namespace_assignment_js(
+        self,
+        module_name: str,
+        names: list[str],
+        signal_names: list[str] | None = None,
+    ) -> str:
         parts = module_name.split(".")
         lines = ["window." + parts[0] + " = window." + parts[0] + " || {};"]
         current = "window." + parts[0]
         for part in parts[1:]:
             current = current + "." + part
             lines.append(f"{current} = {current} || {{}};")
-        exports = ", ".join(f"{name}: {name}" for name in names)
-        lines.append(f"Object.assign({current}, {{{exports}}});")
+        if names:
+            exports = ", ".join(f"{name}: {name}" for name in names)
+            lines.append(f"Object.assign({current}, {{{exports}}});")
+        if signal_names:
+            descriptors = []
+            for name in signal_names:
+                encoded_name = json.dumps(name, ensure_ascii=False)
+                descriptors.append(
+                    f"[{encoded_name}]: {{"
+                    f"get() {{ return _engine.get({encoded_name}).get(); }}, "
+                    f"set(value) {{ _engine.get({encoded_name}).set(value); }}, "
+                    "enumerable: true"
+                    "}"
+                )
+            lines.append(f"Object.defineProperties({current}, {{{', '.join(descriptors)}}});")
         return "\n".join(lines)
 
     def _lower_node(self, node: IRNode) -> None:
@@ -284,7 +388,15 @@ class UILoweringPass:
         return "ui" in effects.names()
 
     def _emit_preamble(self) -> str:
-        return """// Generated by Multilingual UI lowering
+        comment = _UI_LOWERING_CONFIG.get(
+            "generated_comment", "Generated by Multilingual UI lowering"
+        )
+        type_alias_lines = []
+        for type_name, aliases in _TYPE_ALIAS_NAMES.items():
+            rendered_type = json.dumps(type_name, ensure_ascii=False)
+            for alias in sorted(aliases):
+                type_alias_lines.append(f"const {alias} = {rendered_type};")
+        preamble = """// __ML_GENERATED_COMMENT__
 class ReactiveSignal {
   constructor(value) {
     this._value = value;
@@ -316,7 +428,7 @@ class ReactiveList {
     this._value = Array.from(value || []);
     this._handlers = [];
   }
-  get() { return this._value.slice(); }
+  get() { return this._value; }
   set(value) {
     this._value = Array.from(value || []);
     this._notify();
@@ -329,7 +441,7 @@ class ReactiveList {
     this._handlers.push(handler);
   }
   _notify() {
-    const snapshot = this.get();
+    const snapshot = this._value.slice();
     for (const handler of this._handlers) {
       handler(snapshot);
     }
@@ -370,7 +482,7 @@ function streamToView(source, target) {
   });
 }
 
-function intervalle(...args) {
+function __ML_RANGE_HELPER__(...args) {
   let start = 0;
   let stop = 0;
   let step = 1;
@@ -478,8 +590,43 @@ function __ml_slice(start, stop, step) {
   return { start, stop, step };
 }
 
+function __ml_type(v) {
+  if (v === null || v === undefined) return __ML_TYPE_NONE__;
+  if (typeof v === "string") return __ML_TYPE_STRING__;
+  if (Array.isArray(v)) return __ML_TYPE_LIST__;
+  if (typeof v === "number") return __ML_TYPE_NUMBER__;
+  if (typeof v === "boolean") return __ML_TYPE_BOOLEAN__;
+  return __ML_TYPE_DICT__;
+}
+const type = __ml_type;
+__ML_TYPE_ALIASES__
+const max = Math.max;
+const min = Math.min;
+const abs = Math.abs;
+const round = Math.round;
+const ceil = Math.ceil;
+const floor = Math.floor;
+const cos = Math.cos;
+const sin = Math.sin;
+const pi = Math.PI;
+const int = Math.trunc;
+
 const _engine = new ReactiveEngine();
 const __ml_signals = _engine.signals;"""
+        replacements = {
+            "__ML_GENERATED_COMMENT__": comment,
+            "__ML_RANGE_HELPER__": _UI_RANGE_HELPER,
+            "__ML_TYPE_NONE__": json.dumps(_UI_TYPE_NAMES.get("none", "none")),
+            "__ML_TYPE_STRING__": json.dumps(_UI_TYPE_NAMES.get("string", "str")),
+            "__ML_TYPE_LIST__": json.dumps(_UI_TYPE_NAMES.get("list", "list")),
+            "__ML_TYPE_NUMBER__": json.dumps(_UI_TYPE_NAMES.get("number", "number")),
+            "__ML_TYPE_BOOLEAN__": json.dumps(_UI_TYPE_NAMES.get("boolean", "bool")),
+            "__ML_TYPE_DICT__": json.dumps(_UI_TYPE_NAMES.get("dict", "dict")),
+            "__ML_TYPE_ALIASES__": "\n".join(type_alias_lines),
+        }
+        for marker, value in replacements.items():
+            preamble = preamble.replace(marker, value)
+        return preamble
 
     def _lower_observe(self, node: IRObserveBinding) -> None:
         self._signal_names.add(node.name)
@@ -543,9 +690,10 @@ const __ml_signals = _engine.signals;"""
 
     def _lower_render_block(self, node: IRRenderBlock) -> None:
         self._has_render_root = True
+        root_id = _UI_HTML_CONFIG.get("root_id", "__ml_root")
         lines = [
             "function __ml_render() {",
-            "  const __root = document.getElementById('__ml_root');",
+            f"  const __root = document.getElementById('{root_id}');",
             "  if (!__root) {",
             "    return;",
             "  }",
@@ -565,18 +713,20 @@ const __ml_signals = _engine.signals;"""
             )
 
     def _emit_html(self) -> str:
+        canvas_class = _UI_HTML_CONFIG.get("canvas_class", "ml-canvas")
+        root_id = _UI_HTML_CONFIG.get("root_id", "__ml_root")
         canvas_html = "\n".join(
-            f'    <div id="{name}" class="ml-canvas"></div>'
+            f'    <div id="{name}" class="{canvas_class}"></div>'
             for name in self._canvas_names
         )
-        root_html = '    <div id="__ml_root"></div>' if self._has_render_root else ""
+        root_html = f'    <div id="{root_id}"></div>' if self._has_render_root else ""
         title = (
-            "Memory Game - Multilingual"
+            _UI_HTML_CONFIG.get("render_title", "Memory Game - Multilingual")
             if self._has_render_root
-            else "Multilingual UI Preview"
+            else _UI_HTML_CONFIG.get("default_title", "Multilingual UI Preview")
         )
         return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="{_UI_HTML_CONFIG.get("language", "en")}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -820,7 +970,10 @@ const __ml_signals = _engine.signals;"""
         pad = "  " * indent
         target = self._loop_target_to_js(node.target) or "i"
         iterable = node.iterable
-        if isinstance(iterable, IRCallExpr) and self._call_name(iterable.func) == "range":
+        if (
+            isinstance(iterable, IRCallExpr)
+            and self._call_name(iterable.func) in _RANGE_NAMES
+        ):
             args = iterable.args or []
             if len(args) == 1:
                 start, stop, step = "0", self._expr_to_js(args[0]), "1"
@@ -863,9 +1016,9 @@ const __ml_signals = _engine.signals;"""
     def _condition_to_js(self, node: IRNode | None) -> str:
         if isinstance(node, IRBooleanOp):
             op_name = str(node.op).lower()
-            op = " && " if op_name in ("and", "et", "&&") else " || "
+            op = " && " if op_name in _AND_NAMES else " || "
             return "(" + op.join(self._condition_to_js(value) for value in node.values) + ")"
-        if isinstance(node, IRUnaryOp) and node.op in ("NOT", "not", "!"):
+        if isinstance(node, IRUnaryOp) and node.op in _NOT_NAMES:
             return f"(!{self._condition_to_js(node.operand)})"
         return f"__ml_truthy({self._expr_to_js(node)})"
 
@@ -955,7 +1108,10 @@ const __ml_signals = _engine.signals;"""
         target = self._identifier_name(node.target) or "i"
         iterable = node.iterable
         lines: list[str] = []
-        if isinstance(iterable, IRCallExpr) and self._call_name(iterable.func) == "range":
+        if (
+            isinstance(iterable, IRCallExpr)
+            and self._call_name(iterable.func) in _RANGE_NAMES
+        ):
             args = iterable.args or []
             if len(args) == 1:
                 start, stop, step = "0", self._expr_to_js(args[0]), "1"
@@ -1040,7 +1196,7 @@ const __ml_signals = _engine.signals;"""
             return f"({self._expr_to_js(node.left)} {node.op} {self._expr_to_js(node.right)})"
         if isinstance(node, IRBooleanOp):
             op_name = str(node.op).lower()
-            op = " && " if op_name in ("and", "et", "&&") else " || "
+            op = " && " if op_name in _AND_NAMES else " || "
             return "(" + op.join(self._expr_to_js(value) for value in node.values) + ")"
         if isinstance(node, IRCompareOp):
             left = self._expr_to_js(node.left)
@@ -1048,20 +1204,20 @@ const __ml_signals = _engine.signals;"""
             current_left = left
             for op, right in node.comparators:
                 right_js = self._expr_to_js(right)
-                if op in ("in", "dans"):
+                if op in _IN_NAMES:
                     parts.append(f"__ml_contains({right_js}, {current_left})")
-                elif op in ("not in", "non dans"):
+                elif op in _NOT_IN_NAMES:
                     parts.append(f"(!__ml_contains({right_js}, {current_left}))")
-                elif op in ("is", "est"):
+                elif op in _IS_NAMES:
                     parts.append(f"({current_left} === {right_js})")
-                elif op in ("is not", "n'est pas", "nest pas"):
+                elif op in _IS_NOT_NAMES:
                     parts.append(f"({current_left} !== {right_js})")
                 else:
                     parts.append(f"({current_left} {op} {right_js})")
                 current_left = right_js
             return " && ".join(parts) if parts else left
         if isinstance(node, IRUnaryOp):
-            if node.op in ("NOT", "not", "!"):
+            if node.op in _NOT_NAMES:
                 return f"(!{self._condition_to_js(node.operand)})"
             return f"({node.op}{self._expr_to_js(node.operand)})"
         if isinstance(node, IRConditionalExpr):
@@ -1082,10 +1238,24 @@ const __ml_signals = _engine.signals;"""
                 return f"Array.from({args})" if args else "[]"
             if call_name in _SET_NAMES:
                 return f"__ml_set({args})" if args else "new Set()"
+            if call_name in _INT_NAMES:
+                return f"Math.trunc({args})" if args else "0"
             if call_name in _NUMBER_NAMES:
                 return f"Number({args})"
+            if call_name in _ABS_NAMES:
+                return f"Math.abs({args})"
+            if call_name in _MIN_NAMES:
+                return f"Math.min({args})"
+            if call_name in _MAX_NAMES:
+                return f"Math.max({args})"
+            if call_name in _ROUND_NAMES:
+                return f"Math.round({args})"
+            if call_name in {"ceil", "floor", "cos", "sin"}:
+                return f"Math.{call_name}({args})"
+            if call_name == "pi":
+                return "Math.PI"
             if call_name in _RANGE_NAMES:
-                return f"intervalle({args})"
+                return f"{_UI_RANGE_HELPER}({args})"
             if call_name == "Exception":
                 return f"new Error({args})"
             if call_name == "json.dumps":
@@ -1112,37 +1282,37 @@ const __ml_signals = _engine.signals;"""
         attr = node.func.attr
         args = [self._expr_to_js(arg) for arg in (node.args or [])]
 
-        if attr in {"obtenir", "get"}:
+        if attr in _DICT_GET_METHODS:
             key = args[0] if args else "undefined"
             default = args[1] if len(args) > 1 else "undefined"
             return f"(({obj})?.[{key}] ?? {default})"
-        if attr in {"ajouter", "append"}:
+        if attr in _COLLECTION_APPEND_METHODS:
             value = args[0] if args else "undefined"
             return f"__ml_add({obj}, {value})"
-        if attr in {"etendre", "extend"}:
+        if attr in _COLLECTION_EXTEND_METHODS:
             values = args[0] if args else "[]"
             return f"__ml_extend({obj}, {values})"
-        if attr == "intersection":
+        if attr in _SET_INTERSECTION_METHODS:
             other = args[0] if args else "[]"
             return f"__ml_set_intersection({obj}, {other})"
-        if attr == "difference":
+        if attr in _SET_DIFFERENCE_METHODS:
             other = args[0] if args else "[]"
             return f"__ml_set_difference({obj}, {other})"
-        if attr == "union":
+        if attr in _SET_UNION_METHODS:
             other = args[0] if args else "[]"
             return f"__ml_set_union({obj}, {other})"
-        if attr in {"minuscule", "lower"}:
+        if attr in _STRING_LOWER_METHODS:
             return f"String({obj}).toLowerCase()"
-        if attr in {"remplacer", "replace"}:
+        if attr in _STRING_REPLACE_METHODS:
             return f"{obj}.replace({', '.join(args)})"
-        if attr in {"joindre", "join"}:
+        if attr in _STRING_JOIN_METHODS:
             values = args[0] if args else "[]"
             return f"({values}).join({obj})"
-        if attr == "items":
+        if attr in _DICT_ITEMS_METHODS:
             return f"Object.entries({obj})"
-        if attr == "keys":
+        if attr in _DICT_KEYS_METHODS:
             return f"Object.keys({obj})"
-        if attr == "pop" and args and args[0] == "0":
+        if attr in _COLLECTION_POP_METHODS and args and args[0] == "0":
             return f"{obj}.shift()"
         return None
 

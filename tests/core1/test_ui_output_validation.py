@@ -1,9 +1,11 @@
 """Validate generated UI output HTML/CSS/JS quality."""
 
+import json
 from pathlib import Path
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
 from multilingualprogramming.core.semantic_lowering import lower_to_semantic_ir
+from multilingualprogramming.core.ir_nodes import IRListLiteral, IRObserveBinding, IRProgram
 from multilingualprogramming.codegen.ui_lowering import lower_to_ui
 
 
@@ -262,3 +264,69 @@ def test_ui_js_localized_set_constructor_and_methods():
     assert "let c = __ml_set_difference(a, [3]);" in js
     assert "return __ml_set_union(c, b);" in js
     assert "ensemble(" not in js
+
+
+def test_ui_js_localized_numeric_builtins_lower_to_math():
+    """Localized and canonical numeric helpers do not rely on undefined globals."""
+    source = (
+        "déf maths(x):\n"
+        "    soit a = entier(x)\n"
+        "    soit b = maximum(a, 3)\n"
+        "    soit c = minimum(b, 10)\n"
+        "    soit d = valeurabsolue(-1)\n"
+        "    retour arrondir(c + d)\n"
+    )
+    js = _compile_ui(source, "fr").emit_js()
+
+    assert "let a = Math.trunc(x);" in js
+    assert "let b = Math.max(a, 3);" in js
+    assert "let c = Math.min(b, 10);" in js
+    assert "let d = Math.abs((-1));" in js
+    assert "return Math.round((c + d));" in js
+
+
+def test_ui_imported_observer_vars_export_as_namespace_properties():
+    """Imported observer bindings are readable and writable through module namespaces."""
+    module_ir = IRProgram(
+        body=[
+            IRObserveBinding(
+                name="foo",
+                value=IRListLiteral(elements=[]),
+            )
+        ],
+        source_language="en",
+    )
+
+    js = lower_to_ui(IRProgram(body=[]), modules={"ui.etat": module_ir}).emit_js()
+
+    assert "__ml_signals['foo'] = _engine.declare('foo', []);" in js
+    assert "window.ui = window.ui || {};" in js
+    assert "window.ui.etat = window.ui.etat || {};" in js
+    assert "Object.defineProperties(window.ui.etat" in js
+    assert "get() { return _engine.get(\"foo\").get(); }" in js
+    assert "set(value) { _engine.get(\"foo\").set(value); }" in js
+
+
+def test_ui_js_range_helper_is_internal_not_localized():
+    """Localized range aliases lower to the configured internal JS helper."""
+    source = "déf tailles():\n    retour intervalle(3)\n"
+    js = _compile_ui(source, "fr").emit_js()
+
+    assert "function __ml_range(...args)" in js
+    assert "return __ml_range(3);" in js
+    assert "function intervalle(" not in js
+
+
+def test_ui_lowering_config_uses_usm_language_maps():
+    """UI-only aliases follow the same concept -> language map shape as USM."""
+    usm_dir = Path("multilingualprogramming/resources/usm")
+    keywords = json.loads((usm_dir / "keywords.json").read_text(encoding="utf-8"))
+    config = json.loads((usm_dir / "ui_lowering.json").read_text(encoding="utf-8"))
+    languages = set(keywords["languages"])
+
+    assert config["languages_source"] == "keywords.json:languages"
+    for section in ("comparison_aliases", "method_aliases"):
+        for aliases_by_language in config[section].values():
+            assert isinstance(aliases_by_language, dict)
+            assert set(aliases_by_language).issubset(languages)
+            assert languages.issubset(aliases_by_language)

@@ -92,7 +92,7 @@
       },
       "LOOP_WHILE": {
         "en": "while",
-        "fr": "tantque",
+        "fr": ["tantque", "tant que"],
         "es": "mientras",
         "de": "solange",
         "hi": "जबतक",
@@ -807,7 +807,7 @@
     "error_handling": {
       "TRY": {
         "en": "try",
-        "fr": "essayer",
+        "fr": ["essayer", "chercher"],
         "es": "intentar",
         "de": "versuchen",
         "hi": "प्रयास",
@@ -829,7 +829,7 @@
       },
       "EXCEPT": {
         "en": "except",
-        "fr": "sauf",
+        "fr": ["sauf", "exception"],
         "es": "excepto",
         "de": "ausnahme",
         "hi": "अपवाद",
