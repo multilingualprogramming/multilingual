@@ -1,5 +1,6 @@
 """Validate generated UI output HTML/CSS/JS quality."""
 
+import json
 from pathlib import Path
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
@@ -272,3 +273,17 @@ def test_ui_js_range_helper_is_internal_not_localized():
     assert "function __ml_range(...args)" in js
     assert "return __ml_range(3);" in js
     assert "function intervalle(" not in js
+
+
+def test_ui_lowering_config_uses_usm_language_maps():
+    """UI-only aliases follow the same concept -> language map shape as USM."""
+    usm_dir = Path("multilingualprogramming/resources/usm")
+    keywords = json.loads((usm_dir / "keywords.json").read_text(encoding="utf-8"))
+    config = json.loads((usm_dir / "ui_lowering.json").read_text(encoding="utf-8"))
+    languages = set(keywords["languages"])
+
+    assert config["languages_source"] == "keywords.json:languages"
+    for section in ("comparison_aliases", "method_aliases"):
+        for aliases_by_language in config[section].values():
+            assert isinstance(aliases_by_language, dict)
+            assert set(aliases_by_language).issubset(languages)
