@@ -21,6 +21,7 @@ from multilingualprogramming.parser.ast_nodes import (
     Identifier,
     IfStatement,
     ImportStatement,
+    IndexAccess,
     LambdaExpr,
     ListComprehension,
     ListLiteral,
@@ -146,6 +147,46 @@ class WATGeneratorRuntimeMixin:
         wat_fn = fname  # WAT wrapper function has the same name as the builtin
         self._emit(f"{indent}call ${wat_fn}")
 
+    def _gen_dom_value_str(self, handle_arg, indent: str) -> None:
+        """Lower ``dom_value_str(handle)`` to a heap-allocated tracked string.
+
+        Reads the element's value into a fresh heap buffer via
+        ``ml_dom_get_value`` and leaves the buffer pointer (as f64) on the
+        stack with the byte length in ``$__last_str_len`` — i.e. a normal
+        string value. Lets a single function read a DOM input without the
+        caller managing a buffer.
+        """
+        self._uses_dom = True
+        self._need_heap_ptr = True
+        cap = 8192
+        buf_local = f"__domval_{self._new_label()}_buf"
+        self._locals.add(buf_local)
+        sym = self._wat_symbol(buf_local)
+        # Save current heap base as the result string pointer.
+        self._emit(f"{indent};; dom_value_str(handle) → tracked string")
+        self._emit(f"{indent}global.get $__heap_ptr")
+        self._emit(f"{indent}f64.convert_i32_u")
+        self._emit(f"{indent}local.set ${sym}")
+        # ml_dom_get_value(handle f64, buf i32, cap i32) -> i32 bytes written
+        self._gen_expr(handle_arg, indent)
+        self._emit(f"{indent}local.get ${sym}")
+        self._emit(f"{indent}i32.trunc_f64_u")
+        self._emit(f"{indent}i32.const {cap}")
+        self._emit(f"{indent}call $ml_dom_get_value")
+        self._emit(f"{indent}global.set $__last_str_len")
+        # Advance heap_ptr past the written bytes (rounded up to 8).
+        self._emit(f"{indent}local.get ${sym}")
+        self._emit(f"{indent}i32.trunc_f64_u")
+        self._emit(f"{indent}global.get $__last_str_len")
+        self._emit(f"{indent}i32.const 7")
+        self._emit(f"{indent}i32.add")
+        self._emit(f"{indent}i32.const -8")
+        self._emit(f"{indent}i32.and")
+        self._emit(f"{indent}i32.add")
+        self._emit(f"{indent}global.set $__heap_ptr")
+        # Push the result string pointer (f64).
+        self._emit(f"{indent}local.get ${sym}")
+
     def _gen_len(self, arg_node, indent: str):
         """Emit WAT that pushes the length of a string or list variable."""
         if isinstance(arg_node, StringLiteral):
@@ -220,6 +261,15 @@ class WATGeneratorRuntimeMixin:
             self._locals.add(len_local)
             self._emit(f"{indent}local.set ${self._wat_symbol(len_local)}")
             self._string_len_locals[name] = len_local
+        elif self._is_string_value(value):
+            # String subscript (s[i]), slice (s[a:b]), and string-valued method
+            # calls leave the byte length in $__last_str_len during evaluation.
+            len_local = f"{name}_strlen"
+            self._locals.add(len_local)
+            self._emit(f"{indent}global.get $__last_str_len")
+            self._emit(f"{indent}f64.convert_i32_u")
+            self._emit(f"{indent}local.set ${self._wat_symbol(len_local)}")
+            self._string_len_locals[name] = len_local
         elif name in self._string_len_locals:
             del self._string_len_locals[name]
 
@@ -272,6 +322,8 @@ class WATGeneratorRuntimeMixin:
     def _value_tracks_as_list(self, value) -> bool:
         """Return True when *value* should be treated as a tracked list."""
         if isinstance(value, (ListLiteral, SetLiteral)):
+            return True
+        if self._list_repeat_operands(value) is not None:
             return True
         if self._is_materialized_sequence(value):
             return True

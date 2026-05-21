@@ -82,11 +82,18 @@ class WATGeneratorCoreMixin:
             lines.append(
                 f'  (global ${self._wat_symbol(global_name)} (mut f64) (f64.const 0))'
             )
-        if self._lambda_table:
-            n = len(self._lambda_table)
-            lines.append(f'  (table {n} funcref)')
-            elems = " ".join(f"${self._wat_symbol(fn)}" for fn in self._lambda_table)
-            lines.append(f'  (elem (i32.const 0) {elems})')
+        # A funcref table is needed for lambda/callback indirection. When a
+        # module uses the DOM bridge (which emits $__dom_dispatch with a
+        # call_indirect) but registers no callback, still declare a 1-slot
+        # table so the module validates; the dispatch is simply never called.
+        table_size = len(self._lambda_table)
+        if table_size == 0 and getattr(self, "_uses_dom", False):
+            table_size = 1
+        if table_size:
+            lines.append(f'  (table {table_size} funcref)')
+            if self._lambda_table:
+                elems = " ".join(f"${self._wat_symbol(fn)}" for fn in self._lambda_table)
+                lines.append(f'  (elem (i32.const 0) {elems})')
         lines.extend(self._funcs)
         lines.append(")")
         return "\n".join(lines)

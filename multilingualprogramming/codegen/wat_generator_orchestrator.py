@@ -164,6 +164,7 @@ def _reset_generator_state(generator) -> None:
         "_lambda_locals": {},
         "_str_concat_helper_emitted": False,
         "_str_slice_helper_emitted": False,
+        "_str_eq_helper_emitted": False,
         "_sequence_func_names": set(),
         "_string_return_funcs": set(),
         "_string_format_helpers_emitted": False,

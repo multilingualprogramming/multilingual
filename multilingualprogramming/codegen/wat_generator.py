@@ -172,6 +172,7 @@ class WATCodeGenerator(
         # Whether runtime string helpers have been added to _funcs.
         self._str_concat_helper_emitted: bool = False
         self._str_slice_helper_emitted: bool = False
+        self._str_eq_helper_emitted: bool = False
         # Lowered names of @staticmethod and @classmethod methods (no self/cls pushed).
         self._static_method_names: set[str] = set()
         # Maps "ClassName.attr" -> lowered WAT func name for @property getters.
@@ -308,6 +309,95 @@ class WATCodeGenerator(
             self._emit(f"{indent}f64.store")
         # Push the pointer as f64.
         self._emit(f"{indent}local.get ${self._wat_symbol(ptr_local)}")
+
+    def _list_repeat_operands(self, node):
+        """If *node* is ``[elem] * count`` (either order), return ``(elem, count)``.
+
+        Only a single-element list literal repeated by a (non-list) count
+        expression is recognised — enough to pre-allocate a fixed-size buffer
+        such as ``[0.0] * n``. Returns ``None`` otherwise.
+        """
+        if not isinstance(node, BinaryOp) or node.op != "*":
+            return None
+        left, right = node.left, node.right
+        if isinstance(left, ListLiteral) and len(left.elements) == 1 \
+                and not isinstance(right, ListLiteral):
+            return left.elements[0], right
+        if isinstance(right, ListLiteral) and len(right.elements) == 1 \
+                and not isinstance(left, ListLiteral):
+            return right.elements[0], left
+        return None
+
+    def _gen_list_repeat_alloc(self, elem, count_expr, indent: str):
+        """Allocate a runtime-sized list ``[elem] * count`` in linear memory.
+
+        Same layout as :meth:`_gen_list_alloc` (``[length_f64, elem0, ...]``)
+        but the length is computed at runtime, enabling O(n) buffer fills via
+        ``buf[i] = ...``. Pushes the base pointer (as f64) onto the stack.
+        """
+        lbl = self._new_label()
+        ptr_local = f"__listrep_{lbl}_ptr"
+        n_local = f"__listrep_{lbl}_n"
+        i_local = f"__listrep_{lbl}_i"
+        val_local = f"__listrep_{lbl}_v"
+        for loc in (ptr_local, n_local, i_local, val_local):
+            self._locals.add(loc)
+        p = self._wat_symbol(ptr_local)
+        nn = self._wat_symbol(n_local)
+        ii = self._wat_symbol(i_local)
+        vv = self._wat_symbol(val_local)
+        self._emit(f"{indent};; [elem] * count — runtime-sized list")
+        # count (clamped to >= 0) -> $n
+        self._gen_expr(count_expr, indent)
+        self._emit(f"{indent}f64.const 0")
+        self._emit(f"{indent}f64.max")
+        self._emit(f"{indent}f64.floor")
+        self._emit(f"{indent}local.set ${nn}")
+        # repeated element value -> $v
+        self._gen_expr(elem, indent)
+        self._emit(f"{indent}local.set ${vv}")
+        # allocate (n + 1) * 8 bytes
+        self._emit(f"{indent}local.get ${nn}")
+        self._emit(f"{indent}f64.const 1")
+        self._emit(f"{indent}f64.add")
+        self._emit(f"{indent}f64.const 8")
+        self._emit(f"{indent}f64.mul")
+        self._emit(f"{indent}i32.trunc_f64_u")
+        self._emit_alloc_dynamic(ptr_local, indent)
+        # store length header at base + 0
+        self._emit(f"{indent}local.get ${p}")
+        self._emit(f"{indent}i32.trunc_f64_u")
+        self._emit(f"{indent}local.get ${nn}")
+        self._emit(f"{indent}f64.store")
+        # fill: for i in 0..n: base + 8 + i*8 = $v
+        self._emit(f"{indent}f64.const 0")
+        self._emit(f"{indent}local.set ${ii}")
+        self._emit(f"{indent}block $listrep_done_{lbl}")
+        self._emit(f"{indent}  loop $listrep_lp_{lbl}")
+        self._emit(f"{indent}    local.get ${ii}")
+        self._emit(f"{indent}    local.get ${nn}")
+        self._emit(f"{indent}    f64.ge")
+        self._emit(f"{indent}    br_if $listrep_done_{lbl}")
+        self._emit(f"{indent}    local.get ${p}")
+        self._emit(f"{indent}    i32.trunc_f64_u")
+        self._emit(f"{indent}    local.get ${ii}")
+        self._emit(f"{indent}    i32.trunc_f64_u")
+        self._emit(f"{indent}    i32.const 8")
+        self._emit(f"{indent}    i32.mul")
+        self._emit(f"{indent}    i32.const 8")
+        self._emit(f"{indent}    i32.add")
+        self._emit(f"{indent}    i32.add")
+        self._emit(f"{indent}    local.get ${vv}")
+        self._emit(f"{indent}    f64.store")
+        self._emit(f"{indent}    local.get ${ii}")
+        self._emit(f"{indent}    f64.const 1")
+        self._emit(f"{indent}    f64.add")
+        self._emit(f"{indent}    local.set ${ii}")
+        self._emit(f"{indent}    br $listrep_lp_{lbl}")
+        self._emit(f"{indent}  end")
+        self._emit(f"{indent}end")
+        # push base pointer as result
+        self._emit(f"{indent}local.get ${p}")
 
     def _gen_static_dict_alloc(self, node: DictLiteral, indent: str) -> bool:
         """Allocate a compile-time-known dict as a values array plus key metadata."""
@@ -1252,6 +1342,8 @@ class WATCodeGenerator(
             elif fname in _ARGV_NAMES and len(node.args) == 1:
                 self._gen_expr(node.args[0], indent)
                 self._emit(f"{indent}call $argv")
+            elif fname == "dom_value_str" and len(node.args) == 1:
+                self._gen_dom_value_str(node.args[0], indent)
             elif fname in _DOM_CANONICAL_NAMES:
                 self._gen_dom_call(fname, node.args, indent)
             elif fname in _INT_NAMES and len(node.args) == 1:
@@ -1939,6 +2031,10 @@ class WATCodeGenerator(
         if op in ("in", "not in"):
             self._emit_membership_cmp(node.left, right, indent, negate=op == "not in")
             return
+        if op in ("==", "!=") and self._is_string_value(node.left) \
+                and self._is_string_value(right):
+            self._emit_string_eq(node.left, right, indent, negate=op == "!=")
+            return
         self._gen_expr(node.left, indent)
         self._gen_expr(right, indent)
         _cmp_wat = {
@@ -1977,6 +2073,10 @@ class WATCodeGenerator(
 
     def _gen_cmp_from_binop(self, node: BinaryOp, indent: str):
         """Push i32 for a BinaryOp that is a comparison operator."""
+        if node.op in ("==", "!=") and self._is_string_value(node.left) \
+                and self._is_string_value(node.right):
+            self._emit_string_eq(node.left, node.right, indent, negate=node.op == "!=")
+            return
         self._gen_expr(node.left, indent)
         self._gen_expr(node.right, indent)
         _cmp_wat = {
@@ -2169,6 +2269,112 @@ class WATCodeGenerator(
             "  )",
         ]
         self._funcs.append("\n".join(lines))
+
+    def _ensure_str_eq_helper(self):
+        """Emit the $__str_eq WAT helper function once per module.
+
+        Signature: (ptr1: f64, len1: f64, ptr2: f64, len2: f64) -> i32 (1/0)
+        Returns 1 when the two UTF-8 byte ranges are equal in length and content,
+        else 0. Used so that ``==`` / ``!=`` on string operands compare content
+        rather than heap pointers.
+        """
+        if self._str_eq_helper_emitted:
+            return
+        self._str_eq_helper_emitted = True
+        lines = [
+            "  (func $__str_eq (param $eq_p1 f64) (param $eq_l1 f64)"
+            " (param $eq_p2 f64) (param $eq_l2 f64) (result i32)",
+            "    (local $eq_i i32)",
+            "    (local $eq_n i32)",
+            "    ;; different byte length → not equal",
+            "    local.get $eq_l1",
+            "    local.get $eq_l2",
+            "    f64.ne",
+            "    if",
+            "      i32.const 0",
+            "      return",
+            "    end",
+            "    local.get $eq_l1",
+            "    i32.trunc_f64_u",
+            "    local.set $eq_n",
+            "    i32.const 0",
+            "    local.set $eq_i",
+            "    block $eq_done",
+            "      loop $eq_lp",
+            "        local.get $eq_i",
+            "        local.get $eq_n",
+            "        i32.ge_u",
+            "        br_if $eq_done",
+            "        local.get $eq_p1",
+            "        i32.trunc_f64_u",
+            "        local.get $eq_i",
+            "        i32.add",
+            "        i32.load8_u",
+            "        local.get $eq_p2",
+            "        i32.trunc_f64_u",
+            "        local.get $eq_i",
+            "        i32.add",
+            "        i32.load8_u",
+            "        i32.ne",
+            "        if",
+            "          i32.const 0",
+            "          return",
+            "        end",
+            "        local.get $eq_i",
+            "        i32.const 1",
+            "        i32.add",
+            "        local.set $eq_i",
+            "        br $eq_lp",
+            "      end",
+            "    end",
+            "    i32.const 1",
+            "  )",
+        ]
+        self._funcs.append("\n".join(lines))
+
+    def _capture_string_operand(self, expr, indent: str):
+        """Evaluate a string expr, capturing its (ptr, len) into fresh f64 locals.
+
+        Lengths are captured immediately after evaluation so a second operand's
+        evaluation cannot clobber the shared ``$__last_str_len`` global. Returns
+        ``(ptr_local, len_local)`` names.
+        """
+        label = self._new_label()
+        ptr_local = f"__streq_p_{label}"
+        len_local = f"__streq_l_{label}"
+        self._locals.add(ptr_local)
+        self._locals.add(len_local)
+        self._gen_expr(expr, indent)
+        self._emit(f"{indent}local.set ${self._wat_symbol(ptr_local)}")
+        if isinstance(expr, StringLiteral):
+            _, byte_len = self._intern(expr.value)
+            self._emit(f"{indent}f64.const {float(byte_len)}")
+        elif isinstance(expr, Identifier) and expr.name in self._string_len_locals:
+            sym = self._wat_symbol(self._string_len_locals[expr.name])
+            self._emit(f"{indent}local.get ${sym}")
+        elif isinstance(expr, IndexAccess) and not isinstance(expr.index, SliceExpr):
+            # s[i] yields a single-character string.
+            self._emit(f"{indent}f64.const 1")
+        else:
+            # Slices, concats, and string-returning calls leave the byte length
+            # in $__last_str_len; read it now, before anything else runs.
+            self._emit(f"{indent}global.get $__last_str_len")
+            self._emit(f"{indent}f64.convert_i32_u")
+        self._emit(f"{indent}local.set ${self._wat_symbol(len_local)}")
+        return ptr_local, len_local
+
+    def _emit_string_eq(self, left, right, indent: str, negate: bool) -> None:
+        """Push i32 content-equality of two string operands (negated for ``!=``)."""
+        self._ensure_str_eq_helper()
+        ptr_a, len_a = self._capture_string_operand(left, indent)
+        ptr_b, len_b = self._capture_string_operand(right, indent)
+        self._emit(f"{indent}local.get ${self._wat_symbol(ptr_a)}")
+        self._emit(f"{indent}local.get ${self._wat_symbol(len_a)}")
+        self._emit(f"{indent}local.get ${self._wat_symbol(ptr_b)}")
+        self._emit(f"{indent}local.get ${self._wat_symbol(len_b)}")
+        self._emit(f"{indent}call $__str_eq")
+        if negate:
+            self._emit(f"{indent}i32.eqz")
 
     def _ensure_str_slice_helper(self):
         """Emit the $__str_slice WAT helper function once per module.

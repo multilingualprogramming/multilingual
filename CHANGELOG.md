@@ -9,6 +9,11 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 ### Added
 
 #### WAT/WASM backend — string operations
+- **String content equality (`==` / `!=`)**: comparisons where both operands are string-valued
+  now lower to a new `$__str_eq` WAT helper that compares UTF-8 byte ranges, instead of comparing
+  heap pointers. This makes `s[i] == "F"`, `slice == literal`, and string-valued method results
+  compare by content. Variables bound to a string subscript/slice/method result (`ch = s[i]`) now
+  retain string-length tracking, so equality on them compares content too.
 - **`str(x)` number-to-string conversion**: `str(42)` → `"42"`, `str(3.14)` → `"3.14"` via new
   `$__str_from_f64` WAT helper. Correctly formats integers without a decimal point and floats with
   up to 6 significant decimal digits (trailing zeros trimmed). String and string-variable arguments
@@ -29,6 +34,14 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 - **`math.atan` / `math.atan2`**: 6-term series with |x|>1 identity; quadrant-adjusted atan2.
 - **`math.trunc` / `math.hypot` / `math.degrees` / `math.radians`**: Inline WAT lowering.
 - **`math.pi` / `math.e` / `math.tau` / `math.inf` / `math.nan`**: Emitted as `f64.const` literals.
+
+#### WAT/WASM backend — list allocation
+- **Runtime-sized list repeat `[elem] * n`**: a single-element list literal multiplied by a
+  runtime count now allocates an `n`-length list (layout `[length_f64, elem0, ...]`) filled with
+  the repeated element, instead of falling through to numeric multiplication. The result is tracked
+  as a list, so `buf[i] = ...`, `buf[i]`, and `len(buf)` work — enabling O(n) buffer fills
+  (e.g. two-pass count-then-write) rather than O(n²) `append` chains under the bump allocator.
+  Recognised in either operand order (`[0.0] * n` or `n * [0.0]`).
 
 #### WAT/WASM backend — list mutation
 - **`list.append(x)`**: `$__list_append` allocates a new block with `count+1` slots, copies

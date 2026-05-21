@@ -438,6 +438,65 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertEqual(self._call_export(prog, "cellule_suivante", 90.0, 1.0, 0.0, 1.0), 0.0)
         self.assertEqual(self._call_export(prog, "classe_wolfram", 30.0), 3.0)
 
+    def test_string_subscript_equality_compares_content_not_pointer(self):
+        # Counting characters by scanning s[i] == "F" requires content-based
+        # string equality (not heap-pointer comparison) and string tracking to
+        # survive the `ch = s[i]` intermediate binding.
+        prog = _parse_source(
+            "déf compter_f():\n"
+            "    soit s = \"FABF\"\n"
+            "    soit total = 0\n"
+            "    pour i dans intervalle(longueur(s)):\n"
+            "        soit ch = s[i]\n"
+            "        si ch == \"F\":\n"
+            "            total = total + 1\n"
+            "    retour total\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "compter_f"), 2.0)
+
+    def test_string_equality_and_inequality_on_locals(self):
+        prog = _parse_source(
+            "déf egal():\n"
+            "    soit a = \"koch\"\n"
+            "    soit b = \"koch\"\n"
+            "    si a == b:\n"
+            "        retour 1\n"
+            "    retour 0\n"
+            "\n"
+            "déf different():\n"
+            "    soit a = \"koch\"\n"
+            "    soit b = \"dragon\"\n"
+            "    si a != b:\n"
+            "        retour 1\n"
+            "    retour 0\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "egal"), 1.0)
+        self.assertEqual(self._call_export(prog, "different"), 1.0)
+
+    def test_runtime_sized_list_repeat_allocates_and_fills(self):
+        # `[0.0] * n` must allocate a runtime-sized list that supports
+        # element assignment (buf[i] = ...) and len() — enabling O(n) buffer
+        # fills instead of O(n^2) append chains.
+        prog = _parse_source(
+            "déf somme_tampon():\n"
+            "    soit buf = [0.0] * 5\n"
+            "    soit i = 0\n"
+            "    tantque i < 5:\n"
+            "        buf[i] = i * 2\n"
+            "        i = i + 1\n"
+            "    soit s = 0.0\n"
+            "    soit k = 0\n"
+            "    tantque k < longueur(buf):\n"
+            "        s = s + buf[k]\n"
+            "        k = k + 1\n"
+            "    retour s\n",
+            language="fr",
+        )
+        # buf = [0, 2, 4, 6, 8] → sum 20
+        self.assertEqual(self._call_export(prog, "somme_tampon"), 20.0)
+
 
 @unittest.skipUnless(
     importlib.util.find_spec("wasmtime") is not None,
