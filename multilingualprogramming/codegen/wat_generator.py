@@ -1360,6 +1360,12 @@ class WATCodeGenerator(
                 self._emit(f"{indent}call $argv")
             elif fname == "dom_value_str" and len(node.args) == 1:
                 self._gen_dom_value_str(node.args[0], indent)
+            elif fname == "ord" and len(node.args) == 1:
+                # ord(s): first UTF-8 byte of the string as f64.
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_u")
+                self._emit(f"{indent}i32.load8_u")
+                self._emit(f"{indent}f64.convert_i32_u")
             elif fname in _DOM_CANONICAL_NAMES:
                 self._gen_dom_call(fname, node.args, indent)
             elif fname in _INT_NAMES and len(node.args) == 1:

@@ -497,6 +497,17 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # buf = [0, 2, 4, 6, 8] → sum 20
         self.assertEqual(self._call_export(prog, "somme_tampon"), 20.0)
 
+    def test_ord_returns_first_utf8_byte(self):
+        prog = _parse_source(
+            "déf ord_F():\n    retour ord(\"F\")\n"
+            "déf ord_plus():\n    retour ord(\"+\")\n"
+            "déf ord_sub():\n    soit s = \"AF+\"\n    retour ord(s[1])\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "ord_F"), 70.0)
+        self.assertEqual(self._call_export(prog, "ord_plus"), 43.0)
+        self.assertEqual(self._call_export(prog, "ord_sub"), 70.0)  # s[1] == 'F'
+
     def test_math_sin_cos_have_correct_sign_and_range_reduction(self):
         # Regression: math.sin/cos previously returned the negated value
         # (an uncompensated +pi phase shift), so cos(0) came back as -1.

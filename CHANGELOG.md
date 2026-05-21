@@ -35,6 +35,11 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 - **`math.trunc` / `math.hypot` / `math.degrees` / `math.radians`**: Inline WAT lowering.
 - **`math.pi` / `math.e` / `math.tau` / `math.inf` / `math.nan`**: Emitted as `f64.const` literals.
 
+#### WAT/WASM backend — strings
+- **`ord(s)` builtin**: returns the first UTF-8 byte of a string as an `f64`
+  (`i32.load8_u` at the string pointer). Enables storing characters as numeric
+  codes — e.g. on an `f64` stack for iterative/DFS string algorithms.
+
 #### WAT/WASM backend — list allocation
 - **Runtime-sized list repeat `[elem] * n`**: a single-element list literal multiplied by a
   runtime count now allocates an `n`-length list (layout `[length_f64, elem0, ...]`) filled with
