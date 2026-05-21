@@ -87,6 +87,11 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 - **`yield from range(n)`**: Now materializes correctly via Shape 1b in `_simple_generator_spec`.
 
 ### Fixed
+- **`math.sin` / `math.cos` returned the negated value**: both helpers began with an
+  uncompensated `x += pi` phase shift, so they computed `sin(x+pi) = -sin(x)` and
+  `cos(x+pi) = -cos(x)` — e.g. `math.cos(0.0)` returned `-1.0`. Removed the spurious shift;
+  range reduction and the polynomial now yield correct values (`cos(0)=1`, `sin(pi/2)≈1`,
+  `cos(4pi)=1`). `math.tan` (defined as `sin/cos`) is corrected transitively.
 - **F-string float formatting**: Default `{x}` interpolation previously truncated floats to
   their integer part; now delegates to `$__str_from_f64` for correct output.
 - **`math.atan` WAT stack error**: The conditional negation inside `if` without a declared

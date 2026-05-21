@@ -21,7 +21,6 @@ from multilingualprogramming.parser.ast_nodes import (
     Identifier,
     IfStatement,
     ImportStatement,
-    IndexAccess,
     LambdaExpr,
     ListComprehension,
     ListLiteral,

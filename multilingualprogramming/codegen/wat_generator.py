@@ -328,6 +328,53 @@ class WATCodeGenerator(
             return right.elements[0], left
         return None
 
+    def _list_repeat_locals(self, lbl: int) -> tuple[str, str, str, str]:
+        """Create local names for a repeated-list allocation."""
+        locals_ = (
+            f"__listrep_{lbl}_ptr",
+            f"__listrep_{lbl}_n",
+            f"__listrep_{lbl}_i",
+            f"__listrep_{lbl}_v",
+        )
+        for loc in locals_:
+            self._locals.add(loc)
+        return tuple(self._wat_symbol(loc) for loc in locals_)
+
+    def _emit_list_repeat_fill_loop(
+        self,
+        lbl: int,
+        ptr_sym: str,
+        len_sym: str,
+        index_sym: str,
+        value_sym: str,
+        indent: str,
+    ) -> None:
+        """Emit the runtime loop that fills a repeated list allocation."""
+        self._emit(f"{indent}block $listrep_done_{lbl}")
+        self._emit(f"{indent}  loop $listrep_lp_{lbl}")
+        self._emit(f"{indent}    local.get ${index_sym}")
+        self._emit(f"{indent}    local.get ${len_sym}")
+        self._emit(f"{indent}    f64.ge")
+        self._emit(f"{indent}    br_if $listrep_done_{lbl}")
+        self._emit(f"{indent}    local.get ${ptr_sym}")
+        self._emit(f"{indent}    i32.trunc_f64_u")
+        self._emit(f"{indent}    local.get ${index_sym}")
+        self._emit(f"{indent}    i32.trunc_f64_u")
+        self._emit(f"{indent}    i32.const 8")
+        self._emit(f"{indent}    i32.mul")
+        self._emit(f"{indent}    i32.const 8")
+        self._emit(f"{indent}    i32.add")
+        self._emit(f"{indent}    i32.add")
+        self._emit(f"{indent}    local.get ${value_sym}")
+        self._emit(f"{indent}    f64.store")
+        self._emit(f"{indent}    local.get ${index_sym}")
+        self._emit(f"{indent}    f64.const 1")
+        self._emit(f"{indent}    f64.add")
+        self._emit(f"{indent}    local.set ${index_sym}")
+        self._emit(f"{indent}    br $listrep_lp_{lbl}")
+        self._emit(f"{indent}  end")
+        self._emit(f"{indent}end")
+
     def _gen_list_repeat_alloc(self, elem, count_expr, indent: str):
         """Allocate a runtime-sized list ``[elem] * count`` in linear memory.
 
@@ -337,15 +384,7 @@ class WATCodeGenerator(
         """
         lbl = self._new_label()
         ptr_local = f"__listrep_{lbl}_ptr"
-        n_local = f"__listrep_{lbl}_n"
-        i_local = f"__listrep_{lbl}_i"
-        val_local = f"__listrep_{lbl}_v"
-        for loc in (ptr_local, n_local, i_local, val_local):
-            self._locals.add(loc)
-        p = self._wat_symbol(ptr_local)
-        nn = self._wat_symbol(n_local)
-        ii = self._wat_symbol(i_local)
-        vv = self._wat_symbol(val_local)
+        p, nn, ii, vv = self._list_repeat_locals(lbl)
         self._emit(f"{indent};; [elem] * count — runtime-sized list")
         # count (clamped to >= 0) -> $n
         self._gen_expr(count_expr, indent)
@@ -372,30 +411,7 @@ class WATCodeGenerator(
         # fill: for i in 0..n: base + 8 + i*8 = $v
         self._emit(f"{indent}f64.const 0")
         self._emit(f"{indent}local.set ${ii}")
-        self._emit(f"{indent}block $listrep_done_{lbl}")
-        self._emit(f"{indent}  loop $listrep_lp_{lbl}")
-        self._emit(f"{indent}    local.get ${ii}")
-        self._emit(f"{indent}    local.get ${nn}")
-        self._emit(f"{indent}    f64.ge")
-        self._emit(f"{indent}    br_if $listrep_done_{lbl}")
-        self._emit(f"{indent}    local.get ${p}")
-        self._emit(f"{indent}    i32.trunc_f64_u")
-        self._emit(f"{indent}    local.get ${ii}")
-        self._emit(f"{indent}    i32.trunc_f64_u")
-        self._emit(f"{indent}    i32.const 8")
-        self._emit(f"{indent}    i32.mul")
-        self._emit(f"{indent}    i32.const 8")
-        self._emit(f"{indent}    i32.add")
-        self._emit(f"{indent}    i32.add")
-        self._emit(f"{indent}    local.get ${vv}")
-        self._emit(f"{indent}    f64.store")
-        self._emit(f"{indent}    local.get ${ii}")
-        self._emit(f"{indent}    f64.const 1")
-        self._emit(f"{indent}    f64.add")
-        self._emit(f"{indent}    local.set ${ii}")
-        self._emit(f"{indent}    br $listrep_lp_{lbl}")
-        self._emit(f"{indent}  end")
-        self._emit(f"{indent}end")
+        self._emit_list_repeat_fill_loop(lbl, p, nn, ii, vv, indent)
         # push base pointer as result
         self._emit(f"{indent}local.get ${p}")
 

@@ -1966,10 +1966,6 @@ class WATGeneratorCoreMixin:
   (func $math_sin (param $x f64) (result f64)
     (local $u f64) (local $t f64)
     local.get $x
-    f64.const 3.141592653589793
-    f64.add
-    local.set $x
-    local.get $x
     local.get $x
     f64.const 6.283185307179586
     f64.div
@@ -2041,10 +2037,6 @@ class WATGeneratorCoreMixin:
     (local $u f64) (local $t f64) (local $sign f64)
     f64.const 1.0
     local.set $sign
-    local.get $x
-    f64.const 3.141592653589793
-    f64.add
-    local.set $x
     local.get $x
     local.get $x
     f64.const 6.283185307179586

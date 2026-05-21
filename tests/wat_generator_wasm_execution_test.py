@@ -497,6 +497,24 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # buf = [0, 2, 4, 6, 8] → sum 20
         self.assertEqual(self._call_export(prog, "somme_tampon"), 20.0)
 
+    def test_math_sin_cos_have_correct_sign_and_range_reduction(self):
+        # Regression: math.sin/cos previously returned the negated value
+        # (an uncompensated +pi phase shift), so cos(0) came back as -1.
+        prog = _parse_source(
+            "déf c0():\n    retour math.cos(0.0)\n"
+            "déf s0():\n    retour math.sin(0.0)\n"
+            "déf spi2():\n    retour math.sin(1.5707963267948966)\n"
+            "déf cpi():\n    retour math.cos(3.141592653589793)\n"
+            "déf cbig():\n    retour math.cos(12.566370614359172)\n",
+            language="fr",
+        )
+        self.assertAlmostEqual(self._call_export(prog, "c0"), 1.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "s0"), 0.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "spi2"), 1.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "cpi"), -1.0, places=5)
+        # range reduction: cos(4*pi) == 1
+        self.assertAlmostEqual(self._call_export(prog, "cbig"), 1.0, places=5)
+
 
 @unittest.skipUnless(
     importlib.util.find_spec("wasmtime") is not None,
