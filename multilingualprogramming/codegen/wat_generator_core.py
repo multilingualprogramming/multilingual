@@ -1969,6 +1969,8 @@ class WATGeneratorCoreMixin:
     local.get $x
     f64.const 6.283185307179586
     f64.div
+    f64.const 0.5
+    f64.add
     f64.floor
     f64.const 6.283185307179586
     f64.mul
@@ -2041,6 +2043,8 @@ class WATGeneratorCoreMixin:
     local.get $x
     f64.const 6.283185307179586
     f64.div
+    f64.const 0.5
+    f64.add
     f64.floor
     f64.const 6.283185307179586
     f64.mul
