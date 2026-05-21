@@ -87,11 +87,15 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 - **`yield from range(n)`**: Now materializes correctly via Shape 1b in `_simple_generator_spec`.
 
 ### Fixed
-- **`math.sin` / `math.cos` returned the negated value**: both helpers began with an
+- **`math.sin` / `math.cos` returned wrong values** (two bugs): (1) both helpers began with an
   uncompensated `x += pi` phase shift, so they computed `sin(x+pi) = -sin(x)` and
-  `cos(x+pi) = -cos(x)` — e.g. `math.cos(0.0)` returned `-1.0`. Removed the spurious shift;
-  range reduction and the polynomial now yield correct values (`cos(0)=1`, `sin(pi/2)≈1`,
-  `cos(4pi)=1`). `math.tan` (defined as `sin/cos`) is corrected transitively.
+  `cos(x+pi) = -cos(x)` — e.g. `math.cos(0.0)` returned `-1.0`; (2) range reduction used
+  `floor(x/2pi)` (reducing to `[0, 2pi)`), so angles in `(3pi/2, 2pi)` and negative angles got a
+  spurious double reflection with the wrong sign — e.g. `math.cos(-60deg)` returned `-0.5` instead
+  of `+0.5`. Fixed by removing the phase shift and reducing to `[-pi, pi]` via
+  `floor(x/2pi + 0.5)` so a single reflection suffices. Now `cos(0)=1`, `sin(pi/2)≈1`,
+  `cos(4pi)=1`, `cos(-60deg)=cos(300deg)=0.5`, `cos(240deg)=-0.5`. `math.tan` (defined as
+  `sin/cos`) is corrected transitively.
 - **F-string float formatting**: Default `{x}` interpolation previously truncated floats to
   their integer part; now delegates to `$__str_from_f64` for correct output.
 - **`math.atan` WAT stack error**: The conditional negation inside `if` without a declared

@@ -505,7 +505,12 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
             "déf s0():\n    retour math.sin(0.0)\n"
             "déf spi2():\n    retour math.sin(1.5707963267948966)\n"
             "déf cpi():\n    retour math.cos(3.141592653589793)\n"
-            "déf cbig():\n    retour math.cos(12.566370614359172)\n",
+            "déf cbig():\n    retour math.cos(12.566370614359172)\n"
+            # Range reduction must keep the correct sign in (3*pi/2, 2*pi) and
+            # for negative angles: cos(300deg) = cos(-60deg) = +0.5.
+            "déf cneg60():\n    retour math.cos(-1.0471975511965976)\n"
+            "déf c300():\n    retour math.cos(5.235987755982988)\n"
+            "déf c240():\n    retour math.cos(4.1887902047863905)\n",
             language="fr",
         )
         self.assertAlmostEqual(self._call_export(prog, "c0"), 1.0, places=5)
@@ -514,6 +519,9 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertAlmostEqual(self._call_export(prog, "cpi"), -1.0, places=5)
         # range reduction: cos(4*pi) == 1
         self.assertAlmostEqual(self._call_export(prog, "cbig"), 1.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "cneg60"), 0.5, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "c300"), 0.5, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "c240"), -0.5, places=5)
 
 
 @unittest.skipUnless(
