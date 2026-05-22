@@ -184,6 +184,12 @@ class WATGeneratorCoreMixin:
         """Return (byte_offset, byte_length) for a string in the data section."""
         if s not in self._strings:
             encoded = s.encode("utf-8")
+            if not self._data:
+                # Reserve offset 0 so no interned string can alias the null/None
+                # sentinel (f64 pointer 0.0). This keeps length-prefixed string
+                # passing unambiguous: a string argument is never mistaken for
+                # null at a call boundary. 8 bytes preserves heap alignment.
+                self._data.extend(b"\x00" * 8)
             offset = len(self._data)
             self._data.extend(encoded)
             self._strings[s] = (offset, len(encoded))

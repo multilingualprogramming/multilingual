@@ -9,6 +9,18 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 ### Added
 
 #### WAT/WASM backend — string operations
+- **Length-prefixed string parameters (cross-function string passing)**: string values carry no
+  length in their f64 pointer, so passing a string as a function argument previously lost its byte
+  length in the callee. Parameters annotated as strings (`s: str` / `s: chaîne`, normalized to the
+  identifier `str`) are now passed as **length-prefixed buffers**: the caller copies the argument
+  via the new `$__str_make_headered` helper, which writes the byte length as a 4-byte header at
+  `ptr - 4`, and the callee recovers it into a tracked `<name>_strlen` local at its prologue. This
+  makes `len(s)`, indexing (`s[i]`), slicing (`s[a:b]`), char comparison (`s[i] == "F"`), and
+  concatenation work on a string received as an argument — enabling multi-function string APIs.
+  String-annotated parameters are also excluded from list-like inference so `s[i]` lowers as a
+  string subscript rather than a stride-8 list load. Data offset `0` is now reserved (8 bytes) so
+  no interned string can alias the null/None sentinel pointer. `$__str_concat` now maintains
+  `$__last_str_len = len1 + len2`, so concatenation results are self-describing for callers.
 - **String content equality (`==` / `!=`)**: comparisons where both operands are string-valued
   now lower to a new `$__str_eq` WAT helper that compares UTF-8 byte ranges, instead of comparing
   heap pointers. This makes `s[i] == "F"`, `slice == literal`, and string-valued method results

@@ -173,6 +173,10 @@ class WATCodeGenerator(
         self._str_concat_helper_emitted: bool = False
         self._str_slice_helper_emitted: bool = False
         self._str_eq_helper_emitted: bool = False
+        # Whether the length-prefixed string copy helper has been emitted.
+        self._str_make_headered_helper_emitted: bool = False
+        # Maps function name → set of parameter names annotated as strings.
+        self._func_string_params: dict[str, set] = {}
         # Lowered names of @staticmethod and @classmethod methods (no self/cls pushed).
         self._static_method_names: set[str] = set()
         # Maps "ClassName.attr" -> lowered WAT func name for @property getters.
@@ -2197,6 +2201,80 @@ class WATCodeGenerator(
 
         self._loop_stack.pop()
 
+    def _ensure_str_make_headered_helper(self):
+        """Emit the $__str_make_headered WAT helper function once per module.
+
+        Signature: (p: f64 ptr, len: i32) -> f64 (new ptr).
+
+        Allocates ``len + 4`` bytes, stores ``len`` as a 4-byte header at the
+        base, copies ``len`` bytes from ``p`` to ``base + 4``, and returns
+        ``base + 4`` as f64. The callee recovers the byte length via the header
+        at ``ptr - 4`` (see the string-parameter prologue in ``_emit_function``).
+        A null/zero pointer is passed through unchanged (no allocation).
+        """
+        if self._str_make_headered_helper_emitted:
+            return
+        self._str_make_headered_helper_emitted = True
+        self._need_heap_ptr = True
+        lines = [
+            "  (func $__str_make_headered (param $mh_p f64) (param $mh_len i32)"
+            " (result f64)",
+            "    (local $mh_base i32) (local $mh_i i32) (local $mh_src i32)",
+            "    ;; pass null/zero pointers through unchanged",
+            "    local.get $mh_p",
+            "    f64.const 0",
+            "    f64.eq",
+            "    if (result f64)",
+            "      f64.const 0",
+            "    else",
+            "      ;; allocate len + 4 bytes and write the length header at base",
+            "      local.get $mh_len",
+            "      i32.const 4",
+            "      i32.add",
+            "      call $ml_alloc",
+            "      local.set $mh_base",
+            "      local.get $mh_base",
+            "      local.get $mh_len",
+            "      i32.store",
+            "      local.get $mh_p",
+            "      i32.trunc_f64_u",
+            "      local.set $mh_src",
+            "      ;; copy len bytes to base + 4",
+            "      i32.const 0",
+            "      local.set $mh_i",
+            "      block $mh_done",
+            "        loop $mh_lp",
+            "          local.get $mh_i",
+            "          local.get $mh_len",
+            "          i32.ge_s",
+            "          br_if $mh_done",
+            "          local.get $mh_base",
+            "          i32.const 4",
+            "          i32.add",
+            "          local.get $mh_i",
+            "          i32.add",
+            "          local.get $mh_src",
+            "          local.get $mh_i",
+            "          i32.add",
+            "          i32.load8_u",
+            "          i32.store8",
+            "          local.get $mh_i",
+            "          i32.const 1",
+            "          i32.add",
+            "          local.set $mh_i",
+            "          br $mh_lp",
+            "        end",
+            "      end",
+            "      ;; return (base + 4) as f64",
+            "      local.get $mh_base",
+            "      i32.const 4",
+            "      i32.add",
+            "      f64.convert_i32_u",
+            "    end",
+            "  )",
+        ]
+        self._funcs.append("\n".join(lines))
+
     def _ensure_str_concat_helper(self):
         """Emit the $__str_concat WAT helper function once per module.
 
@@ -2287,6 +2365,14 @@ class WATCodeGenerator(
             "    i32.and",
             "    i32.add",
             "    global.set $__heap_ptr",
+            "    ;; maintain $__last_str_len = len1 + len2 so the concatenated",
+            "    ;; result is self-describing for callers (e.g. headered string args)",
+            "    local.get $sc_l1",
+            "    i32.trunc_f64_u",
+            "    local.get $sc_l2",
+            "    i32.trunc_f64_u",
+            "    i32.add",
+            "    global.set $__last_str_len",
             "    local.get $sc_dst",
             "  )",
         ]

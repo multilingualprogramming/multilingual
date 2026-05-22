@@ -27,6 +27,7 @@ from multilingualprogramming.codegen.wat_generator_support import (
     _extract_render_mode,
     _name,
     _real_params,
+    _string_typed_params,
 )
 
 
@@ -73,6 +74,7 @@ class WATGeneratorOrchestratorMixin:
             self._func_real_params[fname] = _real_params(func)
             self._func_render_modes[fname] = _extract_render_mode(func)
             self._func_param_list_names[fname] = _infer_list_like_params(func)
+            self._func_string_params[fname] = _string_typed_params(func)
             if self._returns_string_like(func):
                 self._string_return_funcs.add(fname)
 
@@ -91,19 +93,37 @@ class WATGeneratorOrchestratorMixin:
     ):
         """Push argument values for a call to a known WAT function."""
         real_params = self._func_real_params.get(fname)
+        string_params = self._func_string_params.get(fname, set())
         if real_params:
             kwargs = dict(call_expr.keywords or [])
             effective_params = real_params[skip_params:]
             for i, pname in enumerate(effective_params):
                 if i < len(call_expr.args):
                     self._gen_expr(call_expr.args[i], indent)
+                    self._emit_headered_string_arg(pname, string_params, indent)
                 elif pname in kwargs:
                     self._gen_expr(kwargs[pname], indent)
+                    self._emit_headered_string_arg(pname, string_params, indent)
                 else:
                     self._emit(f"{indent}f64.const 0  ;; missing arg: {pname}")
         else:
             for arg in call_expr.args:
                 self._gen_expr(arg, indent)
+
+    def _emit_headered_string_arg(self, pname, string_params, indent: str) -> None:
+        """Wrap a freshly-evaluated string argument in a length-prefixed buffer.
+
+        For parameters annotated as strings, the byte length of the argument is
+        live in ``$__last_str_len`` immediately after evaluation. We copy the
+        bytes into a heap buffer that stores the length in a 4-byte header at
+        ``ptr - 4`` so the callee can recover it (string params otherwise carry
+        no length across the call boundary).
+        """
+        if pname not in string_params:
+            return
+        self._ensure_str_make_headered_helper()
+        self._emit(f"{indent}global.get $__last_str_len")
+        self._emit(f"{indent}call $__str_make_headered")
 
     def _save_func_state(self):
         """Snapshot and reset nested function state while preserving class context."""
@@ -184,6 +204,8 @@ def _reset_generator_state(generator) -> None:
         "_module_global_tuple_names": set(),
         "_module_global_dict_names": set(),
         "_func_param_list_names": {},
+        "_func_string_params": {},
+        "_str_make_headered_helper_emitted": False,
     }
     for name, value in state.items():
         setattr(generator, name, value)
@@ -245,7 +267,10 @@ def _find_declared_global_names(func_def: FunctionDef) -> set[str]:
 
 def _infer_list_like_params(func_def: FunctionDef) -> set[str]:
     """Infer function parameters that should be treated as list-like in WAT."""
-    params = set(_real_params(func_def))
+    # Parameters explicitly annotated as strings are length-prefixed buffers,
+    # not lists: indexing/len on them must take the string path, so exclude
+    # them from list-like inference (otherwise s[i] lowers as a stride-8 load).
+    params = set(_real_params(func_def)) - _string_typed_params(func_def)
     if not params:
         return set()
 

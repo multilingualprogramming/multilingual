@@ -891,5 +891,101 @@ class WATCrossFunctionExceptionTestSuite(unittest.TestCase):
         self.assertIn("1", out)
 
 
+@unittest.skipUnless(
+    importlib.util.find_spec("wasmtime") is not None,
+    "wasmtime is required for WAT execution tests",
+)
+class WATStringParamWasmExecutionTestSuite(unittest.TestCase):
+    """Execute length-prefixed string parameter passing via wasmtime.
+
+    String parameters carry no length in their f64 pointer value; callers wrap
+    string arguments in a length-prefixed buffer (header at ``ptr - 4``) and the
+    callee recovers the byte length at its prologue. These tests prove that
+    ``len``, indexing, char-comparison, and concatenation all behave correctly
+    on a string received as a function argument — the capability that unblocks
+    multi-function string APIs (e.g. the L-system axiom/rules passed as args).
+    """
+
+    def setUp(self):
+        self.gen = WATCodeGenerator()
+
+    def _run_main(self, source):
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+
+        prog = _parse_source(source, "fr")
+        wat = self.gen.generate(prog)
+        engine = wasmtime.Engine()
+        module = wasmtime.Module(engine, wasmtime.wat2wasm(wat))
+        with tempfile.NamedTemporaryFile(suffix=".out", delete=False) as tf:
+            stdout_path = tf.name
+        try:
+            wasi_cfg = wasmtime.WasiConfig()
+            wasi_cfg.stdout_file = stdout_path
+            store = wasmtime.Store(engine)
+            store.set_wasi(wasi_cfg)
+            linker = wasmtime.Linker(engine)
+            linker.define_wasi()
+            instance = linker.instantiate(store, module)
+            instance.exports(store)["__main"](store)
+            with open(stdout_path, encoding="utf-8") as fh:
+                return _parse_wasi_output(fh.read())
+        finally:
+            os.unlink(stdout_path)
+
+    def test_len_of_string_parameter(self):
+        out = self._run_main(
+            "déf taille(s: str):\n"
+            "    retour longueur(s)\n"
+            "afficher(taille(\"Koch\"))\n"
+        )
+        self.assertEqual(out, [4.0])
+
+    def test_indexing_string_parameter(self):
+        # ord(s[0]) and ord(s[1]) on a parameter — string subscript, not list.
+        out = self._run_main(
+            "déf code0(s: str):\n"
+            "    retour ord(s[0])\n"
+            "déf code1(s: str):\n"
+            "    retour ord(s[1])\n"
+            "afficher(code0(\"Koch\"))\n"
+            "afficher(code1(\"Koch\"))\n"
+        )
+        self.assertEqual(out, [75.0, 111.0])
+
+    def test_char_scan_loop_over_string_parameter(self):
+        # The L-system expansion pattern: scan a passed-in string char by char.
+        out = self._run_main(
+            "déf compte_F(s: str):\n"
+            "    soit n = 0\n"
+            "    pour i dans intervalle(longueur(s)):\n"
+            "        si s[i] == \"F\":\n"
+            "            n = n + 1\n"
+            "    retour n\n"
+            "afficher(compte_F(\"F+F-FF+F\"))\n"
+        )
+        self.assertEqual(out, [5.0])
+
+    def test_computed_string_argument_carries_length(self):
+        # A concatenation result (not a literal) passed as a string argument.
+        out = self._run_main(
+            "déf taille(s: str):\n"
+            "    retour longueur(s)\n"
+            "soit a = \"Koch\"\n"
+            "afficher(taille(a + \"-flake\"))\n"
+        )
+        self.assertEqual(out, [10.0])
+
+    def test_string_parameter_passed_through_two_functions(self):
+        # A string param forwarded into another string param keeps its length.
+        out = self._run_main(
+            "déf taille(s: str):\n"
+            "    retour longueur(s)\n"
+            "déf relais(t: str):\n"
+            "    retour taille(t)\n"
+            "afficher(relais(\"dragon\"))\n"
+        )
+        self.assertEqual(out, [6.0])
+
+
 if __name__ == "__main__":
     unittest.main()

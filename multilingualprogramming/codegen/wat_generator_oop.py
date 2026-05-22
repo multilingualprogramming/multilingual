@@ -24,6 +24,7 @@ from multilingualprogramming.codegen.wat_generator_support import (
     _has_decorator,
     _name,
     _real_params,
+    _string_typed_params,
 )
 
 
@@ -48,6 +49,7 @@ class WATGeneratorOOPMixin:  # pylint: disable=too-many-instance-attributes,too-
             lowered = self._mangle_class_method_name(class_name, method_name)
             self._defined_func_names.add(lowered)
             self._func_real_params[lowered] = _real_params(member)
+            self._func_string_params[lowered] = _string_typed_params(member)
             self._func_render_modes[lowered] = _extract_render_mode(member)
             self._class_attr_call_names[f"{class_name}.{method_name}"] = lowered
             if _has_decorator(member, ("staticmethod", "classmethod")):
@@ -341,6 +343,7 @@ class WATGeneratorOOPMixin:  # pylint: disable=too-many-instance-attributes,too-
         self._locals = set(param_names)
         self._list_locals.update(self._func_param_list_names.get(func_name, set()))
 
+        self._emit_string_param_prologue(func_def)
         self._gen_stmts(func_def.body, "    ")
         body_instrs = list(self._instrs)
         self._append_wat_function(func_name, param_names, body_instrs)
@@ -348,6 +351,37 @@ class WATGeneratorOOPMixin:  # pylint: disable=too-many-instance-attributes,too-
             self._funcs.append(self._build_stream_buffer_helpers(func_name))
         self._in_user_func = prev_in_user_func
         self._restore_func_state(saved)
+
+    def _emit_string_param_prologue(self, func_def: FunctionDef) -> None:
+        """Recover byte lengths for string-annotated parameters at entry.
+
+        Callers pass string arguments as length-prefixed buffers (see
+        ``_emit_headered_string_arg``): the byte length lives in a 4-byte header
+        at ``ptr - 4``. Here we read it back into a tracked ``<name>_strlen``
+        local so the rest of the body (``len``, indexing, slicing, comparison,
+        concatenation) works on the parameter exactly like an in-function
+        string. A null/zero pointer yields length 0 without dereferencing.
+        """
+        for pname in _string_typed_params(func_def):
+            len_local = f"{pname}_strlen"
+            self._locals.add(len_local)
+            sym_p = self._wat_symbol(pname)
+            sym_l = self._wat_symbol(len_local)
+            self._emit(f"    local.get ${sym_p}")
+            self._emit("    f64.const 0")
+            self._emit("    f64.ne")
+            self._emit("    if (result f64)")
+            self._emit(f"      local.get ${sym_p}")
+            self._emit("      i32.trunc_f64_u")
+            self._emit("      i32.const 4")
+            self._emit("      i32.sub")
+            self._emit("      i32.load  ;; byte length from header at ptr-4")
+            self._emit("      f64.convert_i32_u")
+            self._emit("    else")
+            self._emit("      f64.const 0")
+            self._emit("    end")
+            self._emit(f"    local.set ${sym_l}")
+            self._string_len_locals[pname] = len_local
 
     def _emit_class(self, class_def: ClassDef) -> None:
         """Lower class methods to standalone WAT functions."""
