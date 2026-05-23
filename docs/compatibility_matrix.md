@@ -4,10 +4,11 @@ This matrix defines the current compatibility baseline for `multilingual`.
 
 Baseline source of truth:
 - `examples/complete_features_en.multi` (`.ml` also supported)
-- `tests/` (2022 tests across 130+ test suites, 2 skipped)
+- `tests/` (2602 passing tests, 14 skipped, plus 417 passing subtests in the
+  latest local 0.7.0 release pass)
 
 Target runtime:
-- CPython `3.12.x`
+- CPython `3.12+` (CI covers Python 3.12, 3.13, and 3.14)
 
 ## Scope Statement
 
@@ -228,7 +229,9 @@ See [docs/wat_oop_model.md](wat_oop_model.md) for the full object model referenc
 
 ## Test Coverage
 
-2022 tests (2 skipped) across 130+ test suites covering:
+The latest local 0.7.0 release pass reported `2602 passed, 14 skipped,
+2 warnings, 417 subtests passed`. The suite currently includes 92 pytest files
+and about 31k lines of tests covering:
 
 | Test area | Suite count | Description |
 |---|---|---|
@@ -242,7 +245,8 @@ See [docs/wat_oop_model.md](wat_oop_model.md) for the full object model referenc
 | Language completeness and CLI features | 8 | Augmented assignment, membership/identity, ternary, assert, chained assignment, CLI, REPL |
 | Advanced language features | 23 | Loop else, yield/raise from, set comprehensions, parameter separators, f-string formatting, match guards/OR/AS, global/nonlocal, builtins, exceptions, surface normalization, data quality, extended builtins, alias resolution, alias execution, starred unpacking, integration, multilingual |
 | WAT/WASM generation | 10+ | WAT text correctness, WAT OOP object model, WASM execution, complete-features WASM execution |
-| Infrastructure | 10 | Keyword registry, AST nodes, AST printer, error messages, runtime builtins, REPL |
+| Core 1 / AI / UI runtime | 20+ | AI runtime, provider adapters, prompts, model registry, retrieval, memory, tools, agents, reactive UI, channels, multimodal values |
+| Infrastructure | 10+ | Keyword registry, AST nodes, AST printer, error messages, runtime builtins, REPL, packaging/build orchestration |
 
 ## Not Guaranteed Yet
 

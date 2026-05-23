@@ -82,11 +82,18 @@ class WATGeneratorCoreMixin:
             lines.append(
                 f'  (global ${self._wat_symbol(global_name)} (mut f64) (f64.const 0))'
             )
-        if self._lambda_table:
-            n = len(self._lambda_table)
-            lines.append(f'  (table {n} funcref)')
-            elems = " ".join(f"${self._wat_symbol(fn)}" for fn in self._lambda_table)
-            lines.append(f'  (elem (i32.const 0) {elems})')
+        # A funcref table is needed for lambda/callback indirection. When a
+        # module uses the DOM bridge (which emits $__dom_dispatch with a
+        # call_indirect) but registers no callback, still declare a 1-slot
+        # table so the module validates; the dispatch is simply never called.
+        table_size = len(self._lambda_table)
+        if table_size == 0 and getattr(self, "_uses_dom", False):
+            table_size = 1
+        if table_size:
+            lines.append(f'  (table {table_size} funcref)')
+            if self._lambda_table:
+                elems = " ".join(f"${self._wat_symbol(fn)}" for fn in self._lambda_table)
+                lines.append(f'  (elem (i32.const 0) {elems})')
         lines.extend(self._funcs)
         lines.append(")")
         return "\n".join(lines)
@@ -177,6 +184,12 @@ class WATGeneratorCoreMixin:
         """Return (byte_offset, byte_length) for a string in the data section."""
         if s not in self._strings:
             encoded = s.encode("utf-8")
+            if not self._data:
+                # Reserve offset 0 so no interned string can alias the null/None
+                # sentinel (f64 pointer 0.0). This keeps length-prefixed string
+                # passing unambiguous: a string argument is never mistaken for
+                # null at a call boundary. 8 bytes preserves heap alignment.
+                self._data.extend(b"\x00" * 8)
             offset = len(self._data)
             self._data.extend(encoded)
             self._strings[s] = (offset, len(encoded))
@@ -784,6 +797,26 @@ class WATGeneratorCoreMixin:
   ;; decode memory.buffer[ptr .. ptr+len] as UTF-8.
   (func $__ml_str_len (export "__ml_str_len") (result i32)
     global.get $__last_str_len
+  )
+  ;; Allocate a length-prefixed string buffer for host->wasm string passing.
+  ;; Reserves `len + 4` bytes, writes `len` as a 4-byte header, and returns the
+  ;; pointer to the bytes (header at ptr-4). JS callers: call __ml_str_alloc(n),
+  ;; write n UTF-8 bytes at the returned ptr, then pass ptr to a string-param
+  ;; export (the callee recovers the length from the header). This is the
+  ;; host-side counterpart of the internal $__str_make_headered helper.
+  (func $__ml_str_alloc (export "__ml_str_alloc") (param $len i32) (result i32)
+    (local $base i32)
+    local.get $len
+    i32.const 4
+    i32.add
+    call $ml_alloc
+    local.set $base
+    local.get $base
+    local.get $len
+    i32.store
+    local.get $base
+    i32.const 4
+    i32.add
   )
   ;; Print a double-precision float always showing a decimal point.
   ;; Integer values (v == trunc(v), |v| < 1e15) are printed as "N.0".
@@ -1959,13 +1992,11 @@ class WATGeneratorCoreMixin:
   (func $math_sin (param $x f64) (result f64)
     (local $u f64) (local $t f64)
     local.get $x
-    f64.const 3.141592653589793
-    f64.add
-    local.set $x
-    local.get $x
     local.get $x
     f64.const 6.283185307179586
     f64.div
+    f64.const 0.5
+    f64.add
     f64.floor
     f64.const 6.283185307179586
     f64.mul
@@ -2035,13 +2066,11 @@ class WATGeneratorCoreMixin:
     f64.const 1.0
     local.set $sign
     local.get $x
-    f64.const 3.141592653589793
-    f64.add
-    local.set $x
-    local.get $x
     local.get $x
     f64.const 6.283185307179586
     f64.div
+    f64.const 0.5
+    f64.add
     f64.floor
     f64.const 6.283185307179586
     f64.mul
@@ -2180,8 +2209,17 @@ class WATGeneratorCoreMixin:
     f64.const 1.0
     f64.add
   )
-  ;; log(x): natural log via atanh series ln(x)=2*atanh((x-1)/(x+1)), 5 terms.
+  ;; log(x): natural log with IEEE-754 mantissa range reduction.
+  ;;
+  ;; x = m * 2^e with m in [1, 2); log(x) = log(m) + e * log(2). After splitting,
+  ;; reduce m further to [sqrt(1/2), sqrt(2)) so the atanh series argument
+  ;; t = (m-1)/(m+1) stays in [-0.172, 0.172], where 5 odd terms converge to
+  ;; ~2.2e-8. Without range reduction the previous implementation was ~2% off
+  ;; for arguments far from 1 (e.g. log(10) ≈ 2.255 vs the true 2.303).
   (func $math_log (param $x f64) (result f64)
+    (local $bits i64)
+    (local $e f64)
+    (local $m f64)
     (local $t f64) (local $t2 f64) (local $s f64)
     local.get $x
     f64.const 0.0
@@ -2190,10 +2228,47 @@ class WATGeneratorCoreMixin:
       f64.const nan
       return
     end
+    ;; bits = i64 reinterpretation of x
     local.get $x
+    i64.reinterpret_f64
+    local.set $bits
+    ;; e = ((bits >> 52) & 0x7FF) - 1023, as f64
+    local.get $bits
+    i64.const 52
+    i64.shr_u
+    i64.const 2047
+    i64.and
+    i64.const 1023
+    i64.sub
+    f64.convert_i64_s
+    local.set $e
+    ;; m_bits = (bits & 0x000FFFFFFFFFFFFF) | 0x3FF0000000000000  -> m in [1, 2)
+    local.get $bits
+    i64.const 4503599627370495
+    i64.and
+    i64.const 4607182418800017408
+    i64.or
+    f64.reinterpret_i64
+    local.set $m
+    ;; Tighten the range: if m >= sqrt(2), m /= 2 and e += 1.
+    local.get $m
+    f64.const 1.4142135623730951
+    f64.ge
+    if
+      local.get $m
+      f64.const 0.5
+      f64.mul
+      local.set $m
+      local.get $e
+      f64.const 1.0
+      f64.add
+      local.set $e
+    end
+    ;; t = (m - 1) / (m + 1)
+    local.get $m
     f64.const 1.0
     f64.sub
-    local.get $x
+    local.get $m
     f64.const 1.0
     f64.add
     f64.div
@@ -2202,8 +2277,10 @@ class WATGeneratorCoreMixin:
     local.get $t
     f64.mul
     local.set $t2
+    ;; s = t (1st term)
     local.get $t
     local.set $s
+    ;; + t*t2 / 3
     local.get $t
     local.get $t2
     f64.mul
@@ -2212,6 +2289,7 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; + t*t2^2 / 5
     local.get $t
     local.get $t2
     f64.mul
@@ -2222,6 +2300,7 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; + t*t2^3 / 7
     local.get $t
     local.get $t2
     f64.mul
@@ -2234,6 +2313,7 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; + t*t2^4 / 9
     local.get $t
     local.get $t2
     f64.mul
@@ -2248,9 +2328,14 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; log(m) = 2*s ; log(x) = log(m) + e * log(2)
     local.get $s
     f64.const 2.0
     f64.mul
+    local.get $e
+    f64.const 0.6931471805599453
+    f64.mul
+    f64.add
   )
   ;; log2(x) = log(x) * (1/ln 2).
   (func $math_log2 (param $x f64) (result f64)

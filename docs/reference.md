@@ -93,6 +93,7 @@ Key capabilities:
 ### Runtime and Execution
 
 - `PythonCodeGenerator`
+- `WATCodeGenerator`
 - `RuntimeBuiltins`
 - `ProgramExecutor`
 - `REPL`
@@ -100,15 +101,17 @@ Key capabilities:
 Key capabilities:
 
 - transpile multilingual semantic IR to Python source
-- execute full pipeline: source -> tokens -> optional normalization -> AST -> IR -> checks -> Python/WAT -> runtime
+- execute full pipeline: source -> tokens -> optional normalization -> AST -> semantic IR -> checks -> Python/WAT -> runtime
 - inject multilingual runtime builtins
-- interactive REPL with language switching and Python-preview mode
+- interactive REPL with language switching and Python, WAT, and Rust/Wasmtime preview modes
 
 ### AI Runtime
 
 - `AIRuntime` — singleton registry that dispatches AI calls to the active provider
 - `AIProvider` — abstract base class for LLM backends
 - `AnthropicProvider` — concrete provider backed by the Anthropic Messages API
+- `OpenAIProvider` — concrete provider backed by the OpenAI Python SDK
+- `OllamaProvider` — concrete provider backed by a local Ollama instance
 
 Key capabilities:
 
@@ -122,6 +125,9 @@ Key capabilities:
 
 Model reference literals in source (`@claude-sonnet`, `@claude-haiku`, …) resolve to
 full model IDs via `AnthropicProvider._MODEL_ALIASES`.
+
+Concrete provider SDKs are optional dependencies. Install
+`multilingualprogramming[ai]` to get OpenAI, Anthropic, and Ollama support.
 
 ### Reactive / UI Runtime
 

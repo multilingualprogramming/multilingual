@@ -25,7 +25,7 @@ Tests both backends across multiple platforms and Python versions.
 - **Platforms**: Linux (Ubuntu), macOS, Windows
 - **Python versions**: 3.12, 3.13
 - **Backends**: WASM, Python fallback
-- **Total combinations**: 3 × 4 × 2 = 24 test configurations
+- **Total combinations**: 3 × 2 × 2 = 12 test configurations
 
 **Test Execution:**
 
@@ -244,7 +244,7 @@ Parity Validation Results
 ### Required Checks
 
 All PRs require:
-1. ✅ All backend matrix tests passing (24 configurations)
+1. ✅ All backend matrix tests passing (12 configurations)
 2. ✅ Cross-backend parity validation passing
 3. ✅ Minimum coverage thresholds met (>90%)
 4. ✅ No performance regressions (>1.5x WASM speedup maintained)
@@ -348,7 +348,7 @@ pytest tests/wasm_comprehensive_test.py::PlatformCompatibilityTestSuite -vv
 
 ---
 
-**Last updated**: 2026-02-22
+**Last updated**: 2026-05-23
 **Maintainer**: John Samuel
 
 For questions about the testing strategy, see:

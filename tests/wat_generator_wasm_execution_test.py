@@ -438,6 +438,102 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertEqual(self._call_export(prog, "cellule_suivante", 90.0, 1.0, 0.0, 1.0), 0.0)
         self.assertEqual(self._call_export(prog, "classe_wolfram", 30.0), 3.0)
 
+    def test_string_subscript_equality_compares_content_not_pointer(self):
+        # Counting characters by scanning s[i] == "F" requires content-based
+        # string equality (not heap-pointer comparison) and string tracking to
+        # survive the `ch = s[i]` intermediate binding.
+        prog = _parse_source(
+            "déf compter_f():\n"
+            "    soit s = \"FABF\"\n"
+            "    soit total = 0\n"
+            "    pour i dans intervalle(longueur(s)):\n"
+            "        soit ch = s[i]\n"
+            "        si ch == \"F\":\n"
+            "            total = total + 1\n"
+            "    retour total\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "compter_f"), 2.0)
+
+    def test_string_equality_and_inequality_on_locals(self):
+        prog = _parse_source(
+            "déf egal():\n"
+            "    soit a = \"koch\"\n"
+            "    soit b = \"koch\"\n"
+            "    si a == b:\n"
+            "        retour 1\n"
+            "    retour 0\n"
+            "\n"
+            "déf different():\n"
+            "    soit a = \"koch\"\n"
+            "    soit b = \"dragon\"\n"
+            "    si a != b:\n"
+            "        retour 1\n"
+            "    retour 0\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "egal"), 1.0)
+        self.assertEqual(self._call_export(prog, "different"), 1.0)
+
+    def test_runtime_sized_list_repeat_allocates_and_fills(self):
+        # `[0.0] * n` must allocate a runtime-sized list that supports
+        # element assignment (buf[i] = ...) and len() — enabling O(n) buffer
+        # fills instead of O(n^2) append chains.
+        prog = _parse_source(
+            "déf somme_tampon():\n"
+            "    soit buf = [0.0] * 5\n"
+            "    soit i = 0\n"
+            "    tantque i < 5:\n"
+            "        buf[i] = i * 2\n"
+            "        i = i + 1\n"
+            "    soit s = 0.0\n"
+            "    soit k = 0\n"
+            "    tantque k < longueur(buf):\n"
+            "        s = s + buf[k]\n"
+            "        k = k + 1\n"
+            "    retour s\n",
+            language="fr",
+        )
+        # buf = [0, 2, 4, 6, 8] → sum 20
+        self.assertEqual(self._call_export(prog, "somme_tampon"), 20.0)
+
+    def test_ord_returns_first_utf8_byte(self):
+        prog = _parse_source(
+            "déf ord_F():\n    retour ord(\"F\")\n"
+            "déf ord_plus():\n    retour ord(\"+\")\n"
+            "déf ord_sub():\n    soit s = \"AF+\"\n    retour ord(s[1])\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "ord_F"), 70.0)
+        self.assertEqual(self._call_export(prog, "ord_plus"), 43.0)
+        self.assertEqual(self._call_export(prog, "ord_sub"), 70.0)  # s[1] == 'F'
+
+    def test_math_sin_cos_have_correct_sign_and_range_reduction(self):
+        # Regression: math.sin/cos previously returned the negated value
+        # (an uncompensated +pi phase shift), so cos(0) came back as -1.
+        prog = _parse_source(
+            "déf c0():\n    retour math.cos(0.0)\n"
+            "déf s0():\n    retour math.sin(0.0)\n"
+            "déf spi2():\n    retour math.sin(1.5707963267948966)\n"
+            "déf cpi():\n    retour math.cos(3.141592653589793)\n"
+            "déf cbig():\n    retour math.cos(12.566370614359172)\n"
+            # Range reduction must keep the correct sign in (3*pi/2, 2*pi) and
+            # for negative angles: cos(300deg) = cos(-60deg) = +0.5.
+            "déf cneg60():\n    retour math.cos(-1.0471975511965976)\n"
+            "déf c300():\n    retour math.cos(5.235987755982988)\n"
+            "déf c240():\n    retour math.cos(4.1887902047863905)\n",
+            language="fr",
+        )
+        self.assertAlmostEqual(self._call_export(prog, "c0"), 1.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "s0"), 0.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "spi2"), 1.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "cpi"), -1.0, places=5)
+        # range reduction: cos(4*pi) == 1
+        self.assertAlmostEqual(self._call_export(prog, "cbig"), 1.0, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "cneg60"), 0.5, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "c300"), 0.5, places=5)
+        self.assertAlmostEqual(self._call_export(prog, "c240"), -0.5, places=5)
+
 
 @unittest.skipUnless(
     importlib.util.find_spec("wasmtime") is not None,
@@ -793,6 +889,102 @@ class WATCrossFunctionExceptionTestSuite(unittest.TestCase):
         out = self._run(prog)
         self.assertIn("ok", out)
         self.assertIn("1", out)
+
+
+@unittest.skipUnless(
+    importlib.util.find_spec("wasmtime") is not None,
+    "wasmtime is required for WAT execution tests",
+)
+class WATStringParamWasmExecutionTestSuite(unittest.TestCase):
+    """Execute length-prefixed string parameter passing via wasmtime.
+
+    String parameters carry no length in their f64 pointer value; callers wrap
+    string arguments in a length-prefixed buffer (header at ``ptr - 4``) and the
+    callee recovers the byte length at its prologue. These tests prove that
+    ``len``, indexing, char-comparison, and concatenation all behave correctly
+    on a string received as a function argument — the capability that unblocks
+    multi-function string APIs (e.g. the L-system axiom/rules passed as args).
+    """
+
+    def setUp(self):
+        self.gen = WATCodeGenerator()
+
+    def _run_main(self, source):
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+
+        prog = _parse_source(source, "fr")
+        wat = self.gen.generate(prog)
+        engine = wasmtime.Engine()
+        module = wasmtime.Module(engine, wasmtime.wat2wasm(wat))
+        with tempfile.NamedTemporaryFile(suffix=".out", delete=False) as tf:
+            stdout_path = tf.name
+        try:
+            wasi_cfg = wasmtime.WasiConfig()
+            wasi_cfg.stdout_file = stdout_path
+            store = wasmtime.Store(engine)
+            store.set_wasi(wasi_cfg)
+            linker = wasmtime.Linker(engine)
+            linker.define_wasi()
+            instance = linker.instantiate(store, module)
+            instance.exports(store)["__main"](store)
+            with open(stdout_path, encoding="utf-8") as fh:
+                return _parse_wasi_output(fh.read())
+        finally:
+            os.unlink(stdout_path)
+
+    def test_len_of_string_parameter(self):
+        out = self._run_main(
+            "déf taille(s: str):\n"
+            "    retour longueur(s)\n"
+            "afficher(taille(\"Koch\"))\n"
+        )
+        self.assertEqual(out, [4.0])
+
+    def test_indexing_string_parameter(self):
+        # ord(s[0]) and ord(s[1]) on a parameter — string subscript, not list.
+        out = self._run_main(
+            "déf code0(s: str):\n"
+            "    retour ord(s[0])\n"
+            "déf code1(s: str):\n"
+            "    retour ord(s[1])\n"
+            "afficher(code0(\"Koch\"))\n"
+            "afficher(code1(\"Koch\"))\n"
+        )
+        self.assertEqual(out, [75.0, 111.0])
+
+    def test_char_scan_loop_over_string_parameter(self):
+        # The L-system expansion pattern: scan a passed-in string char by char.
+        out = self._run_main(
+            "déf compte_F(s: str):\n"
+            "    soit n = 0\n"
+            "    pour i dans intervalle(longueur(s)):\n"
+            "        si s[i] == \"F\":\n"
+            "            n = n + 1\n"
+            "    retour n\n"
+            "afficher(compte_F(\"F+F-FF+F\"))\n"
+        )
+        self.assertEqual(out, [5.0])
+
+    def test_computed_string_argument_carries_length(self):
+        # A concatenation result (not a literal) passed as a string argument.
+        out = self._run_main(
+            "déf taille(s: str):\n"
+            "    retour longueur(s)\n"
+            "soit a = \"Koch\"\n"
+            "afficher(taille(a + \"-flake\"))\n"
+        )
+        self.assertEqual(out, [10.0])
+
+    def test_string_parameter_passed_through_two_functions(self):
+        # A string param forwarded into another string param keeps its length.
+        out = self._run_main(
+            "déf taille(s: str):\n"
+            "    retour longueur(s)\n"
+            "déf relais(t: str):\n"
+            "    retour taille(t)\n"
+            "afficher(relais(\"dragon\"))\n"
+        )
+        self.assertEqual(out, [6.0])
 
 
 if __name__ == "__main__":

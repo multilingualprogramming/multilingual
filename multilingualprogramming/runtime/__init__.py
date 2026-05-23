@@ -44,6 +44,7 @@ Agent memory and coordination
 """
 
 from multilingualprogramming.runtime.ai_runtime import AIRuntime, AIProvider
+from multilingualprogramming.runtime.anthropic_provider import AnthropicProvider
 from multilingualprogramming.runtime.ollama_provider import OllamaProvider
 from multilingualprogramming.runtime.openai_provider import OpenAIProvider
 from multilingualprogramming.runtime.ai_types import (
@@ -101,6 +102,7 @@ __all__ = [
     # AI
     "AIProvider",
     "AIRuntime",
+    "AnthropicProvider",
     "OllamaProvider",
     "OpenAIProvider",
     "EmbeddingVector",

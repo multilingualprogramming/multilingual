@@ -1,6 +1,6 @@
 # Memory Card Game - Reactive UI Demo
 
-**Status:** Demo for Multilingual v0.8.0 Release  
+**Status:** Demo for Multilingual v0.7.0 reactive UI/Core 1 preview
 **Created:** 2026-05-08  
 **Purpose:** Showcase Reactive UI keywords in interactive web game
 
@@ -8,7 +8,10 @@
 
 ## Overview
 
-The Memory Card Game is the flagship demonstration of Multilingual's new **Reactive UI keywords** in v0.8.0. It proves that complex interactive applications can be built purely through **reactive state management** without traditional imperative game loops or framework overhead.
+The Memory Card Game demonstrates Multilingual's **Reactive UI keywords** in
+the 0.7.0 Core 1 preview. It shows how interactive applications can be built
+through reactive state management without traditional imperative game loops or
+framework overhead.
 
 ### What This Demo Shows
 
@@ -32,12 +35,12 @@ The Memory Card Game is the flagship demonstration of Multilingual's new **React
 | `examples/memory_game_fr.multi` | Memory game in French (polyglot) |
 | `docs/memory-game-demo.html` | GitHub Pages interactive demo |
 
-### Compiled Artifacts (Generated)
+### Generated Artifacts
 
 | Artifact | Generated From | Format |
 |----------|---|--------|
-| `memory_game_en.wasm` | `memory_game_en.multi` | WebAssembly binary |
-| `memory_game_fr.wasm` | `memory_game_fr.multi` | WebAssembly binary |
+| `docs/browser/memory-game/index.html` | `memory_game_en.multi` | Browser UI bundle |
+| `docs/browser/memory-game/bundle.js` | `memory_game_en.multi` | Browser UI bundle JavaScript |
 
 ---
 
@@ -193,37 +196,31 @@ The French version (`memory_game_fr.multi`) uses identical logic with French syn
 | Range | `range()` | `intervalle()` |
 | String | `str()` | `chaine()` |
 
-Both compile to **identical WASM** and execute **identically**. This proves:
+Both lower through the same semantic IR and execute with equivalent behavior. This proves:
 - ✅ Semantic IR is language-independent
 - ✅ Multiple syntaxes can coexist
 - ✅ Users choose their language, not the language
 
 ---
 
-## Compilation
+## Build
 
-### To WebAssembly
+### Browser UI Bundle
 
 ```bash
-# Compile English version
-python -m multilingualprogramming examples/memory_game_en.multi \
-    --target=wasm \
-    --output=memory_game_en.wasm
-
-# Compile French version
-python -m multilingualprogramming examples/memory_game_fr.multi \
-    --target=wasm \
-    --output=memory_game_fr.wasm
+multilingual build-ui-bundle examples/memory_game_en.multi \
+    --lang en \
+    --out-dir docs/browser/memory-game
 ```
 
 ### To Python (for testing)
 
 ```bash
 # Execute directly with Python backend
-python examples/memory_game_en.multi
+multilingual run examples/memory_game_en.multi --lang en
 
 # Or run with pytest for validation
-python -m pytest tests/ -k "memory_game"
+python3 -m pytest tests/ -k "memory_game"
 ```
 
 ---
@@ -316,9 +313,8 @@ python examples/memory_game_en.multi
 - JS footprint <500 lines
 - Demonstrates language can handle application logic
 
-### 4. **WASM-Ready**
-- Compiles to WebAssembly binaries
-- Runs with native performance
+### 4. **Browser-Ready**
+- Builds as a self-contained browser UI bundle
 - Deployable on GitHub Pages
 - No backend services needed
 
@@ -334,29 +330,29 @@ python examples/memory_game_en.multi
 
 | Metric | Value |
 |--------|-------|
-| WASM Binary Size | ~50KB (uncompressed) |
-| Compilation Time | <500ms |
-| Game Load Time | <100ms |
-| Click-to-Render | <16ms (60 FPS) |
-| Memory Usage | <2MB |
+| UI Bundle Size | Small static HTML + JavaScript bundle |
+| Build Path | `multilingual build-ui-bundle` |
+| Game Load Time | Static-site load path |
+| Click-to-Render | Reactive update path |
+| Memory Usage | Browser-runtime dependent |
 
 ---
 
 ## Future Enhancements
 
-### v0.8.1
+### Future
 - Leaderboard with localStorage persistence
 - Difficulty levels (6, 10, 16 cards)
 - Sound effects (reactive audio)
 - Themes (dark mode via observe)
 
-### v0.9.0
+### Later
 - Multiplayer (via WebSockets/channels)
 - Game variants (Simon Says, Pong - same reactive pattern)
 - AI opponent using ML keywords
 - Share/remix capability
 
-### v1.0.0
+### Long Term
 - Native mobile apps (iOS/Android WASM)
 - Offline support (service workers)
 - Cloud save (if backend available)
@@ -369,7 +365,7 @@ python examples/memory_game_en.multi
 - [Frontend Contracts](frontend_contracts.md) — Detailed API reference
 - [WASM AI Integration](WASM_AI_INTEGRATION.md) — How to add AI to WASM apps
 - [Language Reference](reference.md) — All 17 language variants
-- [Release Notes](_generated/RELEASE.md) — What's new
+- [Release Notes](CHANGELOG.md) — What's new
 
 ---
 
@@ -387,9 +383,7 @@ See [Contributing Guide](_generated/CONTRIBUTING.md) for details.
 
 ---
 
-**Status:** ✅ Ready for v0.8.0 Release  
+**Status:** Ready for the 0.7.0 reactive UI/Core 1 preview
 **Demo URL:** https://multilingual-programming.github.io/memory-game  
-**Last Updated:** 2026-05-08  
+**Last Updated:** 2026-05-23
 **Maintainer:** Multilingual Programming Team
-
-

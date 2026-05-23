@@ -32,7 +32,7 @@
 | **Package name** | `multilingualprogramming` |
 | **CLI commands** | `multilingual`, `multilg` (alias) |
 | **Tagline** | "One programming model. Many human languages." |
-| **Version** | `0.6.0` (see `multilingualprogramming/version.py`) |
+| **Version** | `0.7.0` (see `multilingualprogramming/version.py`) |
 | **Status** | Beta (Development Status :: 4) |
 | **Python requirement** | ≥ 3.12 |
 | **License** | GPL-3.0-or-later (code), CC BY-SA 4.0 (docs) |
@@ -66,7 +66,7 @@ SurfaceNormalizer?          multilingualprogramming/parser/surface_normalizer.py
     Parser                  multilingualprogramming/parser/parser.py
         │  AST
         ▼
-Semantic IR lowering        multilingualprogramming/core/lowering.py
+Semantic IR lowering        multilingualprogramming/core/semantic_lowering.py
         │  IRProgram
         ▼
  SemanticAnalyzer           multilingualprogramming/core/semantic_analyzer.py
@@ -136,7 +136,7 @@ multilingual/
 ├── multilingualprogramming/            ← main package
 │   ├── __init__.py                     ← public API exports (88 items)
 │   ├── __main__.py                     ← CLI entry point (argparse)
-│   ├── version.py                      ← version = "0.6.0"
+│   ├── version.py                      ← version = "0.7.0"
 │   ├── exceptions.py                   ← custom exceptions
 │   ├── imports.py                      ← multilingual .multi/.ml import support
 │   ├── unicode_string.py               ← Unicode string utilities
@@ -220,7 +220,7 @@ multilingual/
 │       ├── tuple_abi.py                ← tuple serialization
 │       └── tuple_memory.py             ← memory management
 │
-├── tests/                              ← 67 test files, ~22,284 lines
+├── tests/                              ← 92 pytest files, ~31,344 lines
 ├── examples/                           ← 33 .multi example files (17 languages, .ml also supported)
 ├── docs/                               ← 29+ markdown files + French docs
 └── tools/                              ← development utilities
@@ -315,7 +315,7 @@ registry = KeywordRegistry.get_instance()
 - `_skip_bracket_newlines()`: skips NEWLINE, COMMENT, INDENT, DEDENT — **required** inside
   list/dict/call/tuple to handle multi-line literals.
 
-### Semantic IR Lowering (`core/lowering.py`)
+### Semantic IR Lowering (`core/semantic_lowering.py`)
 
 - Bridges the shared parser AST toward the Core 1.0 semantic direction.
 - Produces `IRProgram` and related IR nodes for downstream analysis/codegen.
@@ -638,9 +638,9 @@ CI gates before merge: `pythonpackage`, `pylint`, `package-artifacts`, `compatib
 ### Test Suite Overview
 
 - **Location**: `tests/`
-- **Files**: 67 test files, ~22,284 lines of test code
+- **Files**: 92 pytest files, ~31,344 lines of test code
 - **Discovery**: `test_*.py` and `*_test.py`
-- **Total tests**: ~2,022 (2 skipped — require `rustc wasm32` target)
+- **Latest local release pass**: 2602 passed, 14 skipped, 417 subtests passed
 
 ### Running Tests
 
@@ -884,7 +884,7 @@ Both forms must appear in the language's array for reliable lexer matching.
 
 ## 15. Version & Release Info
 
-### Current Version: `0.6.0`
+### Current Version: `0.7.0`
 
 Defined in `multilingualprogramming/version.py`.
 
@@ -892,6 +892,7 @@ Defined in `multilingualprogramming/version.py`.
 
 | Version | Highlights |
 |---|---|
+| `0.7.0` | Core 1 semantic runtime expansion; AI, multimodal, retrieval, memory, tools, agents/swarm, reactive UI, structured concurrency, model registry, prompt optimization, and provider adapters; WAT/WASM string/list/math/DOM/JSON/generator improvements; browser/UI bundle commands and ABI/shim tooling |
 | `0.6.0` | WAT/WASM OOP object model, inheritance, `with`/`try`/`match`/`lambda`/`async` lowering, bytes support, WAT backend reorganization; real `try/except/finally` with numeric exception codes; `input()` / `argc()` / `argv()` builtins; DOM bridge (`"env"` host imports + WAT wrappers); source location comments in WAT |
 | `0.5.1` | Documentation updates |
 | `0.5.0` | WAT/WASM OOP object model; class lowering; inheritance; WAT execution tests; Unicode identifier reliability |
@@ -909,4 +910,4 @@ via the `release-pypi.yml` GitHub Actions workflow.
 
 ---
 
-*Last updated: 2026-03-16. For changes after this date, check CHANGELOG.md and git log.*
+*Last updated: 2026-05-23. For changes after this date, check CHANGELOG.md and git log.*

@@ -49,6 +49,11 @@ class WATGeneratorExpressionMixin:
         if op == "+" and self._is_string_binop(node):
             self._emit_string_concat_binop(node, indent)
             return
+        if op == "*":
+            repeat = self._list_repeat_operands(node)
+            if repeat is not None:
+                self._gen_list_repeat_alloc(repeat[0], repeat[1], indent)
+                return
         self._emit_numeric_binop(node, indent)
 
     def _emit_modulo_binop(self, node: BinaryOp, indent: str):
@@ -110,7 +115,8 @@ class WATGeneratorExpressionMixin:
             or (
                 isinstance(expr, CallExpr)
                 and (
-                    _name(expr.func) in self._string_return_funcs
+                    _name(expr.func) == "dom_value_str"
+                    or _name(expr.func) in self._string_return_funcs
                     or _name(expr.func) in _STR_NAMES
                     or (
                         isinstance(expr.func, AttributeAccess)

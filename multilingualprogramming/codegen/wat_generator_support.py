@@ -182,6 +182,27 @@ def _real_params(func_def: FunctionDef) -> list:
     return result
 
 
+def _string_typed_params(func_def: FunctionDef) -> set:
+    """Return the names of parameters explicitly annotated as strings.
+
+    The parser normalizes ``str``/``chaîne``/``chaine`` (and other localized
+    spellings) to an :class:`Identifier` named ``"str"``. These parameters are
+    passed as length-prefixed buffers at the call site so the callee can
+    recover their byte length from the 4-byte header at ``ptr - 4``.
+    """
+    names = set()
+    for p in (func_def.params or []):
+        pname = _name(p.name)
+        if pname in _PARAM_SEPARATORS:
+            continue
+        if getattr(p, "is_vararg", False) or getattr(p, "is_kwarg", False):
+            continue
+        annotation = getattr(p, "annotation", None)
+        if isinstance(annotation, Identifier) and annotation.name == "str":
+            names.add(pname)
+    return names
+
+
 def _extract_render_mode(func_def: FunctionDef) -> str:
     """Extract @render_mode("...") metadata from function decorators."""
     for decorator in (func_def.decorators or []):

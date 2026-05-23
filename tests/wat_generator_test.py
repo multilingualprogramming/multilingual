@@ -863,7 +863,9 @@ class WATPrintTestSuite(unittest.TestCase):
     def test_string_ptr_and_len_emitted(self):
         """i32.const for ptr and len must be emitted for print_str."""
         wat = self._wat(self._print(StringLiteral("hi")))
-        self.assertIn("i32.const 0   ;; str ptr", wat)
+        # Offset 0 is reserved (8 bytes) so no interned string aliases the
+        # null/None sentinel; the first literal therefore lives at offset 8.
+        self.assertIn("i32.const 8   ;; str ptr", wat)
         self.assertIn("i32.const 2   ;; str len", wat)
 
     def test_string_deduplication(self):
@@ -872,9 +874,9 @@ class WATPrintTestSuite(unittest.TestCase):
             self._print(StringLiteral("x")),
             self._print(StringLiteral("x")),
         )
-        # Data section should contain "x" (1 byte) only once → total data = 1 byte
-        # Both print calls should reference offset 0
-        self.assertEqual(wat.count("i32.const 0   ;; str ptr"), 2)
+        # "x" is interned once; both print calls reference the same offset.
+        # Offset 0 is reserved, so the first literal lives at offset 8.
+        self.assertEqual(wat.count("i32.const 8   ;; str ptr"), 2)
 
     def test_print_emits_comment(self):
         wat = self._wat(self._print(NumeralLiteral("1")))
@@ -1356,14 +1358,15 @@ class WATStringInternTestSuite(unittest.TestCase):
     def test_second_string_offset_follows_first(self):
         """Consecutive strings must be laid out sequentially in memory."""
         wat = self.gen.generate(_prog(
-            self._print_stmt("hi"),     # offset 0, len 2
-            self._print_stmt("world"),  # offset 2, len 5
+            self._print_stmt("hi"),     # offset 8, len 2
+            self._print_stmt("world"),  # offset 10, len 5
         ))
-        # First string: ptr=0, len=2
-        self.assertIn("i32.const 0   ;; str ptr", wat)
+        # Offset 0 is reserved (8 bytes), so the first string starts at offset 8.
+        # First string: ptr=8, len=2
+        self.assertIn("i32.const 8   ;; str ptr", wat)
         self.assertIn("i32.const 2   ;; str len", wat)
-        # Second string: ptr=2, len=5
-        self.assertIn("i32.const 2   ;; str ptr", wat)
+        # Second string: ptr=10, len=5
+        self.assertIn("i32.const 10   ;; str ptr", wat)
         self.assertIn("i32.const 5   ;; str len", wat)
 
     def test_same_string_reuses_offset(self):
@@ -1372,8 +1375,8 @@ class WATStringInternTestSuite(unittest.TestCase):
             self._print_stmt("dup"),
             self._print_stmt("dup"),
         ))
-        # Both calls reference offset 0
-        self.assertEqual(wat.count("i32.const 0   ;; str ptr"), 2)
+        # Both calls reference the same offset (8; offset 0 is reserved)
+        self.assertEqual(wat.count("i32.const 8   ;; str ptr"), 2)
 
     def test_empty_string_has_zero_length(self):
         """Empty string literal must use length 0."""
@@ -1385,8 +1388,8 @@ class WATStringInternTestSuite(unittest.TestCase):
         gen = WATCodeGenerator()
         gen.generate(_prog(self._print_stmt("first")))
         wat2 = gen.generate(_prog(self._print_stmt("second")))
-        # After reset, "second" should start at offset 0
-        self.assertIn("i32.const 0   ;; str ptr", wat2)
+        # After reset, "second" should start at offset 8 (offset 0 reserved)
+        self.assertIn("i32.const 8   ;; str ptr", wat2)
 
 
 # ---------------------------------------------------------------------------

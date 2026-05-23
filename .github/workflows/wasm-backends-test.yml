@@ -12,6 +12,9 @@ on:
     # Run weekly comprehensive test
     - cron: '0 0 * * 0'
 
+permissions:
+  contents: read
+
 jobs:
   backend-testing:
     name: Test ${{ matrix.backend }} backend on Python ${{ matrix.python-version }}

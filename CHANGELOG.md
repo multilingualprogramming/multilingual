@@ -6,9 +6,51 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-23
+
 ### Added
 
+#### WAT/WASM backend — math accuracy
+- **`math.log` mantissa range reduction.** The atanh series was applied directly to `x`, so
+  `log(10)` returned ~2.255 instead of 2.302585 (~2% error for arguments far from 1). Now uses
+  IEEE-754 bit manipulation (`i64.reinterpret_f64`) to split `x = m·2^e`, reduces `m` further to
+  `[sqrt(0.5), sqrt(2))`, and computes `log(m) + e·log(2)`. The atanh argument stays in
+  `[-0.172, 0.172]` so the 5-term series converges to ~2.2e-8. Verified to ~1e-6 accuracy across
+  `log(0.5)` → `log(1e10)`.
+
+#### WAT/WASM backend — list-return propagation
+- **User functions returning lists are now tracked at the call site.** A function whose body
+  returns a list literal (`retour [a, b]`), a list-repeat (`retour [0]*n`), a tracked-list local,
+  or another list-returning call is detected by `_returns_list_like` and registered in
+  `_sequence_func_names`. The caller's `x = func(...)` therefore makes `x` a tracked list, so
+  `x[i]` indexing lowers correctly (previously fell back to `f64.const 0 ;; unsupported:
+  IndexAccess on non-list`). Unblocks pure-`.multi` Dekker arithmetic (`two_sum`/`two_product`
+  returning `[hi, lo]`) and other helpers that return small fixed-shape lists.
+
+#### WAT/WASM backend — host-side helpers
+- **`__ml_str_alloc(len)` exported** (companion to `__ml_str_len`): JS calls this to allocate a
+  length-prefixed string buffer for host→wasm string passing. Writes the byte length as a
+  4-byte header and returns the pointer to the bytes (header at `ptr-4`). Used by the fractales
+  L-système main-canvas migration to pass axiom/rules as real string args.
+
 #### WAT/WASM backend — string operations
+- **Length-prefixed string parameters (cross-function string passing)**: string values carry no
+  length in their f64 pointer, so passing a string as a function argument previously lost its byte
+  length in the callee. Parameters annotated as strings (`s: str` / `s: chaîne`, normalized to the
+  identifier `str`) are now passed as **length-prefixed buffers**: the caller copies the argument
+  via the new `$__str_make_headered` helper, which writes the byte length as a 4-byte header at
+  `ptr - 4`, and the callee recovers it into a tracked `<name>_strlen` local at its prologue. This
+  makes `len(s)`, indexing (`s[i]`), slicing (`s[a:b]`), char comparison (`s[i] == "F"`), and
+  concatenation work on a string received as an argument — enabling multi-function string APIs.
+  String-annotated parameters are also excluded from list-like inference so `s[i]` lowers as a
+  string subscript rather than a stride-8 list load. Data offset `0` is now reserved (8 bytes) so
+  no interned string can alias the null/None sentinel pointer. `$__str_concat` now maintains
+  `$__last_str_len = len1 + len2`, so concatenation results are self-describing for callers.
+- **String content equality (`==` / `!=`)**: comparisons where both operands are string-valued
+  now lower to a new `$__str_eq` WAT helper that compares UTF-8 byte ranges, instead of comparing
+  heap pointers. This makes `s[i] == "F"`, `slice == literal`, and string-valued method results
+  compare by content. Variables bound to a string subscript/slice/method result (`ch = s[i]`) now
+  retain string-length tracking, so equality on them compares content too.
 - **`str(x)` number-to-string conversion**: `str(42)` → `"42"`, `str(3.14)` → `"3.14"` via new
   `$__str_from_f64` WAT helper. Correctly formats integers without a decimal point and floats with
   up to 6 significant decimal digits (trailing zeros trimmed). String and string-variable arguments
@@ -29,6 +71,19 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 - **`math.atan` / `math.atan2`**: 6-term series with |x|>1 identity; quadrant-adjusted atan2.
 - **`math.trunc` / `math.hypot` / `math.degrees` / `math.radians`**: Inline WAT lowering.
 - **`math.pi` / `math.e` / `math.tau` / `math.inf` / `math.nan`**: Emitted as `f64.const` literals.
+
+#### WAT/WASM backend — strings
+- **`ord(s)` builtin**: returns the first UTF-8 byte of a string as an `f64`
+  (`i32.load8_u` at the string pointer). Enables storing characters as numeric
+  codes — e.g. on an `f64` stack for iterative/DFS string algorithms.
+
+#### WAT/WASM backend — list allocation
+- **Runtime-sized list repeat `[elem] * n`**: a single-element list literal multiplied by a
+  runtime count now allocates an `n`-length list (layout `[length_f64, elem0, ...]`) filled with
+  the repeated element, instead of falling through to numeric multiplication. The result is tracked
+  as a list, so `buf[i] = ...`, `buf[i]`, and `len(buf)` work — enabling O(n) buffer fills
+  (e.g. two-pass count-then-write) rather than O(n²) `append` chains under the bump allocator.
+  Recognised in either operand order (`[0.0] * n` or `n * [0.0]`).
 
 #### WAT/WASM backend — list mutation
 - **`list.append(x)`**: `$__list_append` allocates a new block with `count+1` slots, copies
@@ -74,6 +129,15 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 - **`yield from range(n)`**: Now materializes correctly via Shape 1b in `_simple_generator_spec`.
 
 ### Fixed
+- **`math.sin` / `math.cos` returned wrong values** (two bugs): (1) both helpers began with an
+  uncompensated `x += pi` phase shift, so they computed `sin(x+pi) = -sin(x)` and
+  `cos(x+pi) = -cos(x)` — e.g. `math.cos(0.0)` returned `-1.0`; (2) range reduction used
+  `floor(x/2pi)` (reducing to `[0, 2pi)`), so angles in `(3pi/2, 2pi)` and negative angles got a
+  spurious double reflection with the wrong sign — e.g. `math.cos(-60deg)` returned `-0.5` instead
+  of `+0.5`. Fixed by removing the phase shift and reducing to `[-pi, pi]` via
+  `floor(x/2pi + 0.5)` so a single reflection suffices. Now `cos(0)=1`, `sin(pi/2)≈1`,
+  `cos(4pi)=1`, `cos(-60deg)=cos(300deg)=0.5`, `cos(240deg)=-0.5`. `math.tan` (defined as
+  `sin/cos`) is corrected transitively.
 - **F-string float formatting**: Default `{x}` interpolation previously truncated floats to
   their integer part; now delegates to `$__str_from_f64` for correct output.
 - **`math.atan` WAT stack error**: The conditional negation inside `if` without a declared

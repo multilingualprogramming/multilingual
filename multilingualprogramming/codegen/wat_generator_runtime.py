@@ -16,6 +16,7 @@ from multilingualprogramming.parser.ast_nodes import (
     DictLiteral,
     DictUnpackEntry,
     FStringLiteral,
+    ForLoop,
     FromImportStatement,
     FunctionDef,
     Identifier,
@@ -32,6 +33,7 @@ from multilingualprogramming.parser.ast_nodes import (
     StringLiteral,
     TupleLiteral,
     VariableDeclaration,
+    WhileLoop,
 )
 
 from multilingualprogramming.codegen.wat_generator_support import (
@@ -146,6 +148,46 @@ class WATGeneratorRuntimeMixin:
         wat_fn = fname  # WAT wrapper function has the same name as the builtin
         self._emit(f"{indent}call ${wat_fn}")
 
+    def _gen_dom_value_str(self, handle_arg, indent: str) -> None:
+        """Lower ``dom_value_str(handle)`` to a heap-allocated tracked string.
+
+        Reads the element's value into a fresh heap buffer via
+        ``ml_dom_get_value`` and leaves the buffer pointer (as f64) on the
+        stack with the byte length in ``$__last_str_len`` — i.e. a normal
+        string value. Lets a single function read a DOM input without the
+        caller managing a buffer.
+        """
+        self._uses_dom = True
+        self._need_heap_ptr = True
+        cap = 8192
+        buf_local = f"__domval_{self._new_label()}_buf"
+        self._locals.add(buf_local)
+        sym = self._wat_symbol(buf_local)
+        # Save current heap base as the result string pointer.
+        self._emit(f"{indent};; dom_value_str(handle) → tracked string")
+        self._emit(f"{indent}global.get $__heap_ptr")
+        self._emit(f"{indent}f64.convert_i32_u")
+        self._emit(f"{indent}local.set ${sym}")
+        # ml_dom_get_value(handle f64, buf i32, cap i32) -> i32 bytes written
+        self._gen_expr(handle_arg, indent)
+        self._emit(f"{indent}local.get ${sym}")
+        self._emit(f"{indent}i32.trunc_f64_u")
+        self._emit(f"{indent}i32.const {cap}")
+        self._emit(f"{indent}call $ml_dom_get_value")
+        self._emit(f"{indent}global.set $__last_str_len")
+        # Advance heap_ptr past the written bytes (rounded up to 8).
+        self._emit(f"{indent}local.get ${sym}")
+        self._emit(f"{indent}i32.trunc_f64_u")
+        self._emit(f"{indent}global.get $__last_str_len")
+        self._emit(f"{indent}i32.const 7")
+        self._emit(f"{indent}i32.add")
+        self._emit(f"{indent}i32.const -8")
+        self._emit(f"{indent}i32.and")
+        self._emit(f"{indent}i32.add")
+        self._emit(f"{indent}global.set $__heap_ptr")
+        # Push the result string pointer (f64).
+        self._emit(f"{indent}local.get ${sym}")
+
     def _gen_len(self, arg_node, indent: str):
         """Emit WAT that pushes the length of a string or list variable."""
         if isinstance(arg_node, StringLiteral):
@@ -220,6 +262,15 @@ class WATGeneratorRuntimeMixin:
             self._locals.add(len_local)
             self._emit(f"{indent}local.set ${self._wat_symbol(len_local)}")
             self._string_len_locals[name] = len_local
+        elif self._is_string_value(value):
+            # String subscript (s[i]), slice (s[a:b]), and string-valued method
+            # calls leave the byte length in $__last_str_len during evaluation.
+            len_local = f"{name}_strlen"
+            self._locals.add(len_local)
+            self._emit(f"{indent}global.get $__last_str_len")
+            self._emit(f"{indent}f64.convert_i32_u")
+            self._emit(f"{indent}local.set ${self._wat_symbol(len_local)}")
+            self._string_len_locals[name] = len_local
         elif name in self._string_len_locals:
             del self._string_len_locals[name]
 
@@ -272,6 +323,8 @@ class WATGeneratorRuntimeMixin:
     def _value_tracks_as_list(self, value) -> bool:
         """Return True when *value* should be treated as a tracked list."""
         if isinstance(value, (ListLiteral, SetLiteral)):
+            return True
+        if self._list_repeat_operands(value) is not None:
             return True
         if self._is_materialized_sequence(value):
             return True
@@ -1006,6 +1059,63 @@ class WATGeneratorRuntimeMixin:
             return False
 
         return any(_stmt_returns_string(stmt) for stmt in func_def.body)
+
+    def _returns_list_like(self, func_def: FunctionDef) -> bool:
+        """Best-effort check for functions that return list/tuple-like values.
+
+        Recognizes ``retour [..]``, ``retour [expr] * n``, ``retour <local>``
+        where ``<local>`` was assigned a tracked list value, and propagated
+        returns from already-known list-returning callees. Used to populate
+        ``_sequence_func_names`` so that the caller's ``x = func(...)`` knows
+        ``x`` is a list pointer (enabling ``x[i]`` indexing).
+        """
+        # First pass: collect locals known to hold lists inside this function.
+        list_locals = set()
+        list_locals.update(self._func_param_list_names.get(_name(func_def.name), set()))
+
+        def _track_assign(target, value):
+            if not isinstance(target, Identifier):
+                return
+            if self._value_tracks_as_list(value):
+                list_locals.add(target.name)
+            elif isinstance(value, Identifier) and value.name in list_locals:
+                list_locals.add(target.name)
+
+        def _visit_for_tracking(stmt):
+            if isinstance(stmt, VariableDeclaration) and isinstance(stmt.name, Identifier):
+                _track_assign(stmt.name, stmt.value)
+            elif isinstance(stmt, Assignment):
+                _track_assign(stmt.target, stmt.value)
+            elif isinstance(stmt, IfStatement):
+                for inner in stmt.body + (stmt.else_body or []):
+                    _visit_for_tracking(inner)
+            elif isinstance(stmt, WhileLoop):
+                for inner in stmt.body:
+                    _visit_for_tracking(inner)
+            elif isinstance(stmt, ForLoop):
+                for inner in stmt.body:
+                    _visit_for_tracking(inner)
+
+        for stmt in func_def.body:
+            _visit_for_tracking(stmt)
+
+        def _stmt_returns_list(stmt):
+            if isinstance(stmt, ReturnStatement) and stmt.value is not None:
+                if self._value_tracks_as_list(stmt.value):
+                    return True
+                if isinstance(stmt.value, Identifier) and stmt.value.name in list_locals:
+                    return True
+                return False
+            if isinstance(stmt, IfStatement):
+                else_body = stmt.else_body or []
+                return any(_stmt_returns_list(inner) for inner in stmt.body + else_body)
+            if isinstance(stmt, WhileLoop):
+                return any(_stmt_returns_list(inner) for inner in stmt.body)
+            if isinstance(stmt, ForLoop):
+                return any(_stmt_returns_list(inner) for inner in stmt.body)
+            return False
+
+        return any(_stmt_returns_list(stmt) for stmt in func_def.body)
 
     def _exception_code_for(self, value) -> int:
         """Return a small numeric code for supported exception types."""

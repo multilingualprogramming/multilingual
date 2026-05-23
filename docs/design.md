@@ -9,7 +9,8 @@ The implementation is structured as five explicit layers:
 
 1. Concrete surface syntax (`CS_lang`): language-specific source text.
 2. Shared Core AST: language-agnostic parser output (`ast_nodes.py`).
-3. Typed Core IR container: `CoreIRProgram` (`multilingualprogramming/core/ir.py`).
+3. Typed semantic IR container: `IRProgram` and related nodes
+   (`multilingualprogramming/core/ir_nodes.py`).
 4. Backend lowering/codegen: Python and WAT/WASM oriented generation paths.
 5. Runtime execution and backend selection.
 
