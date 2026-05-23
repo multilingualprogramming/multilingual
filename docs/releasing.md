@@ -11,20 +11,32 @@ This project publishes to PyPI via GitHub Actions trusted publishing.
 ## Release Checklist
 
 1. Update `multilingualprogramming/version.py` with the new version.
-2. Add release notes to `CHANGELOG.md` under a new version heading.
-3. Run local checks:
+2. Add release notes to `CHANGELOG.md` and `RELEASE.md` under a new version heading.
+3. Review user-facing docs for stale version numbers, install extras, CLI flags, and backend claims.
+4. Run local checks:
 ```bash
-python -m pytest -q
-python -m pylint (git ls-files '*.py')
+python3 -m multilingualprogramming --version
+python3 -m multilingualprogramming smoke --all
+python3 -m pytest -q
 ```
-4. Push changes to `main`.
-5. Create and push a version tag:
+5. Build and validate release artifacts:
+```bash
+python3 -m build
+python3 -m twine check dist/*
+```
+Current optional extras are:
+- `wasm` — Wasmtime runtime
+- `ai` — OpenAI, Anthropic, and Ollama providers
+- `performance` — Wasmtime plus NumPy
+- `all` — WASM, performance, and AI dependencies
+6. Push changes to `main`.
+7. Create and push a version tag:
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
-6. Verify workflow `Release to PyPI` succeeds.
-7. Confirm package availability on PyPI.
+8. Verify workflow `Release to PyPI` succeeds.
+9. Confirm package availability on PyPI.
 
 ## Post-release
 

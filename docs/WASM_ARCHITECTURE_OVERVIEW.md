@@ -41,20 +41,18 @@
          └──────┬──────────┘      └──────────┬────────┘
                 │                            │
                 │                    ┌───────▼────────┐
-                │                    │ Rust Code      │
-                │                    │ (Intermediate) │
+                │                    │ WAT Source     │
+                │                    │ (Text Format)  │
                 │                    └───────┬────────┘
                 │                            │
                 │                    ┌───────▼────────┐
-                │                    │ Cranelift      │
-                │                    │ Compiler       │
-                │                    │  [PLANNED]     │
+                │                    │ Wasmtime/WAT   │
+                │                    │ Compilation    │
                 │                    └───────┬────────┘
                 │                            │
                 │                    ┌───────▼────────┐
                 │                    │ WASM Binary    │
-                │                    │ (.wasm files)  │
-                │                    │  [PLANNED]     │
+                │                    │ when available │
                 │                    └───────┬────────┘
                 │                            │
                 └─────────────┬──────────────┘
@@ -259,11 +257,13 @@ class ImageOperations:
 
 ---
 
-### 5. WASM Corpus: WASM Corpus Projects [PLANNED]
+### 5. WASM Corpus: Source Corpus Projects
 
-> **Note:** The WASM corpus binaries described below do not yet exist in the repository. No `.wasm` files are shipped with the package. The Python fallback implementations (Section 4) are available; the compiled WASM equivalents are planned for a future release.
+> **Note:** The repository includes multilingual corpus source programs and tests
+> that generate WAT/WASM artifacts as part of validation. Precompiled corpus
+> `.wasm` binaries are not shipped with the Python package.
 
-**Planned: 5 Real-World Projects** × **4 Languages** = **20 Files**
+**Corpus: 5 Real-World Project Families** × **multiple language surfaces**
 
 **Projects**:
 

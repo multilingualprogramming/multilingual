@@ -1,13 +1,17 @@
 # Using AI Keywords in WASM
 
 **Status:** Reference guide for WAT/WASM developers  
-**Updated:** 2026-05-08
+**Updated:** 2026-05-23
 
 ---
 
 ## Overview
 
-AI keywords (PROMPT, GENERATE, EXTRACT, CLASSIFY, THINK, STREAM, PLAN, EMBED, TRANSCRIBE) are fully implemented in the **Python backend** but require **host import implementations** in WASM/WAT environments.
+AI keywords (PROMPT, GENERATE, EXTRACT, CLASSIFY, THINK, STREAM, PLAN, EMBED,
+TRANSCRIBE) are implemented in the **Python/Core 1 runtime** and can use the
+MockProvider or optional OpenAI, Anthropic, and Ollama providers. WAT/WASM
+integration is host-driven: browser or Wasmtime embeddings must provide host
+imports/callbacks for model calls.
 
 This guide explains how to integrate AI functionality when targeting WebAssembly.
 
@@ -21,7 +25,9 @@ let response = prompt @default: "What is 2 + 2?"
 print(response)  # "4"
 ```
 
-The Python backend uses a MockProvider (for testing) or real AI services at runtime.
+The Python backend uses a MockProvider for tests and examples unless a real
+provider is registered. Install `multilingualprogramming[ai]` for the OpenAI,
+Anthropic, and Ollama provider SDKs.
 
 ### WASM (Requires Host Imports)
 ```wat
@@ -128,11 +134,16 @@ function writeStringToMemory(str) {
 
 ## Example: Browser Integration
 
-### 1. Compile Multilingual Code to WASM
+### 1. Build A WAT/WASM Bundle
 
 ```bash
-python -m multilingualprogramming examples/my_ai_program.multi --target=wasm --output=my_ai_program.wasm
+multilingual build-wasm-bundle examples/my_ai_program.multi \
+  --lang en \
+  --out-dir build/my_ai_program
 ```
+
+The current CLI uses `build-wasm-bundle` for deterministic browser/WASI
+artifacts.
 
 ### 2. Load and Instantiate
 
@@ -172,9 +183,9 @@ print("Q:", question)
 print("A:", answer)
 ```
 
-### Compile to WASM
+### Build WAT/WASM Artifacts
 ```bash
-python -m multilingualprogramming ai_demo.multi --target=wasm -o ai_demo.wasm
+multilingual build-wasm-bundle ai_demo.multi --lang en --out-dir build/ai_demo
 ```
 
 ### JavaScript Host (`ai_demo.html`)
@@ -304,7 +315,7 @@ python -m multilingualprogramming ai_demo.multi --target=wasm -o ai_demo.wasm
 ## See Also
 
 - [WASM Architecture Overview](WASM_ARCHITECTURE_OVERVIEW.md)
-- [Release Notes](_generated/RELEASE.md)
+- [Release Notes](CHANGELOG.md)
 - [Frontend Contracts](frontend_contracts.md)
 
 ---
@@ -323,4 +334,3 @@ To improve this guide or add new AI integrations:
 **Generated:** 2026-05-08  
 **Maintainer:** Multilingual Programming Team  
 **License:** GPL-3.0-or-later
-

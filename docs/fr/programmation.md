@@ -632,7 +632,7 @@ multilingual run examples/research_swarm_en.multi --lang en
 - **Mots-cles complets** (tous les mots-cles + alias built-ins): [mots_cles.md](mots_cles.md)
 - **Modules et projets multi-fichiers** (packages, imports, tests): [modules.md](modules.md)
 - **Backends WAT/WASM** (`:wat`, `:rust`, playground): [wasm.md](wasm.md)
-- Guide usage: [USAGE.md](../_generated/USAGE.md)
+- Guide usage: [USAGE.md](../../USAGE.md)
 - Reference technique: [README docs](../reference.md)
 - Vue design (architecture + roadmap): [design.md](../design.md)
 - Onboarding nouvelles langues: [language_onboarding.md](../language_onboarding.md)

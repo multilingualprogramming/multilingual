@@ -66,7 +66,7 @@ SurfaceNormalizer?          multilingualprogramming/parser/surface_normalizer.py
     Parser                  multilingualprogramming/parser/parser.py
         │  AST
         ▼
-Semantic IR lowering        multilingualprogramming/core/lowering.py
+Semantic IR lowering        multilingualprogramming/core/semantic_lowering.py
         │  IRProgram
         ▼
  SemanticAnalyzer           multilingualprogramming/core/semantic_analyzer.py
@@ -220,7 +220,7 @@ multilingual/
 │       ├── tuple_abi.py                ← tuple serialization
 │       └── tuple_memory.py             ← memory management
 │
-├── tests/                              ← 67 test files, ~22,284 lines
+├── tests/                              ← 92 pytest files, ~31,344 lines
 ├── examples/                           ← 33 .multi example files (17 languages, .ml also supported)
 ├── docs/                               ← 29+ markdown files + French docs
 └── tools/                              ← development utilities
@@ -315,7 +315,7 @@ registry = KeywordRegistry.get_instance()
 - `_skip_bracket_newlines()`: skips NEWLINE, COMMENT, INDENT, DEDENT — **required** inside
   list/dict/call/tuple to handle multi-line literals.
 
-### Semantic IR Lowering (`core/lowering.py`)
+### Semantic IR Lowering (`core/semantic_lowering.py`)
 
 - Bridges the shared parser AST toward the Core 1.0 semantic direction.
 - Produces `IRProgram` and related IR nodes for downstream analysis/codegen.
@@ -638,9 +638,9 @@ CI gates before merge: `pythonpackage`, `pylint`, `package-artifacts`, `compatib
 ### Test Suite Overview
 
 - **Location**: `tests/`
-- **Files**: 67 test files, ~22,284 lines of test code
+- **Files**: 92 pytest files, ~31,344 lines of test code
 - **Discovery**: `test_*.py` and `*_test.py`
-- **Total tests**: ~2,022 (2 skipped — require `rustc wasm32` target)
+- **Latest local release pass**: 2602 passed, 14 skipped, 417 subtests passed
 
 ### Running Tests
 

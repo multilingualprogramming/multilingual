@@ -505,36 +505,38 @@ Lexer & Parser
     ↓
 AST (Abstract Syntax Tree)
     ↓
-WasmCodeGenerator
+WATCodeGenerator
     ↓
-Rust Code (intermediate)
+WebAssembly Text (.wat)
     ↓
-Cranelift Compiler
+Wasmtime/WAT compilation when available
     ↓
 WebAssembly Binary (.wasm)
     ↓
-Wheel Package (.whl)
-    ↓
-PyPI Distribution
+Browser/WASI artifact bundle
 ```
 
-### Building WASM Binaries [PLANNED]
+### Building WAT/WASM Bundles
 
-> **Note:** The `build_wasm.sh` script and the Cranelift compilation step are not yet implemented. The commands below describe the intended workflow for a future release.
+The current supported build path is the CLI bundle builder. It writes generated
+Python, WAT, ABI metadata, JavaScript host shims, renderer templates, and a
+WASM binary when the optional runtime/compiler pieces are available.
 
 ```bash
-# Setup build environment
-cargo install cranelift-cli
+# Browser-oriented bundle
+multilingual build-wasm-bundle examples/complete_features_en.multi \
+    --lang en \
+    --out-dir build/wasm
 
-# Build single module (planned)
-./build_wasm.sh matrix_operations
-
-# Build all modules (planned)
-./build_wasm.sh --all
-
-# Build with optimizations (planned)
-./build_wasm.sh --optimize matrix_operations
+# WASI-oriented bundle
+multilingual build-wasm-bundle examples/complete_features_en.multi \
+    --lang en \
+    --wasm-target wasi \
+    --out-dir build/wasm-wasi
 ```
+
+The older Rust/Cranelift package-binary path remains an experimental direction;
+use `:rust` / `--show-rust` when you want to inspect that scaffold.
 
 ---
 

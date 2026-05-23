@@ -62,6 +62,42 @@ print(result.output)   # 5
 
 `ProgramExecutor` enables `.multi` and `.ml` module imports automatically during execution.
 
+## CLI Essentials
+
+```bash
+multilingual --version
+multilingual run hello.multi --lang en
+multilingual run hello.multi --show-backend
+multilingual run hello.multi --mode core
+multilingual compile hello.multi --lang en
+multilingual smoke --all
+multilingual ir hello.multi --format json
+multilingual explain hello.multi
+```
+
+Backend and artifact helpers:
+
+```bash
+multilingual repl --show-python --show-wat --show-rust
+multilingual wat-abi hello.multi --lang en
+multilingual wat-host-shim hello.multi --lang en
+multilingual wat-renderer-template hello.multi --lang en
+multilingual build-wasm-bundle hello.multi --out-dir build/wasm
+multilingual build-ui-bundle examples/memory_game_en.multi --out-dir build/ui
+multilingual ui-preview examples/memory_game_en.multi --html
+```
+
+## Optional Extras
+
+```bash
+pip install "multilingualprogramming[wasm]"
+pip install "multilingualprogramming[ai]"
+pip install "multilingualprogramming[performance]"
+pip install "multilingualprogramming[all]"
+```
+
+The `ai` extra installs provider SDKs for OpenAI, Anthropic, and Ollama.
+
 ## Enable `.multi` Imports In Plain Python
 
 ```python
@@ -87,6 +123,24 @@ ast = Parser(tokens, source_language="en").parse()
 print(ASTPrinter().print(ast))
 ```
 
+## Core 1 Runtime APIs
+
+```python
+from multilingualprogramming.runtime import (
+    AIRuntime,
+    AnthropicProvider,
+    OpenAIProvider,
+    OllamaProvider,
+    InferenceCache,
+    ModelRegistry,
+    ReactiveEngine,
+    Channel,
+)
+```
+
+Provider SDKs are optional. Install `multilingualprogramming[ai]` before
+constructing the concrete OpenAI, Anthropic, or Ollama providers.
+
 ## Run Examples
 
 ```bash
@@ -103,5 +157,4 @@ python -m examples.multilingual_codegen_example
 python -m examples.semantic_example
 python -m examples.executor_example
 ```
-
 
