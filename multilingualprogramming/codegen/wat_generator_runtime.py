@@ -240,8 +240,17 @@ class WATGeneratorRuntimeMixin:
             self._emit(f"{indent}f64.const {float(byte_len)}")
             return True
         if isinstance(node, BinaryOp) and node.op == "+" and self._is_string_binop(node):
-            self._gen_string_len_expr(node.left, indent)
-            self._gen_string_len_expr(node.right, indent)
+            # Récursion : si l'un des opérandes n'a pas de longueur calculable
+            # statiquement (FString, CallExpr, …), on renonce à l'addition et
+            # on retourne False — l'appelant retombera sur `$__last_str_len`
+            # rempli par l'évaluation du runtime-concat.
+            start = len(self._instrs)
+            if not self._gen_string_len_expr(node.left, indent):
+                del self._instrs[start:]
+                return False
+            if not self._gen_string_len_expr(node.right, indent):
+                del self._instrs[start:]
+                return False
             self._emit(f"{indent}f64.add")
             return True
         return False
@@ -756,6 +765,70 @@ class WATGeneratorRuntimeMixin:
             return int(m.group(1))
         return None
 
+    def _ensure_fixed_dyn_helper(self) -> str:
+        """Émet (une fois) `$__fmt_fixed_dyn(v, n)` qui dispatche vers les
+        helpers fixedN existants selon la valeur runtime de n (0..9). Clamp
+        en dehors : n<0 → ".0f" (entier arrondi), n>9 → ".9f".
+
+        Permet une fonction multilingual `format_fixed(v, n)` avec n variable
+        au runtime — sans cela il faut une fonction par N (formatter_fixe_2/3/5/6
+        comme on l'a vu côté fractales).
+        """
+        if getattr(self, "_string_format_fixed_dyn_emitted", False):
+            return "$__fmt_fixed_dyn"
+        self._string_format_fixed_dyn_emitted = True
+        # On garantit que tous les helpers fixedN qu'on va appeler existent.
+        self._ensure_string_format_helpers()
+        for k in range(2, 10):
+            self._ensure_fixedN_format_helper(k)
+        lines = ["  (func $__fmt_fixed_dyn (param $v f64) (param $n i32) (result f64 f64)"]
+        # Clamp inférieur : n<0 → n=0.
+        lines.append("    local.get $n")
+        lines.append("    i32.const 0")
+        lines.append("    i32.lt_s")
+        lines.append("    if")
+        lines.append("      i32.const 0")
+        lines.append("      local.set $n")
+        lines.append("    end")
+        # Clamp supérieur : n>9 → n=9.
+        lines.append("    local.get $n")
+        lines.append("    i32.const 9")
+        lines.append("    i32.gt_s")
+        lines.append("    if")
+        lines.append("      i32.const 9")
+        lines.append("      local.set $n")
+        lines.append("    end")
+        # n=0 → arrondir + helper par défaut (entier).
+        lines.append("    local.get $n")
+        lines.append("    i32.eqz")
+        lines.append("    if (result f64 f64)")
+        lines.append("      local.get $v")
+        lines.append("      f64.nearest")
+        lines.append("      call $__fmt_default_tmpstr")
+        lines.append("    else")
+        # Cascade if pour n=1..9. Compact mais lisible.
+        for k in range(1, 9):
+            indent = "      " + "  " * (k - 1)
+            lines.append(f"{indent}local.get $n")
+            lines.append(f"{indent}i32.const {k}")
+            lines.append(f"{indent}i32.eq")
+            lines.append(f"{indent}if (result f64 f64)")
+            lines.append(f"{indent}  local.get $v")
+            lines.append(f"{indent}  call $__fmt_fixed{k}_tmpstr")
+            lines.append(f"{indent}else")
+        # n=9 (cas par défaut au fond de la cascade)
+        deepest = "      " + "  " * 8
+        lines.append(f"{deepest}local.get $v")
+        lines.append(f"{deepest}call $__fmt_fixed9_tmpstr")
+        # Ferme chaque `else` ouvert (8 cas + le tout-extérieur n=0).
+        for k in range(8, 0, -1):
+            indent = "      " + "  " * (k - 1)
+            lines.append(f"{indent}end")
+        lines.append("    end")
+        lines.append("  )")
+        self._funcs.append("\n".join(lines))
+        return "$__fmt_fixed_dyn"
+
     def _ensure_fixedN_format_helper(self, n: int) -> str:  # pylint: disable=too-many-statements
         """Emit (once) a ``$__fmt_fixedN_tmpstr`` helper for N decimal places."""
         attr = f"_string_format_fixed{n}_emitted"
@@ -1059,6 +1132,59 @@ class WATGeneratorRuntimeMixin:
             return False
 
         return any(_stmt_returns_string(stmt) for stmt in func_def.body)
+
+    def _multi_value_return_arity(self, func_def: FunctionDef) -> int:
+        """Return N≥2 if every reachable `retour` returns a TupleLiteral of arity N
+        (with non-string elements) ; 1 otherwise.
+
+        Multi-value returns lower to a WAT signature `(result f64 f64 …)` and
+        `retour (a, b)` pushes N values then `return`. Heterogeneous arities or
+        mixed tuple/non-tuple returns disable the optimization (function falls
+        back to single-value semantics).
+        """
+        from multilingualprogramming.parser.ast_nodes import (  # pylint: disable=import-outside-toplevel
+            TupleLiteral as _TupleLiteral,
+            IfStatement as _IfStatement,
+        )
+
+        seen_arities: set[int] = set()
+        has_non_tuple_return: list[bool] = [False]
+
+        def _collect(stmt):
+            if isinstance(stmt, ReturnStatement):
+                if stmt.value is None:
+                    has_non_tuple_return[0] = True
+                    return
+                if isinstance(stmt.value, _TupleLiteral):
+                    # tuple de 1 élément ≡ scalaire (cas rare ; on l'ignore).
+                    if len(stmt.value.elements) >= 2:
+                        # Refuse les éléments string — multi-valeur ne porte que
+                        # des f64 pour l'instant.
+                        if any(self._is_string_value(el) for el in stmt.value.elements):
+                            has_non_tuple_return[0] = True
+                            return
+                        seen_arities.add(len(stmt.value.elements))
+                        return
+                has_non_tuple_return[0] = True
+                return
+            if isinstance(stmt, _IfStatement):
+                for inner in stmt.body + (stmt.else_body or []):
+                    _collect(inner)
+                return
+            # Autres compounds : peuvent contenir return — descendre. (Boucles
+            # sont skip-safe : un retour à l'intérieur compte aussi.)
+            for attr in ("body", "else_body", "finally_body"):
+                inner_body = getattr(stmt, attr, None)
+                if inner_body:
+                    for inner in inner_body:
+                        _collect(inner)
+
+        for stmt in func_def.body:
+            _collect(stmt)
+
+        if has_non_tuple_return[0] or len(seen_arities) != 1:
+            return 1
+        return next(iter(seen_arities))
 
     def _returns_list_like(self, func_def: FunctionDef) -> bool:
         """Best-effort check for functions that return list/tuple-like values.

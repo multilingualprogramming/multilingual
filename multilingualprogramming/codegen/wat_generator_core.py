@@ -171,12 +171,23 @@ class WATGeneratorCoreMixin:
         lines = [f'  (func ${wat_func_name} (export "{func_name}")']
         for param_name in param_names:
             lines.append(f"    (param ${self._wat_symbol(param_name)} f64)")
-        lines.append("    (result f64)")
+        # Fonctions multi-valuées : signature `(result f64 f64 ...)` × arité.
+        arity = self._multi_value_func_arity.get(func_name, 1)
+        if arity > 1:
+            lines.append(f"    (result {' '.join(['f64'] * arity)})")
+        else:
+            lines.append("    (result f64)")
         for local_name in local_names:
             lines.append(f"    (local ${self._wat_symbol(local_name)} f64)")
         lines.extend(body_instrs)
         if implicit_return:
-            lines.append("    f64.const 0  ;; implicit return")
+            if arity > 1:
+                # Fallback implicit return : empile N zéros (chemin rarement
+                # atteint — chaque branche utilisateur termine par un retour).
+                for _ in range(arity):
+                    lines.append("    f64.const 0  ;; implicit return")
+            else:
+                lines.append("    f64.const 0  ;; implicit return")
         lines.append("  )")
         self._funcs.append("\n".join(lines))
 
@@ -642,12 +653,36 @@ class WATGeneratorCoreMixin:
     local.get $exp
     f64.abs
     local.set $exp
+    ;; Si exp n'est pas entier, repli sur exp(b·ln(a)) pour base > 0.
+    ;; (À ce point, $exp est déjà passé par f64.abs, donc on calcule
+    ;;  |result| = base^|exp| via exp(|exp|·ln(base)), puis on inverse
+    ;;  si neg=1.) base ≤ 0 avec exp non-entier reste NaN (pas de valeur réelle).
     local.get $exp
     f64.trunc
     local.get $exp
     f64.ne
     if
-      f64.const nan
+      local.get $base
+      f64.const 0.0
+      f64.le
+      if
+        f64.const nan
+        return
+      end
+      local.get $base
+      call $math_log
+      local.get $exp
+      f64.mul
+      call $math_exp
+      local.set $result
+      local.get $neg
+      if
+        f64.const 1.0
+        local.get $result
+        f64.div
+        local.set $result
+      end
+      local.get $result
       return
     end
     local.get $exp
@@ -818,6 +853,36 @@ class WATGeneratorCoreMixin:
     local.get $base
     i32.const 4
     i32.add
+  )
+  ;; Layout des listes multilingual (heap-backed) :
+  ;;   ptr+0  : header f64 = nombre d'éléments
+  ;;   ptr+8  : item 0 (f64)
+  ;;   ptr+16 : item 1 (f64)
+  ;;   …
+  ;; Les helpers ci-dessous exposent ce layout aux callers hôte sans qu'ils
+  ;; aient à manipuler les offsets bruts (cf. fractales/renderer-exploration.js
+  ;; qui faisait `view.getFloat64(base + 8 + 8 * (2 + 2 * k), true)` à la main).
+  ;;
+  ;; __ml_list_count(ptr) : nombre d'éléments. Lit le header f64 à ptr+0.
+  (func $__ml_list_count (export "__ml_list_count") (param $ptr f64) (result f64)
+    local.get $ptr
+    i32.trunc_f64_u
+    f64.load
+  )
+  ;; __ml_list_item(ptr, i) : i-ième élément (zero-indexed). Lit f64 à ptr+8+8*i.
+  ;; Pas de borne checking : caller responsabilisé (cohérent avec le reste du
+  ;; runtime multilingual).
+  (func $__ml_list_item (export "__ml_list_item") (param $ptr f64) (param $i f64) (result f64)
+    local.get $ptr
+    i32.trunc_f64_u
+    local.get $i
+    i32.trunc_f64_u
+    i32.const 8
+    i32.mul
+    i32.const 8
+    i32.add
+    i32.add
+    f64.load
   )
   ;; Print a double-precision float always showing a decimal point.
   ;; Integer values (v == trunc(v), |v| < 1e15) are printed as "N.0".
@@ -2145,70 +2210,107 @@ class WATGeneratorCoreMixin:
     call $math_cos
     f64.div
   )
-  ;; exp(x): 10-term Horner polynomial for e^x.
+  ;; exp(x) avec réduction d'intervalle : k = round(x/ln2), r = x - k·ln2,
+  ;; exp(x) = 2^k · exp(r). 2^k construit par bit-pattern IEEE-754. Taylor à
+  ;; 11 termes sur r ∈ [-ln2/2, ln2/2] ≈ [-0.347, 0.347] → ~1e-15. Avant :
+  ;; Taylor direct sur x sans réduction (~5% à |x|=5, divergent à |x|>20).
   (func $math_exp (param $x f64) (result f64)
-    (local $t f64)
+    (local $t f64) (local $r f64) (local $kf f64) (local $k i32)
+    (local $two_pow_k f64)
+    ;; kf = round(x / ln2) en f64 (utilisé pour le calcul de r). k = trunc(kf)
+    ;; en i32 pour construire 2^k.
+    local.get $x
+    f64.const 1.4426950408889634
+    f64.mul
+    f64.nearest
+    local.set $kf
+    local.get $kf
+    i32.trunc_f64_s
+    local.set $k
+    ;; r = x - kf·ln2.
+    local.get $x
+    local.get $kf
+    f64.const 0.6931471805599453
+    f64.mul
+    f64.sub
+    local.set $r
+    ;; Taylor 10 termes (degrés 0..10) sur r.
     f64.const 2.7557319223985888e-7
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 2.7557319223985888e-6
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 2.4801587301587302e-5
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.9841269841269841e-4
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.3888888888888889e-3
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 8.3333333333333332e-3
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 4.1666666666666664e-2
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.6666666666666667e-1
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 5.0e-1
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.0
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.0
     f64.add
+    local.set $t
+    ;; 2^k via bit-pattern IEEE-754 : champ exposant biaisé = (1023 + k) << 52.
+    ;; k clampé implicitement par i32.trunc_f64_s ; valeurs hors [-1022, 1023]
+    ;; produisent inf/0 (acceptable — exp(huge) = inf, exp(very-negative) ≈ 0).
+    local.get $k
+    i32.const 1023
+    i32.add
+    i64.extend_i32_s
+    i64.const 52
+    i64.shl
+    f64.reinterpret_i64
+    local.set $two_pow_k
+    local.get $t
+    local.get $two_pow_k
+    f64.mul
   )
   ;; log(x): natural log with IEEE-754 mantissa range reduction.
   ;;

@@ -98,6 +98,8 @@ from multilingualprogramming.codegen.wat_generator_support import (
     _SET_NAMES,
     _STR_NAMES,
     _ZIP_NAMES,
+    BUILTIN_LIST_RETURNERS,
+    BUILTIN_STRING_RETURNERS,
     _name,
     _real_params,
 )
@@ -188,12 +190,20 @@ class WATCodeGenerator(
         # Populated for methods that are overridden in ≥1 subclass.
         self._dispatch_func_names: dict[str, str] = {}
         # Functions known to return heap-backed sequence pointers.
-        # Pre-populated with builtins that emit list pointers (e.g. SIMD kernels) ;
-        # user-defined list-returning functions are added by the orchestrator
-        # via `_returns_list_like` analysis.
-        self._sequence_func_names: set[str] = {"simd_mandelbrot_pair"}
+        # Seeded from `BUILTIN_LIST_RETURNERS` (single source of truth in
+        # wat_generator_support) ; user-defined list-returning functions are
+        # added by the orchestrator via `_returns_list_like` analysis.
+        self._sequence_func_names: set[str] = set(BUILTIN_LIST_RETURNERS)
+        # Fonctions à retour multi-valeur (retour (a, b, ...)). Nom -> arité N>=2.
+        # Lowering : signature `(result f64 f64 ...)`, retour empile N valeurs,
+        # destructuring `soit (x, y) = f(...)` consomme N valeurs en local.set
+        # reverse. Détecté par `_multi_value_return_arity` à la collecte des
+        # métadonnées de fonctions.
+        self._multi_value_func_arity: dict[str, int] = {}
         # Functions known to return string-like values with $__last_str_len metadata.
-        self._string_return_funcs: set[str] = set()
+        # Seeded from BUILTIN_STRING_RETURNERS (single source of truth) ; user
+        # functions are added via _returns_string_like.
+        self._string_return_funcs: set[str] = set(BUILTIN_STRING_RETURNERS)
         # Runtime string formatting helpers.
         self._string_format_helpers_emitted: bool = False
         # Narrow closure-factory support for returned nested functions with one captured cell.
@@ -477,7 +487,26 @@ class WATCodeGenerator(
         if line:
             self._emit(f"{indent};; @{line}:{col}")
         if isinstance(stmt, VariableDeclaration):
-            if isinstance(stmt.name, (TupleLiteral, ListLiteral)) and \
+            # Destructuring multi-valeur : `soit (a, b) = f(...)` où f est marquée
+            # à arité ≥2 dans _multi_value_func_arity. L'appel laisse N valeurs
+            # sur la pile ; on les consomme en `local.set` ordre inverse.
+            if (
+                isinstance(stmt.name, (TupleLiteral, ListLiteral))
+                and isinstance(stmt.value, CallExpr)
+                and _name(stmt.value.func) in self._multi_value_func_arity
+                and self._multi_value_func_arity[_name(stmt.value.func)]
+                    == len(stmt.name.elements)
+            ):
+                arity = len(stmt.name.elements)
+                self._emit(f"{indent};; let ({', '.join(_name(el) for el in stmt.name.elements)}) = ...")
+                self._gen_expr(stmt.value, indent)
+                # Stack top = last element ; local.set in reverse order.
+                for element in reversed(stmt.name.elements):
+                    name = _name(element)
+                    if not self._is_module_global(name):
+                        self._locals.add(name)
+                    self._emit_name_set(name, indent)
+            elif isinstance(stmt.name, (TupleLiteral, ListLiteral)) and \
                     self._gen_unpack_assignment(stmt.name, stmt.value, indent):
                 self._emit(f"{indent};; unpacking declaration lowered")
             else:
@@ -586,6 +615,23 @@ class WATCodeGenerator(
                 self._emit(f"{indent}i32.add")
                 self._gen_expr(stmt.value, indent)   # f64 value
                 self._emit(f"{indent}f64.store")
+            elif (
+                isinstance(target, (TupleLiteral, ListLiteral))
+                and isinstance(stmt.value, CallExpr)
+                and _name(stmt.value.func) in self._multi_value_func_arity
+                and self._multi_value_func_arity[_name(stmt.value.func)]
+                    == len(target.elements)
+            ):
+                # Destructuring multi-valeur : `soit a, b = f(...)`. L'appel
+                # laisse N valeurs sur la pile (top = dernier élément).
+                arity = len(target.elements)
+                self._emit(f"{indent};; ({', '.join(_name(el) for el in target.elements)}) = ...")
+                self._gen_expr(stmt.value, indent)
+                for element in reversed(target.elements):
+                    name = _name(element)
+                    if not self._is_module_global(name):
+                        self._locals.add(name)
+                    self._emit_name_set(name, indent)
             elif self._gen_unpack_assignment(target, stmt.value, indent):
                 self._emit(f"{indent};; unpacking assignment lowered")
             else:
@@ -874,11 +920,19 @@ class WATCodeGenerator(
             self._gen_for(stmt, indent)
 
         elif isinstance(stmt, ReturnStatement):
-            if stmt.value:
+            # Retour multi-valeur (`retour (a, b)`) : empile chaque élément
+            # individuellement, puis `return`. La signature de la fonction est
+            # déjà `(result f64 f64 …)` via _multi_value_func_arity.
+            if isinstance(stmt.value, TupleLiteral) and len(stmt.value.elements) >= 2:
+                for element in stmt.value.elements:
+                    self._gen_expr(element, indent)
+                self._emit(f"{indent}return")
+            elif stmt.value:
                 self._gen_expr(stmt.value, indent)
+                self._emit(f"{indent}return")
             else:
                 self._emit(f"{indent}f64.const 0")
-            self._emit(f"{indent}return")
+                self._emit(f"{indent}return")
 
         elif isinstance(stmt, BreakStatement):
             if self._loop_stack:
@@ -1354,6 +1408,22 @@ class WATCodeGenerator(
                 self._emit(f"{indent}i32.trunc_f64_s")
                 self._emit(f"{indent}i32.shr_u")
                 self._emit(f"{indent}f64.convert_i32_s")
+            elif resolved_fname in {"format_fixed"} and len(node.args) == 2:
+                # format_fixed(v, n) — formate v à n décimales (n runtime,
+                # clampé à [0, 9]). Renvoie un f64 ptr ; longueur dans
+                # $__last_str_len. Remplace les `formatter_fixe_2/3/5/6`
+                # spécialisés côté fractales par un seul appel.
+                helper = self._ensure_fixed_dyn_helper()
+                self._gen_expr(node.args[0], indent)  # v (f64)
+                self._gen_expr(node.args[1], indent)  # n (f64)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}call {helper}")
+                # Helper retourne (ptr_f64, len_f64). On stocke len dans la
+                # globale `$__last_str_len` puis on garde ptr sur la pile,
+                # conformément à la convention multilingual (cf.
+                # _emit_string_value_with_len, _update_string_tracking).
+                self._emit(f"{indent}i32.trunc_f64_u")
+                self._emit(f"{indent}global.set $__last_str_len")
             elif resolved_fname in {"simd_mandelbrot_pair"} and len(node.args) == 5:
                 # SIMD f64x2 kernel : itère deux pixels Mandelbrot en parallèle
                 # via WebAssembly v128 (cf. $mandelbrot_pair_simd dans

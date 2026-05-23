@@ -158,6 +158,17 @@ class WATGeneratorExpressionMixin:
             return
         if self._gen_string_len_expr(expr, indent):
             return
+        # FStringLiteral, appel string-returning, OU concat imbriqué dont
+        # un opérande est l'un des deux ci-dessus : l'évaluation a déjà
+        # rempli `$__last_str_len` comme side-effect (f-strings via
+        # _gen_fstring_expr, appels via la convention $__last_str_len,
+        # `$__str_concat` qui pose len1+len2). On copie la globale.
+        if isinstance(expr, (FStringLiteral, CallExpr)) or (
+            isinstance(expr, BinaryOp) and expr.op == "+" and self._is_string_binop(expr)
+        ):
+            self._emit(f"{indent}global.get $__last_str_len")
+            self._emit(f"{indent}f64.convert_i32_u")
+            return
         raise ValueError(f"Unsupported string expression for WAT concat: {type(expr).__name__}")
 
     def _emit_numeric_binop(self, node: BinaryOp, indent: str):

@@ -132,6 +132,17 @@ def _name(node) -> str:
 
 _PARAM_SEPARATORS = frozenset(("/", "*"))
 
+# Builtins that return a heap-backed list pointer (caller's `r = foo(...)` then
+# `r[i]` lowers as list subscript). User-defined list-returning functions are
+# discovered separately by `_returns_list_like` analysis ; this set is the
+# floor — orchestrator must UNION with discovered names, never reset.
+BUILTIN_LIST_RETURNERS: frozenset = frozenset({"simd_mandelbrot_pair"})
+
+# Builtins that return a string pointer with length staged in `$__last_str_len`.
+# Same union pattern as BUILTIN_LIST_RETURNERS — orchestrator unions with
+# user-defined string-returning functions discovered by `_returns_string_like`.
+BUILTIN_STRING_RETURNERS: frozenset = frozenset({"format_fixed"})
+
 _RENDER_MODE_DECORATOR_NAMES = frozenset({"render_mode", "mode_rendu"})
 _SUPPORTED_RENDER_MODES = frozenset({"scalar_field", "point_stream", "polyline"})
 _STREAM_RENDER_MODES = frozenset({"point_stream", "polyline"})

@@ -37,6 +37,78 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
   exponents (interpolation). Exposed by `formatter_exponentiel` in fractales partage
   (mantissa = `x / pow(10, e)`). Regression : `test_pow_f64_negative_integer_exponent`.
 
+#### WAT/WASM backend — language ergonomics (roadmap section C, 2026-05-23 part 2)
+
+- **Multi-value returns (`retour (a, b, …)`).** WAT functions can now return
+  N≥2 values on the stack via a `(result f64 f64 …)` signature. `retour (a, b)`
+  pushes both values then `return` ; `soit x, y = f(…)` destructures via
+  `local.set` in reverse order. Detected automatically per-function via
+  `_multi_value_return_arity` (all `retour` statements must agree on arity).
+  Eliminates the `_x`/`_y` function-pair pattern across fractales (transforms,
+  landmarks, attractors). Regression: `test_multi_value_returns_tuple`.
+
+- **String concat on FString/CallExpr RHS.** Previously `s + f"…"` and
+  `s + func_call()` raised `Unsupported string expression for WAT concat`,
+  forcing a temp-local refactor. Now `_emit_string_value_with_len` falls
+  through to `$__last_str_len` (set by both f-string evaluation and
+  string-returning calls — and by `$__str_concat` itself, so chains of
+  arbitrary length work). Also fixed `_gen_string_len_expr` BinaryOp recursion
+  to bail (and rollback emitted instructions) if a child returns False.
+  Regression: `test_string_concat_rhs_fstring_and_call`.
+
+- **`pow_f64` general real exponents.** Previously returned NaN for any
+  non-integer exponent outside `{0, 0.5, 1, -0.5}`. Now falls back to
+  `exp(b · ln(a))` for `base > 0` ; negative base with non-integer exp still
+  returns NaN (no real value). Precision is bounded by `math.exp`/`math.log`
+  (~1e-6 with the 2026-05-22 log fix and the new exp range reduction below).
+  Regression: `test_pow_f64_general_real_exponents`.
+
+- **`math.exp` range reduction.** Previously a 10-term Taylor applied
+  directly to `x` (no reduction) — ~5% off at `|x|=5`, divergent at `|x|>20`.
+  Now uses `k = round(x/ln2)`, reduces to `r ∈ [-ln2/2, ln2/2]`, applies the
+  same Taylor on `r`, and multiplies by `2^k` via IEEE-754 bit-pattern
+  (exponent field = `1023 + k`, mantissa 0). Accurate to ~1e-15 across the
+  practical range. Enables the `pow_f64` general case above.
+
+- **`format_fixed(v, n)` runtime builtin.** Where `f"{v:.Nf}"` requires N at
+  compile time, `format_fixed(v, n)` accepts N at runtime (clamped to `[0, 9]`).
+  Internally dispatches to the existing `$__fmt_fixedN_tmpstr` helpers via an
+  if/else cascade in `$__fmt_fixed_dyn`. Eliminates the `formatter_fixe_2/3/5/6`
+  pattern (4 near-identical functions) in fractales. Registered in
+  `BUILTIN_STRING_RETURNERS` so `r = format_fixed(...)` tracks `r` as a
+  string. Regression: `test_format_fixed_dynamic_n`.
+
+- **List ABI helpers `__ml_list_count(ptr)`, `__ml_list_item(ptr, i)`.**
+  Exported runtime helpers that expose the heap-backed list layout
+  (header f64 at `ptr+0` = count, items at `ptr+8`, `ptr+16`, …) to host
+  callers. Eliminates the `base + 8 + 8 * (2 + 2 * k)` magic-offset reads
+  scattered across fractales JS code. Regression:
+  `test_ml_list_count_and_item_helpers`.
+
+- **Architectural fix: orchestrator unions state instead of resetting.**
+  `_sequence_func_names` and `_string_return_funcs` are now seeded from
+  `BUILTIN_LIST_RETURNERS` / `BUILTIN_STRING_RETURNERS` (frozensets in
+  `wat_generator_support`) — single source of truth. Adding a new builtin
+  that returns a list/string requires editing ONE constant, not also
+  patching the orchestrator's reset dict. Removes the dual-init smell I
+  introduced when adding `simd_mandelbrot_pair` in the prior session.
+
+#### Deferred (need a typed IR layer)
+
+The following items in the section-C roadmap require type information that
+isn't yet tracked through expressions, and so are deferred to a future
+typed-IR pass :
+
+- **B2 — `v128`/`f64x2` source type.** A real SIMD type with operators
+  `+ - * < le` lowering to `f64x2.*`. Currently scoped to one builtin
+  (`simd_mandelbrot_pair`). Needs operand-type dispatch in `_emit_numeric_binop`.
+- **B3 — i32 wraparound on `*` and `+` when bitwise-shaped.** Would
+  eliminate `imul32`/`iadd32` builtins. Needs operand "shape" tracking.
+- **B6 (full) — module-grouped manifest.** Manifest currently emits a flat
+  function list. Grouping by source module name would let fractales drop
+  the hand-coded `wasmMetaPanels` rebundling in `renderer.js`. Needs
+  per-function module attribution through the IR.
+
 #### WAT/WASM backend — SIMD (v128 f64x2)
 - **`simd_mandelbrot_pair(cx0, cy0, cx1, cy1, max_iter)` builtin.** First WebAssembly
   SIMD-using helper in the WAT backend. Iterates two Mandelbrot pixels in parallel via

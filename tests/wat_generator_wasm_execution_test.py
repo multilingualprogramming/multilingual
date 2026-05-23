@@ -671,6 +671,159 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertAlmostEqual(self._call_export(prog, "p_neg", 2.0), 0.125, places=12)
         self.assertAlmostEqual(self._call_export(prog, "p_neg_grand", 10.0), 1e-10, places=20)
 
+    def test_multi_value_returns_tuple(self):
+        # B1 : `retour (a, b)` lower à signature `(result f64 f64)`, push N
+        # valeurs avant `return`. `soit (x, y) = f(...)` destructure via
+        # `local.set` ordre inverse. Remplace les paires _x/_y dans fractales.
+        prog = _parse_source(
+            "déf paire(x, y):\n    retour (x + 1.0, y * 2.0)\n"
+            "déf utilise_x(x, y):\n    soit a, b = paire(x, y)\n    retour a\n"
+            "déf utilise_y(x, y):\n    soit a, b = paire(x, y)\n    retour b\n"
+            "déf utilise_somme(x, y):\n    soit a, b = paire(x, y)\n    retour a + b\n"
+            "déf cayley(x, y):\n"
+            "    soit den_re = x + 1.0\n"
+            "    soit den_im = y\n"
+            "    soit d2 = den_re * den_re + den_im * den_im\n"
+            "    retour (((x - 1.0) * den_re + y * den_im) / d2, (y * den_re - (x - 1.0) * den_im) / d2)\n"
+            "déf cayley_x(x, y):\n    soit cx, cy = cayley(x, y)\n    retour cx\n"
+            "déf cayley_y(x, y):\n    soit cx, cy = cayley(x, y)\n    retour cy\n",
+            language="fr",
+        )
+        # Basic destructuring
+        self.assertEqual(self._call_export(prog, "utilise_x", 3.0, 5.0), 4.0)
+        self.assertEqual(self._call_export(prog, "utilise_y", 3.0, 5.0), 10.0)
+        self.assertEqual(self._call_export(prog, "utilise_somme", 3.0, 5.0), 14.0)
+        # Cayley: z=2+0i → (1)/(3) = 0.333... ; (0)/(3) = 0
+        self.assertAlmostEqual(self._call_export(prog, "cayley_x", 2.0, 0.0), 1.0 / 3.0, places=12)
+        self.assertAlmostEqual(self._call_export(prog, "cayley_y", 2.0, 0.0), 0.0, places=12)
+
+    def test_ml_list_count_and_item_helpers(self):
+        # B5 : __ml_list_count(ptr) et __ml_list_item(ptr, i) exposent le
+        # layout des listes heap-backed sans que le caller hôte doive
+        # calculer les offsets bruts. Vérifie sur une liste créée via [0]*n.
+        prog = _parse_source(
+            "déf make_liste():\n    soit l = [0.0]*5\n    l[0] = 11.0\n    l[1] = 22.0\n    l[2] = 33.0\n    l[3] = 44.0\n    l[4] = 55.0\n    retour l\n",
+            language="fr",
+        )
+        from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        ptr = ex["make_liste"](store)
+        # __ml_list_count : doit retourner 5 (la liste a 5 éléments).
+        self.assertEqual(ex["__ml_list_count"](store, ptr), 5.0)
+        # __ml_list_item : 11, 22, 33, 44, 55.
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 0.0), 11.0)
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 1.0), 22.0)
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 4.0), 55.0)
+
+    def test_format_fixed_dynamic_n(self):
+        # B4 : `format_fixed(v, n)` builtin avec n variable au runtime
+        # (clampé à [0, 9]). Remplace les formatter_fixe_2/3/5/6 dans fractales.
+        prog = _parse_source(
+            "déf fmt(v, n):\n    retour format_fixed(v, n)\n",
+            language="fr",
+        )
+        from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        # n=2 → 2 décimales
+        self.assertEqual(read(ex["fmt"](store, 3.14159, 2.0)), "3.14")
+        # n=5 → 5 décimales (rounding ulp banker's)
+        self.assertEqual(read(ex["fmt"](store, -0.43633, 5.0)), "-0.43633")
+        # n=0 → entier arrondi (nearest-even)
+        self.assertEqual(read(ex["fmt"](store, 2.5, 0.0)), "2")  # round-half-to-even
+        # Clamp n>9 → n=9
+        self.assertEqual(read(ex["fmt"](store, 1.0, 12.0)), "1.000000000")
+        # Clamp n<0 → n=0
+        self.assertEqual(read(ex["fmt"](store, 7.7, -3.0)), "8")
+
+    def test_string_concat_rhs_fstring_and_call(self):
+        # Avant 2026-05-23 : `s + f"..."` et `s + func_call()` levaient
+        # `Unsupported string expression for WAT concat`. Le caller devait
+        # affecter le RHS à un local temporaire. Le fix : récupérer la
+        # longueur depuis `$__last_str_len` après évaluation (que les
+        # f-strings ET les appels string-returning remplissent déjà).
+        prog = _parse_source(
+            "déf maker(n):\n    retour f\"item_{n:.0f}\"\n"
+            "déf concat_fstring(n):\n    retour \"prefix_\" + f\"{n:.0f}\"\n"
+            "déf concat_call(n):\n    retour \"got_\" + maker(n)\n"
+            "déf triple(a, b):\n    retour f\"a={a:.2f}\" + \"_\" + f\"b={b:.2f}\"\n",
+            language="fr",
+        )
+        # Lire le résultat string : déclare un export "go" qui invoque
+        # concat_fstring(42) et utilise read_string sur le résultat. Plus
+        # simple : on vérifie juste que la compilation passe sans erreur.
+        from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
+        wat = WATCodeGenerator().generate(prog)
+        self.assertIn("call $__str_concat", wat)
+        self.assertIn("global.get $__last_str_len", wat)
+        self.assertNotIn("Unsupported string expression", wat)
+        # Exécuter pour vérifier le résultat. Sous WASI on lit via stdout,
+        # mais ici on appelle juste la fonction et on récupère l'i32 ptr +
+        # __ml_str_len pour décoder.
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read_str(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        self.assertEqual(read_str(ex["concat_fstring"](store, 42.0)), "prefix_42")
+        self.assertEqual(read_str(ex["concat_call"](store, 7.0)), "got_item_7")
+        self.assertEqual(read_str(ex["triple"](store, 1.0, 2.5)), "a=1.00_b=2.50")
+
+    def test_pow_f64_general_real_exponents(self):
+        # Renvoie NaN pour exposant non-entier avant 2026-05-23 ; doit
+        # désormais retomber sur exp(b·ln(a)) pour base > 0. Précision
+        # limitée par math.exp/math.log (~1e-6) donc tolérance places=4
+        # sur les exposants non-entiers.
+        import math as _m
+        prog = _parse_source(
+            "déf p(base, exp):\n    retour base ** exp\n",
+            language="fr",
+        )
+        # Cas non-entier positif : 2^0.5 = sqrt(2) — déjà spécial-casé, exact.
+        self.assertAlmostEqual(self._call_export(prog, "p", 2.0, 0.5), _m.sqrt(2), places=12)
+        # Cas non-entier général : 2^1.5 = 2*sqrt(2) ≈ 2.828
+        self.assertAlmostEqual(self._call_export(prog, "p", 2.0, 1.5), 2.0 ** 1.5, places=4)
+        # 10^2.3 ≈ 199.526
+        self.assertAlmostEqual(self._call_export(prog, "p", 10.0, 2.3), 10.0 ** 2.3, places=2)
+        # 0.5^0.3 ≈ 0.812 (base < 1)
+        self.assertAlmostEqual(self._call_export(prog, "p", 0.5, 0.3), 0.5 ** 0.3, places=4)
+        # Exposant non-entier négatif : 2^-1.5 = 1/(2*sqrt(2)) ≈ 0.354
+        self.assertAlmostEqual(self._call_export(prog, "p", 2.0, -1.5), 2.0 ** -1.5, places=4)
+        # Base ≤ 0 avec exposant non-entier : NaN (pas de valeur réelle).
+        result_neg_base = self._call_export(prog, "p", -2.0, 0.5)
+        self.assertTrue(result_neg_base != result_neg_base, "expected NaN")  # NaN != NaN
+
 
 @unittest.skipUnless(
     importlib.util.find_spec("wasmtime") is not None,
