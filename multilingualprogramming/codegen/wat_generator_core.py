@@ -798,6 +798,26 @@ class WATGeneratorCoreMixin:
   (func $__ml_str_len (export "__ml_str_len") (result i32)
     global.get $__last_str_len
   )
+  ;; Allocate a length-prefixed string buffer for host->wasm string passing.
+  ;; Reserves `len + 4` bytes, writes `len` as a 4-byte header, and returns the
+  ;; pointer to the bytes (header at ptr-4). JS callers: call __ml_str_alloc(n),
+  ;; write n UTF-8 bytes at the returned ptr, then pass ptr to a string-param
+  ;; export (the callee recovers the length from the header). This is the
+  ;; host-side counterpart of the internal $__str_make_headered helper.
+  (func $__ml_str_alloc (export "__ml_str_alloc") (param $len i32) (result i32)
+    (local $base i32)
+    local.get $len
+    i32.const 4
+    i32.add
+    call $ml_alloc
+    local.set $base
+    local.get $base
+    local.get $len
+    i32.store
+    local.get $base
+    i32.const 4
+    i32.add
+  )
   ;; Print a double-precision float always showing a decimal point.
   ;; Integer values (v == trunc(v), |v| < 1e15) are printed as "N.0".
   ;; Use this when the source literal was written as 1.0, 2.0, etc.
