@@ -10,7 +10,13 @@ import io
 import unittest
 from unittest.mock import patch
 
-from multilingualprogramming.codegen.runtime_builtins import RuntimeBuiltins, _runtime_input
+from multilingualprogramming.codegen.runtime_builtins import (
+    RuntimeBuiltins,
+    _runtime_input,
+    emit,
+    spatial_entity,
+    spatial_seed,
+)
 from multilingualprogramming.keyword.keyword_registry import KeywordRegistry
 from multilingualprogramming.runtime.channel import Channel
 from multilingualprogramming.runtime.reactive import CanvasNode, Signal
@@ -153,6 +159,15 @@ class RuntimeBuiltinsTestSuite(unittest.TestCase):
         self.assertIn("min", ns)
         self.assertIn("max", ns)
         self.assertIn("sorted", ns)
+
+    def test_namespace_has_spatial_primitives(self):
+        ns = RuntimeBuiltins("en").namespace()
+        self.assertIs(ns["emit"], emit)
+        self.assertIs(ns["spatial_entity"], spatial_entity)
+        self.assertIs(ns["spatial_seed"], spatial_seed)
+        entity = ns["spatial_entity"](ns["emit"](), 0.5, 0.5, 10)
+        self.assertEqual(entity[0], 1)
+        self.assertEqual(ns["spatial_seed"](entity), [entity])
 
     def test_namespace_has_type_builtins(self):
         ns = RuntimeBuiltins("en").namespace()
