@@ -2351,9 +2351,15 @@ class WATGeneratorCoreMixin:
     f64.const 0.4342944819032518
     f64.mul
   )
-  ;; atan(x): 6-term series for |x| ≤ 1; uses atan(x)=π/2-atan(1/x) for |x|>1.
+  ;; atan(x) avec double réduction d'intervalle pour ~1e-12 de précision :
+  ;;   1) signe : atan(-x) = -atan(x)
+  ;;   2) |x| > 1     → atan(x) = π/2 − atan(1/x)        (réduit à |y| ≤ 1)
+  ;;   3) |x| > tan(π/8) ≈ 0.4142 → atan(x) = π/4 + atan((x−1)/(x+1))
+  ;;                                                      (réduit à |y| ≤ tan(π/8))
+  ;;   4) série de Taylor à 12 termes (degrés 1..23) sur |y| ≤ tan(π/8) :
+  ;;      erreur de troncature ~ y^25 / 25 < 5e-12.
   (func $math_atan (param $x f64) (result f64)
-    (local $t f64) (local $x2 f64) (local $neg i32) (local $r f64)
+    (local $t f64) (local $x2 f64) (local $neg i32) (local $r f64) (local $offset f64)
     i32.const 0
     local.set $neg
     local.get $x
@@ -2366,6 +2372,7 @@ class WATGeneratorCoreMixin:
       f64.neg
       local.set $x
     end
+    ;; Réduction 1 : |x| > 1 → atan(x) = π/2 − atan(1/x).
     local.get $x
     f64.const 1.0
     f64.gt
@@ -2386,34 +2393,92 @@ class WATGeneratorCoreMixin:
       local.get $r
       return
     end
+    ;; Réduction 2 : |x| > tan(π/8) → atan(x) = π/4 + atan((x−1)/(x+1)).
+    ;; offset accumule π/4 si on a réduit, 0 sinon.
+    f64.const 0.0
+    local.set $offset
+    local.get $x
+    f64.const 0.41421356237309503
+    f64.gt
+    if
+      f64.const 0.7853981633974483
+      local.set $offset
+      local.get $x
+      f64.const 1.0
+      f64.sub
+      local.get $x
+      f64.const 1.0
+      f64.add
+      f64.div
+      local.set $x
+    end
+    ;; Série de Taylor (Horner) : atan(y) = y·P(y²) avec
+    ;; P(u) = 1 − u/3 + u²/5 − u³/7 + u⁴/9 − u⁵/11 + u⁶/13 − u⁷/15 + u⁸/17
+    ;;        − u⁹/19 + u¹⁰/21 − u¹¹/23.
     local.get $x
     local.get $x
     f64.mul
     local.set $x2
-    f64.const -0.09090909090909091
+    f64.const -0.043478260869565216  ;; -1/23
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const 0.1111111111111111
+    f64.const 0.047619047619047616   ;;  1/21
     f64.add
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const -0.14285714285714285
+    f64.const -0.05263157894736842   ;; -1/19
     f64.add
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const 0.2
+    f64.const 0.058823529411764705   ;;  1/17
     f64.add
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const -0.3333333333333333
+    f64.const -0.06666666666666667   ;; -1/15
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const 0.07692307692307693    ;;  1/13
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const -0.09090909090909091   ;; -1/11
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const 0.1111111111111111     ;;  1/9
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const -0.14285714285714285   ;; -1/7
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const 0.2                    ;;  1/5
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const -0.3333333333333333    ;; -1/3
     f64.add
     local.set $t
     local.get $x2
@@ -2422,9 +2487,12 @@ class WATGeneratorCoreMixin:
     f64.const 1.0
     f64.add
     local.set $t
+    ;; r = x·t + offset
     local.get $x
     local.get $t
     f64.mul
+    local.get $offset
+    f64.add
     local.set $r
     local.get $neg
     if

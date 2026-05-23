@@ -6,6 +6,19 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+### Added
+
+#### WAT/WASM backend — math accuracy
+- **`math.atan` double range reduction + 12-term Taylor.** The previous implementation used
+  a 6-term Taylor with only the `1/x` reduction, so `atan(1)` returned ~0.747 vs the true
+  `π/4 ≈ 0.7854` (~5% error, the worst case on `|x| ≤ 1`). Now adds a second reduction
+  `atan(x) = π/4 + atan((x − 1)/(x + 1))` for `x > tan(π/8) ≈ 0.4142`, so the Taylor
+  argument is always in `[-tan(π/8), tan(π/8)]`. Extended to 12 terms (degrees 1..23) —
+  truncation error `~ x^25/25 < 5e-12` at the boundary. Verified ~10 decimal places across
+  `atan(0)`, `atan(0.5)`, `atan(1)`, `atan(10)`, `atan(1000)`, and negative arguments.
+  `math.atan2` inherits the improvement directly. Regression test:
+  `tests/wat_generator_wasm_execution_test.py::test_math_atan_range_reduction_precision`.
+
 ## [0.7.0] - 2026-05-23
 
 ### Added

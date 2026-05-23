@@ -534,6 +534,45 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertAlmostEqual(self._call_export(prog, "c300"), 0.5, places=5)
         self.assertAlmostEqual(self._call_export(prog, "c240"), -0.5, places=5)
 
+    def test_math_atan_range_reduction_precision(self):
+        # Regression : la version 6-termes sans réduction (x-1)/(x+1) plafonnait
+        # à ~5% d'erreur pour atan(1) (= π/4). La double réduction (1/x ET
+        # (x-1)/(x+1)) + 12 termes Taylor doit donner ≥10 décimales correctes.
+        import math as _m
+        prog = _parse_source(
+            "déf a0():\n    retour math.atan(0.0)\n"
+            "déf a_un():\n    retour math.atan(1.0)\n"             # π/4
+            "déf a_demi():\n    retour math.atan(0.5)\n"           # 0.4636476090...
+            "déf a_neg_demi():\n    retour math.atan(-0.5)\n"
+            "déf a_tan_pi8():\n    retour math.atan(0.41421356237309503)\n"  # π/8
+            "déf a_juste_au_dessus():\n    retour math.atan(0.42)\n"        # franchit le seuil
+            "déf a_petit():\n    retour math.atan(0.1)\n"
+            "déf a_grand():\n    retour math.atan(10.0)\n"          # > 1, force la réduction 1/x
+            "déf a_tres_grand():\n    retour math.atan(1000.0)\n"   # 1.5697963...
+            "déf a_neg_grand():\n    retour math.atan(-50.0)\n"
+            "déf a_pi8():\n    retour math.atan2(0.4142135623730951, 1.0)\n"  # π/8
+            "déf a_pi4():\n    retour math.atan2(1.0, 1.0)\n"        # π/4
+            "déf a_3pi4():\n    retour math.atan2(1.0, -1.0)\n"      # 3π/4
+            "déf a_neg_pi2():\n    retour math.atan2(-1.0, 0.0)\n",
+            language="fr",
+        )
+        # Tolérance ~1e-10 (places=10) sur la branche standard, vs ~5e-2 avant.
+        self.assertAlmostEqual(self._call_export(prog, "a0"), 0.0, places=12)
+        self.assertAlmostEqual(self._call_export(prog, "a_un"), _m.pi / 4, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_demi"), _m.atan(0.5), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_neg_demi"), -_m.atan(0.5), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_tan_pi8"), _m.pi / 8, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_juste_au_dessus"), _m.atan(0.42), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_petit"), _m.atan(0.1), places=12)
+        self.assertAlmostEqual(self._call_export(prog, "a_grand"), _m.atan(10.0), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_tres_grand"), _m.atan(1000.0), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_neg_grand"), _m.atan(-50.0), places=10)
+        # atan2 hérite de la précision atan (≥10 décimales).
+        self.assertAlmostEqual(self._call_export(prog, "a_pi8"), _m.pi / 8, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_pi4"), _m.pi / 4, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_3pi4"), 3 * _m.pi / 4, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_neg_pi2"), -_m.pi / 2, places=12)
+
 
 @unittest.skipUnless(
     importlib.util.find_spec("wasmtime") is not None,
