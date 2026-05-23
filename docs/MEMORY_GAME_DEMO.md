@@ -379,7 +379,7 @@ Want to add another game using the reactive pattern?
 4. Create demo HTML in `docs/your_game_demo.html`
 5. Submit PR with documentation
 
-See [Contributing Guide](../CONTRIBUTING.md) for details.
+See [Contributing Guide](_generated/CONTRIBUTING.md) for details.
 
 ---
 
