@@ -2209,8 +2209,17 @@ class WATGeneratorCoreMixin:
     f64.const 1.0
     f64.add
   )
-  ;; log(x): natural log via atanh series ln(x)=2*atanh((x-1)/(x+1)), 5 terms.
+  ;; log(x): natural log with IEEE-754 mantissa range reduction.
+  ;;
+  ;; x = m * 2^e with m in [1, 2); log(x) = log(m) + e * log(2). After splitting,
+  ;; reduce m further to [sqrt(1/2), sqrt(2)) so the atanh series argument
+  ;; t = (m-1)/(m+1) stays in [-0.172, 0.172], where 5 odd terms converge to
+  ;; ~2.2e-8. Without range reduction the previous implementation was ~2% off
+  ;; for arguments far from 1 (e.g. log(10) ≈ 2.255 vs the true 2.303).
   (func $math_log (param $x f64) (result f64)
+    (local $bits i64)
+    (local $e f64)
+    (local $m f64)
     (local $t f64) (local $t2 f64) (local $s f64)
     local.get $x
     f64.const 0.0
@@ -2219,10 +2228,47 @@ class WATGeneratorCoreMixin:
       f64.const nan
       return
     end
+    ;; bits = i64 reinterpretation of x
     local.get $x
+    i64.reinterpret_f64
+    local.set $bits
+    ;; e = ((bits >> 52) & 0x7FF) - 1023, as f64
+    local.get $bits
+    i64.const 52
+    i64.shr_u
+    i64.const 2047
+    i64.and
+    i64.const 1023
+    i64.sub
+    f64.convert_i64_s
+    local.set $e
+    ;; m_bits = (bits & 0x000FFFFFFFFFFFFF) | 0x3FF0000000000000  -> m in [1, 2)
+    local.get $bits
+    i64.const 4503599627370495
+    i64.and
+    i64.const 4607182418800017408
+    i64.or
+    f64.reinterpret_i64
+    local.set $m
+    ;; Tighten the range: if m >= sqrt(2), m /= 2 and e += 1.
+    local.get $m
+    f64.const 1.4142135623730951
+    f64.ge
+    if
+      local.get $m
+      f64.const 0.5
+      f64.mul
+      local.set $m
+      local.get $e
+      f64.const 1.0
+      f64.add
+      local.set $e
+    end
+    ;; t = (m - 1) / (m + 1)
+    local.get $m
     f64.const 1.0
     f64.sub
-    local.get $x
+    local.get $m
     f64.const 1.0
     f64.add
     f64.div
@@ -2231,8 +2277,10 @@ class WATGeneratorCoreMixin:
     local.get $t
     f64.mul
     local.set $t2
+    ;; s = t (1st term)
     local.get $t
     local.set $s
+    ;; + t*t2 / 3
     local.get $t
     local.get $t2
     f64.mul
@@ -2241,6 +2289,7 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; + t*t2^2 / 5
     local.get $t
     local.get $t2
     f64.mul
@@ -2251,6 +2300,7 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; + t*t2^3 / 7
     local.get $t
     local.get $t2
     f64.mul
@@ -2263,6 +2313,7 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; + t*t2^4 / 9
     local.get $t
     local.get $t2
     f64.mul
@@ -2277,9 +2328,14 @@ class WATGeneratorCoreMixin:
     local.get $s
     f64.add
     local.set $s
+    ;; log(m) = 2*s ; log(x) = log(m) + e * log(2)
     local.get $s
     f64.const 2.0
     f64.mul
+    local.get $e
+    f64.const 0.6931471805599453
+    f64.mul
+    f64.add
   )
   ;; log2(x) = log(x) * (1/ln 2).
   (func $math_log2 (param $x f64) (result f64)
