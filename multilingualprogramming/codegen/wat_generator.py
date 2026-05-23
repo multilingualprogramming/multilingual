@@ -188,7 +188,10 @@ class WATCodeGenerator(
         # Populated for methods that are overridden in ≥1 subclass.
         self._dispatch_func_names: dict[str, str] = {}
         # Functions known to return heap-backed sequence pointers.
-        self._sequence_func_names: set[str] = set()
+        # Pre-populated with builtins that emit list pointers (e.g. SIMD kernels) ;
+        # user-defined list-returning functions are added by the orchestrator
+        # via `_returns_list_like` analysis.
+        self._sequence_func_names: set[str] = {"simd_mandelbrot_pair"}
         # Functions known to return string-like values with $__last_str_len metadata.
         self._string_return_funcs: set[str] = set()
         # Runtime string formatting helpers.
@@ -1313,6 +1316,64 @@ class WATCodeGenerator(
                 self._gen_expr(node.args[0], indent)
                 self._gen_expr(node.args[1], indent)
                 self._emit(f"{indent}call $math_atan2")
+            elif resolved_fname in {"imul32"} and len(node.args) == 2:
+                # 32-bit integer multiplication with wraparound, mirroring
+                # JS Math.imul. The bitwise ops `& | ^ << >>` already use the
+                # signed-i32 convention (trunc_f64_s / convert_i32_s) ; this
+                # extends it to multiplication. f64.mul does NOT wrap, hence
+                # the need for a dedicated builtin. Required by mulberry32
+                # PRNG and any 32-bit hash (FNV, CRC32, …).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i32.mul")
+                self._emit(f"{indent}f64.convert_i32_s")
+            elif resolved_fname in {"iadd32"} and len(node.args) == 2:
+                # 32-bit integer addition with wraparound. Uses an i64
+                # intermediate so the sum cannot overflow before wrapping :
+                #   i64.extend_i32_s ; i64.add ; i32.wrap_i64.
+                # Naïvement écrire `(a + b) ^ 0` traperait quand le sum f64
+                # dépasse [-2^31, 2^31).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i64.extend_i32_s")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i64.extend_i32_s")
+                self._emit(f"{indent}i64.add")
+                self._emit(f"{indent}i32.wrap_i64")
+                self._emit(f"{indent}f64.convert_i32_s")
+            elif resolved_fname in {"shr_u32"} and len(node.args) == 2:
+                # Unsigned right shift (zero-fill), mirroring JS `>>>`. The
+                # built-in `>>` is signed (sign-extending). Required by
+                # mulberry32 (which mixes (t ^ (t >>> 15)) etc.).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i32.shr_u")
+                self._emit(f"{indent}f64.convert_i32_s")
+            elif resolved_fname in {"simd_mandelbrot_pair"} and len(node.args) == 5:
+                # SIMD f64x2 kernel : itère deux pixels Mandelbrot en parallèle
+                # via WebAssembly v128 (cf. $mandelbrot_pair_simd dans
+                # wat_generator_core). Retourne un pointeur vers la liste
+                # [iter0, iter1]. Le caller .multi peut donc faire
+                # `soit r = simd_mandelbrot_pair(...)` puis `r[0]`, `r[1]`.
+                # Inscription auto comme « returns list » via le marquage
+                # ci-dessous dans _track_callee_list_return n'est pas nécessaire :
+                # le caller appelle un builtin et le résultat est ptr+f64.
+                for arg in node.args:
+                    self._gen_expr(arg, indent)
+                self._emit(f"{indent}call $mandelbrot_pair_simd")
+            elif resolved_fname in {"u32_to_f64"} and len(node.args) == 1:
+                # Reinterpret a signed-i32-as-f64 value as unsigned-i32-as-f64.
+                # Negatives become value + 2^32. Identity for non-negatives.
+                # Used to convert mulberry32 output (signed-view i32) to a
+                # uint32 magnitude before dividing by 2^32 → [0, 1).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}f64.convert_i32_u")
             elif resolved_fname in {"math.hypot", "hypot"} and len(node.args) == 2:
                 # hypot(a,b) = sqrt(a²+b²)
                 self._gen_expr(node.args[0], indent)

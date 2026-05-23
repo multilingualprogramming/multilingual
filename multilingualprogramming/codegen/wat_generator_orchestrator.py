@@ -187,7 +187,10 @@ def _reset_generator_state(generator) -> None:
         "_str_concat_helper_emitted": False,
         "_str_slice_helper_emitted": False,
         "_str_eq_helper_emitted": False,
-        "_sequence_func_names": set(),
+        # Pré-rempli : builtins de bas niveau qui renvoient un pointeur de liste
+        # (cf. simd_mandelbrot_pair → ml_alloc + writes). Les fonctions
+        # utilisateurs list-returning seront ajoutées par _collect_function_metadata.
+        "_sequence_func_names": {"simd_mandelbrot_pair"},
         "_string_return_funcs": set(),
         "_string_format_helpers_emitted": False,
         "_closure_factory_funcs": {},
