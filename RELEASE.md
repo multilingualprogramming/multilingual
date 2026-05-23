@@ -1,5 +1,40 @@
 # Release Notes
 
+## v0.7.0 - 2026-05-23
+
+### Core 1 Runtime, AI, And Backend Expansion
+
+This release moves Multilingual beyond the 0.6 WAT/WASM milestone into a broader Core 1 platform
+preview: AI-native runtime pieces, semantic IR tooling, reactive UI output, and a deeper
+WAT/WASM backend.
+
+#### AI-Native Runtime
+- Added runtime support for prompts, generation, extraction, embeddings, reasoning, streaming,
+  caching, model registry/routing, prompt optimization, retrieval, memory stores, tools, agents,
+  and swarm-style delegation.
+- Added provider adapters for OpenAI, Anthropic, and Ollama behind optional `[ai]` dependencies.
+- Added typed AI result/value helpers and tests under `tests/core1/`.
+
+#### Core 1, UI, And CLI
+- Added semantic IR commands: `multilingual ir`, `multilingual explain`, and `--mode core`.
+- Added reactive UI lowering plus `build-ui-bundle` and `ui-preview` commands.
+- Added WAT ABI helper commands for manifests, host shims, and renderer templates.
+
+#### WAT/WASM Backend
+- Expanded math support and fixed numeric accuracy for trigonometric, logarithmic, exponential,
+  atan/atan2, hypot, degree/radian, and constants lowering.
+- Added richer string support: length-preserving string parameters, content equality, `str()`,
+  f-string numeric interpolation, ASCII case conversion, prefix/suffix/count/replace helpers,
+  indexing, slicing, and host string allocation.
+- Added list-return propagation, runtime-sized list repeat, list mutation/copy helpers,
+  `enumerate`, `map`, `filter`, dictionary method lowering, `json.dumps(list)`, type-tagged
+  `isinstance`, DOM callback dispatch, and `yield from range(n)` materialization.
+
+#### Packaging
+- Bumped package version to `0.7.0`.
+- Added optional extras: `[ai]` for AI providers and `[all]` for WASM, performance, and AI
+  dependencies together.
+
 ## v0.6.0 - 2026-03-09
 
 ### WAT/WASM Backend — Full Construct Coverage

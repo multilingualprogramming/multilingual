@@ -6,6 +6,8 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-05-23
+
 ### Added
 
 #### WAT/WASM backend — math accuracy

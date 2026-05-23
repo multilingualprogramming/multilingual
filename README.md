@@ -139,6 +139,14 @@ pip install -r requirements.txt
 pip install .
 ```
 
+Optional runtime extras:
+
+```bash
+pip install "multilingualprogramming[wasm]"
+pip install "multilingualprogramming[ai]"
+pip install "multilingualprogramming[all]"
+```
+
 ## Hello World
 
 ```text

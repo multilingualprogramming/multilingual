@@ -32,7 +32,7 @@
 | **Package name** | `multilingualprogramming` |
 | **CLI commands** | `multilingual`, `multilg` (alias) |
 | **Tagline** | "One programming model. Many human languages." |
-| **Version** | `0.6.0` (see `multilingualprogramming/version.py`) |
+| **Version** | `0.7.0` (see `multilingualprogramming/version.py`) |
 | **Status** | Beta (Development Status :: 4) |
 | **Python requirement** | ≥ 3.12 |
 | **License** | GPL-3.0-or-later (code), CC BY-SA 4.0 (docs) |
@@ -136,7 +136,7 @@ multilingual/
 ├── multilingualprogramming/            ← main package
 │   ├── __init__.py                     ← public API exports (88 items)
 │   ├── __main__.py                     ← CLI entry point (argparse)
-│   ├── version.py                      ← version = "0.6.0"
+│   ├── version.py                      ← version = "0.7.0"
 │   ├── exceptions.py                   ← custom exceptions
 │   ├── imports.py                      ← multilingual .multi/.ml import support
 │   ├── unicode_string.py               ← Unicode string utilities
@@ -884,7 +884,7 @@ Both forms must appear in the language's array for reliable lexer matching.
 
 ## 15. Version & Release Info
 
-### Current Version: `0.6.0`
+### Current Version: `0.7.0`
 
 Defined in `multilingualprogramming/version.py`.
 
@@ -892,6 +892,7 @@ Defined in `multilingualprogramming/version.py`.
 
 | Version | Highlights |
 |---|---|
+| `0.7.0` | Core 1 semantic runtime expansion; AI, multimodal, retrieval, memory, tools, agents/swarm, reactive UI, structured concurrency, model registry, prompt optimization, and provider adapters; WAT/WASM string/list/math/DOM/JSON/generator improvements; browser/UI bundle commands and ABI/shim tooling |
 | `0.6.0` | WAT/WASM OOP object model, inheritance, `with`/`try`/`match`/`lambda`/`async` lowering, bytes support, WAT backend reorganization; real `try/except/finally` with numeric exception codes; `input()` / `argc()` / `argv()` builtins; DOM bridge (`"env"` host imports + WAT wrappers); source location comments in WAT |
 | `0.5.1` | Documentation updates |
 | `0.5.0` | WAT/WASM OOP object model; class lowering; inheritance; WAT execution tests; Unicode identifier reliability |
@@ -909,4 +910,4 @@ via the `release-pypi.yml` GitHub Actions workflow.
 
 ---
 
-*Last updated: 2026-03-16. For changes after this date, check CHANGELOG.md and git log.*
+*Last updated: 2026-05-23. For changes after this date, check CHANGELOG.md and git log.*

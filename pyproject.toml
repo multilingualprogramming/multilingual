@@ -7,7 +7,7 @@ name = "multilingualprogramming"
 dynamic = ["version"]
 description = "Python application for multilingual programming"
 readme = "README.md"
-license = {text = "GPL-3.0-or-later"}
+license = "GPL-3.0-or-later"
 requires-python = ">=3.12"
 keywords = [
     "programming-language",
@@ -23,7 +23,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Compilers",
     "Topic :: Software Development :: Interpreters",
@@ -43,9 +42,21 @@ dev = [
 wasm = [
     "wasmtime>=1.0.0",
 ]
+ai = [
+    "openai>=1.0.0",
+    "anthropic>=0.25.0",
+    "ollama>=0.2.0",
+]
 performance = [
     "wasmtime>=1.0.0",
     "numpy>=1.20.0",
+]
+all = [
+    "wasmtime>=1.0.0",
+    "numpy>=1.20.0",
+    "openai>=1.0.0",
+    "anthropic>=0.25.0",
+    "ollama>=0.2.0",
 ]
 
 [project.scripts]
