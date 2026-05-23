@@ -16,6 +16,7 @@ from multilingualprogramming.parser.ast_nodes import (
     DictLiteral,
     DictUnpackEntry,
     FStringLiteral,
+    ForLoop,
     FromImportStatement,
     FunctionDef,
     Identifier,
@@ -32,6 +33,7 @@ from multilingualprogramming.parser.ast_nodes import (
     StringLiteral,
     TupleLiteral,
     VariableDeclaration,
+    WhileLoop,
 )
 
 from multilingualprogramming.codegen.wat_generator_support import (
@@ -1057,6 +1059,63 @@ class WATGeneratorRuntimeMixin:
             return False
 
         return any(_stmt_returns_string(stmt) for stmt in func_def.body)
+
+    def _returns_list_like(self, func_def: FunctionDef) -> bool:
+        """Best-effort check for functions that return list/tuple-like values.
+
+        Recognizes ``retour [..]``, ``retour [expr] * n``, ``retour <local>``
+        where ``<local>`` was assigned a tracked list value, and propagated
+        returns from already-known list-returning callees. Used to populate
+        ``_sequence_func_names`` so that the caller's ``x = func(...)`` knows
+        ``x`` is a list pointer (enabling ``x[i]`` indexing).
+        """
+        # First pass: collect locals known to hold lists inside this function.
+        list_locals = set()
+        list_locals.update(self._func_param_list_names.get(_name(func_def.name), set()))
+
+        def _track_assign(target, value):
+            if not isinstance(target, Identifier):
+                return
+            if self._value_tracks_as_list(value):
+                list_locals.add(target.name)
+            elif isinstance(value, Identifier) and value.name in list_locals:
+                list_locals.add(target.name)
+
+        def _visit_for_tracking(stmt):
+            if isinstance(stmt, VariableDeclaration) and isinstance(stmt.name, Identifier):
+                _track_assign(stmt.name, stmt.value)
+            elif isinstance(stmt, Assignment):
+                _track_assign(stmt.target, stmt.value)
+            elif isinstance(stmt, IfStatement):
+                for inner in stmt.body + (stmt.else_body or []):
+                    _visit_for_tracking(inner)
+            elif isinstance(stmt, WhileLoop):
+                for inner in stmt.body:
+                    _visit_for_tracking(inner)
+            elif isinstance(stmt, ForLoop):
+                for inner in stmt.body:
+                    _visit_for_tracking(inner)
+
+        for stmt in func_def.body:
+            _visit_for_tracking(stmt)
+
+        def _stmt_returns_list(stmt):
+            if isinstance(stmt, ReturnStatement) and stmt.value is not None:
+                if self._value_tracks_as_list(stmt.value):
+                    return True
+                if isinstance(stmt.value, Identifier) and stmt.value.name in list_locals:
+                    return True
+                return False
+            if isinstance(stmt, IfStatement):
+                else_body = stmt.else_body or []
+                return any(_stmt_returns_list(inner) for inner in stmt.body + else_body)
+            if isinstance(stmt, WhileLoop):
+                return any(_stmt_returns_list(inner) for inner in stmt.body)
+            if isinstance(stmt, ForLoop):
+                return any(_stmt_returns_list(inner) for inner in stmt.body)
+            return False
+
+        return any(_stmt_returns_list(stmt) for stmt in func_def.body)
 
     def _exception_code_for(self, value) -> int:
         """Return a small numeric code for supported exception types."""

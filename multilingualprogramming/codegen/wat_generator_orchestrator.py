@@ -77,6 +77,8 @@ class WATGeneratorOrchestratorMixin:
             self._func_string_params[fname] = _string_typed_params(func)
             if self._returns_string_like(func):
                 self._string_return_funcs.add(fname)
+            if self._returns_list_like(func):
+                self._sequence_func_names.add(fname)
 
     def _emit_program_sections(self, funcs: list, classes: list, top: list) -> None:
         """Emit functions, classes, dispatch helpers, and optional main body."""

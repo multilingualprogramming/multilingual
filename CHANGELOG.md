@@ -8,6 +8,29 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ### Added
 
+#### WAT/WASM backend — math accuracy
+- **`math.log` mantissa range reduction.** The atanh series was applied directly to `x`, so
+  `log(10)` returned ~2.255 instead of 2.302585 (~2% error for arguments far from 1). Now uses
+  IEEE-754 bit manipulation (`i64.reinterpret_f64`) to split `x = m·2^e`, reduces `m` further to
+  `[sqrt(0.5), sqrt(2))`, and computes `log(m) + e·log(2)`. The atanh argument stays in
+  `[-0.172, 0.172]` so the 5-term series converges to ~2.2e-8. Verified to ~1e-6 accuracy across
+  `log(0.5)` → `log(1e10)`.
+
+#### WAT/WASM backend — list-return propagation
+- **User functions returning lists are now tracked at the call site.** A function whose body
+  returns a list literal (`retour [a, b]`), a list-repeat (`retour [0]*n`), a tracked-list local,
+  or another list-returning call is detected by `_returns_list_like` and registered in
+  `_sequence_func_names`. The caller's `x = func(...)` therefore makes `x` a tracked list, so
+  `x[i]` indexing lowers correctly (previously fell back to `f64.const 0 ;; unsupported:
+  IndexAccess on non-list`). Unblocks pure-`.multi` Dekker arithmetic (`two_sum`/`two_product`
+  returning `[hi, lo]`) and other helpers that return small fixed-shape lists.
+
+#### WAT/WASM backend — host-side helpers
+- **`__ml_str_alloc(len)` exported** (companion to `__ml_str_len`): JS calls this to allocate a
+  length-prefixed string buffer for host→wasm string passing. Writes the byte length as a
+  4-byte header and returns the pointer to the bytes (header at `ptr-4`). Used by the fractales
+  L-système main-canvas migration to pass axiom/rules as real string args.
+
 #### WAT/WASM backend — string operations
 - **Length-prefixed string parameters (cross-function string passing)**: string values carry no
   length in their f64 pointer, so passing a string as a function argument previously lost its byte
