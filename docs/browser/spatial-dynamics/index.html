@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fixed-Semantic Spatial Dynamics</title>
+  <style>
+    :root {
+      --bg: #11130f;
+      --surface: #f1efe4;
+      --panel: rgba(17, 19, 15, 0.78);
+      --line: rgba(241, 239, 228, 0.2);
+      --ink: #f1efe4;
+      --focus: #f7c948;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: var(--surface);
+      cursor: crosshair;
+    }
+
+    .toolbar,
+    .palette {
+      position: fixed;
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+
+    .toolbar {
+      top: 12px;
+      left: 12px;
+      border-radius: 8px;
+    }
+
+    .palette {
+      left: 12px;
+      bottom: 12px;
+      max-width: calc(100vw - 24px);
+      overflow-x: auto;
+      border-radius: 8px;
+    }
+
+    button {
+      width: 44px;
+      height: 44px;
+      position: relative;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    button[aria-pressed="true"],
+    .selected {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 2px rgba(247, 201, 72, 0.2) inset;
+    }
+
+    .icon-play::before {
+      width: 0;
+      height: 0;
+      border-top: 10px solid transparent;
+      border-bottom: 10px solid transparent;
+      border-left: 16px solid currentColor;
+      content: "";
+      transform: translateX(2px);
+    }
+
+    .icon-pause::before,
+    .icon-pause::after {
+      width: 6px;
+      height: 22px;
+      background: currentColor;
+      content: "";
+    }
+
+    .icon-pause {
+      grid-template-columns: repeat(2, 8px);
+    }
+
+    .icon-reset::before {
+      width: 20px;
+      height: 20px;
+      border: 3px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      content: "";
+    }
+
+    .glyph::before,
+    .glyph::after {
+      content: "";
+      position: absolute;
+      display: block;
+    }
+
+    .b1::before {
+      width: 16px;
+      height: 16px;
+      background: #de3c4b;
+      border-radius: 50%;
+      box-shadow: 0 0 18px #de3c4b;
+    }
+
+    .b2::before {
+      width: 24px;
+      height: 24px;
+      border: 4px solid #3a86ff;
+      border-radius: 50%;
+      opacity: 0.9;
+    }
+
+    .b3::before {
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-bottom: 22px solid #2d6a4f;
+    }
+
+    .b4::before {
+      width: 0;
+      height: 0;
+      border-left: 12px solid transparent;
+      border-right: 12px solid transparent;
+      border-top: 22px solid #f77f00;
+    }
+
+    .b5::before {
+      width: 22px;
+      height: 22px;
+      border: 4px double #6c757d;
+    }
+
+    .b6::before {
+      width: 24px;
+      height: 24px;
+      border: 4px solid #8338ec;
+      border-radius: 50%;
+      clip-path: polygon(0 0, 50% 0, 50% 100%, 0 100%);
+    }
+
+    .b7::before {
+      width: 22px;
+      height: 22px;
+      background: #00a896;
+      clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    }
+
+    .b8::before {
+      width: 26px;
+      height: 26px;
+      border: 3px solid #ffbe0b;
+      border-radius: 50%;
+    }
+
+    .b8::after {
+      width: 12px;
+      height: 12px;
+      border: 3px solid #ffbe0b;
+      border-radius: 50%;
+    }
+
+    .b9::before {
+      width: 28px;
+      height: 20px;
+      background: #fb5607;
+      clip-path: polygon(0 0, 48% 50%, 0 100%, 18% 50%);
+    }
+
+    .b9::after {
+      width: 28px;
+      height: 20px;
+      background: #fb5607;
+      clip-path: polygon(100% 0, 52% 50%, 100% 100%, 82% 50%);
+    }
+
+    .b10::before {
+      width: 28px;
+      height: 20px;
+      background: #7209b7;
+      clip-path: polygon(0 0, 50% 50%, 0 100%);
+    }
+
+    .b10::after {
+      width: 28px;
+      height: 20px;
+      background: #7209b7;
+      clip-path: polygon(100% 0, 50% 50%, 100% 100%);
+    }
+
+    .b11::before {
+      width: 30px;
+      height: 30px;
+      border: 3px solid #252422;
+      border-radius: 50%;
+    }
+
+    .b12::before {
+      width: 26px;
+      height: 6px;
+      background: #0077b6;
+    }
+
+    .b12::after {
+      width: 14px;
+      height: 14px;
+      border-top: 6px solid #0077b6;
+      border-right: 6px solid #0077b6;
+      transform: translateX(8px) rotate(45deg);
+    }
+
+    noscript {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+      background: var(--bg);
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="world" aria-label="fixed semantic spatial dynamics workspace"></canvas>
+
+  <nav class="toolbar" aria-label="runtime">
+    <button id="toggle" class="icon-pause" type="button" aria-label="pause" aria-pressed="true"></button>
+    <button id="reset" class="icon-reset" type="button" aria-label="reset"></button>
+  </nav>
+
+  <nav class="palette" aria-label="fixed behavior palette">
+    <button class="glyph b1 selected" type="button" data-behavior="1" aria-label="emit"></button>
+    <button class="glyph b2" type="button" data-behavior="2" aria-label="diffuse"></button>
+    <button class="glyph b3" type="button" data-behavior="3" aria-label="attract"></button>
+    <button class="glyph b4" type="button" data-behavior="4" aria-label="repel"></button>
+    <button class="glyph b5" type="button" data-behavior="5" aria-label="stabilize"></button>
+    <button class="glyph b6" type="button" data-behavior="6" aria-label="oscillate"></button>
+    <button class="glyph b7" type="button" data-behavior="7" aria-label="transform"></button>
+    <button class="glyph b8" type="button" data-behavior="8" aria-label="resonate"></button>
+    <button class="glyph b9" type="button" data-behavior="9" aria-label="split"></button>
+    <button class="glyph b10" type="button" data-behavior="10" aria-label="merge"></button>
+    <button class="glyph b11" type="button" data-behavior="11" aria-label="contain"></button>
+    <button class="glyph b12" type="button" data-behavior="12" aria-label="propagate"></button>
+  </nav>
+
+  <noscript>This 2D spatial dynamics prototype requires JavaScript.</noscript>
+  <script type="module" src="./spatial_runtime.js"></script>
+</body>
+</html>

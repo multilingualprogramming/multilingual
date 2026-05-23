@@ -52,7 +52,6 @@ from multilingualprogramming.runtime.semantic_match import semantic_match
 from multilingualprogramming.runtime.tool_runtime import AgentLoop, get_registry, tool
 from multilingualprogramming.runtime.memory_store import ml_memory
 
-
 def _coerce_model(model):
     """Normalize model inputs to ModelRef values."""
     if isinstance(model, ModelRef):
@@ -311,6 +310,57 @@ def _bind(canvas_or_node, slot_name, signal):
     if hasattr(canvas_or_node, 'bind'):
         canvas_or_node.bind(slot_name, signal)
     return canvas_or_node
+
+
+def _spatial_opcode(value):
+    """Create a fixed behavior opcode function for Multilingual spatial source."""
+    return lambda: value
+
+
+emit = _spatial_opcode(1)
+diffuse = _spatial_opcode(2)
+attract = _spatial_opcode(3)
+repel = _spatial_opcode(4)
+stabilize = _spatial_opcode(5)
+oscillate = _spatial_opcode(6)
+transform = _spatial_opcode(7)
+resonate = _spatial_opcode(8)
+split = _spatial_opcode(9)
+merge = _spatial_opcode(10)
+contain = _spatial_opcode(11)
+propagate = _spatial_opcode(12)
+
+
+def spatial_entity(
+    behavior,
+    x_ratio,
+    y_ratio,
+    radius,
+    intensity=1.0,
+    signal=0.0,
+    vx=0.0,
+    vy=0.0,
+    phase=0.0,
+    channel=0,
+):
+    """Return an unlabeled spatial entity row for Multilingual source."""
+    return [
+        int(behavior),
+        float(x_ratio),
+        float(y_ratio),
+        float(radius),
+        float(intensity),
+        float(signal),
+        float(vx),
+        float(vy),
+        float(phase),
+        int(channel),
+    ]
+
+
+def spatial_seed(*entities):
+    """Return a spatial world seed from unlabeled entity rows."""
+    return list(entities)
 
 
 class RuntimeBuiltins:
@@ -578,6 +628,21 @@ class RuntimeBuiltins:
         "vincular": _bind,
         "CanvasNode": _canvas,
         "Channel": _channel,
+        # Fixed-semantic spatial computation primitives
+        "emit": emit,
+        "diffuse": diffuse,
+        "attract": attract,
+        "repel": repel,
+        "stabilize": stabilize,
+        "oscillate": oscillate,
+        "transform": transform,
+        "resonate": resonate,
+        "split": split,
+        "merge": merge,
+        "contain": contain,
+        "propagate": propagate,
+        "spatial_entity": spatial_entity,
+        "spatial_seed": spatial_seed,
     }
 
     # Non-callable special values available in exec() namespace

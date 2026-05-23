@@ -49,6 +49,7 @@ from multilingualprogramming.source_extensions import (
     find_package_init,
     has_source_extension,
 )
+from multilingualprogramming.codegen.spatial_manifest import build_spatial_manifest_file
 from multilingualprogramming.version import __version__
 
 
@@ -365,6 +366,17 @@ def cmd_build_ui_bundle(args):
     if result.diagnostics:
         for diag in result.diagnostics:
             print(f"[WARN] {diag}")
+
+
+def cmd_spatial_build(args):
+    """Build a spatial JSON manifest from a Multilingual source file."""
+    manifest = build_spatial_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[spatial] {manifest['kind']} entities={len(manifest['entities'])}")
 
 
 def cmd_ir(args):
@@ -739,6 +751,20 @@ def main():  # pylint: disable=too-many-statements
         help="Output directory for generated artifacts (default: build/ui)",
     )
 
+    spatial_build_parser = subparsers.add_parser(
+        "spatial-build",
+        help="Build a fixed-semantic spatial JSON manifest",
+    )
+    spatial_build_parser.add_argument("file", help="Path to the source file")
+    spatial_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    spatial_build_parser.add_argument(
+        "--out", default="program.spatial.json",
+        help="Output JSON manifest path (default: program.spatial.json)",
+    )
+
     # ir subcommand
     ir_parser = subparsers.add_parser(
         "ir", help="Show the semantic IR for a source file"
@@ -805,6 +831,8 @@ def main():  # pylint: disable=too-many-statements
         cmd_build_wasm_bundle(args)
     elif args.command == "build-ui-bundle":
         cmd_build_ui_bundle(args)
+    elif args.command == "spatial-build":
+        cmd_spatial_build(args)
     elif args.command == "ir":
         cmd_ir(args)
     elif args.command == "explain":

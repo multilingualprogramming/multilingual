@@ -21,6 +21,22 @@ Reactive UI, async handlers, and browser interaction in Multilingual.
 - `examples/memory_game_en.multi`
 - `examples/memory_game_fr.multi`
 
+### Spatial dynamics
+
+Fixed-semantic 2D research prototype for post-textual computation.
+
+**[Open the Spatial Dynamics prototype](browser/spatial-dynamics/)**
+
+- no textual source editor inside the workspace
+- no labels rendered on the computational canvas
+- fixed visual primitives with dynamic interaction laws
+- source is authored in `program.multi` and built into `program.spatial.json`
+
+```bash
+multilingual spatial-build docs/browser/spatial-dynamics/program.multi \
+  --out docs/browser/spatial-dynamics/program.spatial.json
+```
+
 ### Reactive counter
 
 A compact reactive web app using state changes and canvas updates.
