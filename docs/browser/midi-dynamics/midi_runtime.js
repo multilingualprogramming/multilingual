@@ -11,12 +11,27 @@
 // output port so users with a connected synth can hear the program.
 // Without a MIDI output, the runtime falls back to a tiny WebAudio
 // synth so the page is audible on localhost with no external hardware.
+//
+// The "In" button captures incoming MIDI from the first available
+// MIDI input device for one bar, runs the inverse projection from
+// sonic_capture's MIDI peer (midi_capture.js), and renders the
+// recovered semantic-core manifest in a DOM panel. This makes the
+// MIDI round-trip claim user-visible.
+
+import {
+  loadOntology,
+  observeEvent,
+  captureSemanticCore,
+} from "./midi_capture.js";
 
 const MANIFEST_KIND = "midi-seed-v0";
+const DEFAULT_BAR_SECONDS = 4.0;
 
 const startButton = document.getElementById("start");
 const stopButton = document.getElementById("stop");
 const midiOutButton = document.getElementById("midiout");
+const midiInButton = document.getElementById("midiin");
+const recoveredPanel = document.getElementById("recovered");
 const roll = document.getElementById("roll");
 const ctx = roll.getContext("2d");
 const palette = document.querySelector(".palette");
@@ -30,6 +45,7 @@ let midiOutput = null;
 let activeNotes = new Set(); // pitch|channel keys for note-offs
 let audioContext = null;
 let masterGain = null;
+let capturing = false;
 
 async function loadMidiManifest() {
   const response = await fetch("./program.midi.json", { cache: "no-store" });
@@ -276,6 +292,104 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
+async function captureFromMidiIn() {
+  if (capturing) return;
+  capturing = true;
+  midiInButton.setAttribute("aria-pressed", "true");
+  const cleanup = [];
+  try {
+    if (!navigator.requestMIDIAccess) {
+      throw new Error("Web MIDI not available in this browser");
+    }
+    if (!midiAccess) {
+      midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    }
+    const inputs = Array.from(midiAccess.inputs.values());
+    if (inputs.length === 0) {
+      throw new Error("No Web MIDI input ports available");
+    }
+    const ontology = await loadOntology();
+    const events = [];
+    const startedAt = performance.now();
+    const barSeconds = (manifest && manifest.bar_seconds) || DEFAULT_BAR_SECONDS;
+
+    const onMessage = (message) => {
+      const [status, data1, data2 = 0] = message.data;
+      const elapsed = (performance.now() - startedAt) / 1000;
+      if (elapsed > barSeconds) return;
+      const startOffset = Math.max(0, Math.min(0.9999, elapsed / barSeconds));
+      const event = decodeStatus(status, data1, data2, events.length, startOffset);
+      if (event) events.push(event);
+    };
+    for (const port of inputs) {
+      port.addEventListener("midimessage", onMessage);
+      cleanup.push(() => port.removeEventListener("midimessage", onMessage));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, barSeconds * 1000));
+
+    const observed = events.map((event) => observeEvent(event));
+    const core = captureSemanticCore(observed, ontology, {
+      sourceLanguage: "en",
+      sourcePath: "<web-midi-in>",
+    });
+    renderRecovered(core);
+  } catch (err) {
+    renderRecovered({ error: String(err && err.message ? err.message : err) });
+  } finally {
+    for (const fn of cleanup) {
+      try { fn(); } catch (_e) { /* ignore */ }
+    }
+    capturing = false;
+    midiInButton.setAttribute("aria-pressed", "false");
+  }
+}
+
+function decodeStatus(status, data1, data2, index, startOffset) {
+  // Strip channel bits to identify the message kind, then derive an
+  // ObservedMidiEvent compatible with midi_capture.observeEvent. The
+  // role assignments mirror the forward MidiHint taxonomy.
+  const type = status & 0xf0;
+  const channel = status & 0x0f;
+  if (type === 0x90 && data2 > 0) {
+    return {
+      index,
+      role: channel === 9 ? "drum" : "note",
+      pitch: data1,
+      velocity: data2,
+      channel,
+      start_offset: startOffset,
+    };
+  }
+  if (type === 0xb0) {
+    return {
+      index,
+      role: "cc",
+      pitch: data1,
+      velocity: data2,
+      channel,
+      start_offset: startOffset,
+    };
+  }
+  if (type === 0xc0) {
+    return {
+      index,
+      role: "program",
+      pitch: data1,
+      velocity: 0,
+      channel,
+      start_offset: startOffset,
+    };
+  }
+  return null;
+}
+
+function renderRecovered(payload) {
+  if (!recoveredPanel) return;
+  recoveredPanel.hidden = false;
+  recoveredPanel.textContent = JSON.stringify(payload, null, 2);
+}
+
 palette.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
@@ -285,6 +399,8 @@ palette.addEventListener("click", (event) => {
     stop();
   } else if (button.dataset.action === "midiout") {
     toggleMidiOut();
+  } else if (button.dataset.action === "midiin") {
+    captureFromMidiIn();
   }
 });
 

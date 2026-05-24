@@ -96,6 +96,40 @@
       content: "";
     }
 
+    .icon-in::before {
+      width: 18px;
+      height: 18px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-top-color: transparent;
+      transform: rotate(45deg);
+      content: "";
+    }
+
+    .recovered {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      max-width: min(420px, 40vw);
+      max-height: 50vh;
+      overflow: auto;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      color: var(--ink);
+    }
+
+    .recovered[hidden] {
+      display: none;
+    }
+
     noscript {
       position: fixed;
       inset: 0;
@@ -114,7 +148,10 @@
     <button id="start" class="icon-play" type="button" data-action="start" aria-label="start" aria-pressed="false"></button>
     <button id="stop" class="icon-stop" type="button" data-action="stop" aria-label="stop" aria-pressed="true"></button>
     <button id="midiout" class="icon-out" type="button" data-action="midiout" aria-label="enable web midi output" aria-pressed="false"></button>
+    <button id="midiin" class="icon-in" type="button" data-action="midiin" aria-label="capture from web midi input" aria-pressed="false"></button>
   </nav>
+
+  <pre id="recovered" class="recovered" aria-live="polite" hidden></pre>
 
   <noscript>This polymodal MIDI prototype requires JavaScript.</noscript>
   <script type="module" src="./midi_runtime.js"></script>

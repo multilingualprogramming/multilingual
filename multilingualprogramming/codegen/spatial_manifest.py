@@ -58,7 +58,7 @@ def build_spatial_manifest(
         "source": source_path,
         "capabilities": capability_contract(
             projection=MANIFEST_KIND,
-            preserves=["opcode", "intensity", "signal", "phase", "channel"],
+            preserves=["id", "opcode", "intensity", "signal", "phase", "channel"],
             derived=[],
             lossy=[],
             ambiguous=[],
@@ -127,6 +127,7 @@ def _entity_from_semantic(
 
     op = opcode_ontology.get(core_entity["opcode"])
     return {
+        "id": core_entity["id"],
         "index": core_entity["index"],
         "opcode": op.code,
         "name": op.name,

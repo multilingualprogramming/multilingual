@@ -56,7 +56,7 @@ def build_volumetric_manifest(
         "source": source_path,
         "capabilities": capability_contract(
             projection=MANIFEST_KIND,
-            preserves=["opcode", "intensity", "phase", "channel"],
+            preserves=["id", "opcode", "intensity", "phase", "channel"],
             derived=[],
             lossy=["signal"],
             ambiguous=[],
@@ -92,6 +92,7 @@ def build_volumetric_manifest_file(
 def _mark_from_semantic_entity(entity: dict[str, Any]) -> dict[str, Any]:
     op = opcode_ontology.get(entity["opcode"])
     return {
+        "id": entity["id"],
         "index": int(entity["index"]),
         "opcode": op.code,
         "name": op.name,

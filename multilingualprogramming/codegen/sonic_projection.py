@@ -65,7 +65,7 @@ def build_sonic_manifest(
         "source": source_path,
         "capabilities": capability_contract(
             projection=MANIFEST_KIND,
-            preserves=["opcode", "phase", "channel"],
+            preserves=["id", "opcode", "phase", "channel"],
             derived=["intensity"],
             lossy=["signal"],
             ambiguous=[
@@ -120,6 +120,7 @@ def _voice_from_semantic_entity(entity: dict[str, Any]) -> dict[str, Any]:
         amplitude = max(0.0, min(1.0, intensity * 0.6))
 
     return {
+        "id": entity["id"],
         "index": index,
         "opcode": op.code,
         "name": op.name,

@@ -38,6 +38,7 @@ Currently inferred:
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -51,6 +52,24 @@ CORE_KIND = "semantic-core-v0"
 SEED_ROW_ARITY = 10
 CONTAIN_OPCODE = 11
 RELATION_CONTAINMENT = "containment"
+ENTITY_ID_PREFIX = "ent_"
+
+
+def stable_entity_id(source_path: str, index: int) -> str:
+    """Return a deterministic stable identifier for an entity.
+
+    Identity is derived from the source path plus the entity's index in
+    the seed program. The hash gives surfaces a stable handle they can
+    keep across edits, reorderings, or modality round-trips, while the
+    derivation stays purely a function of program structure -- two
+    rebuilds of the same source produce the same IDs without state.
+
+    Indexes alone are not enough: when an authoring surface inserts or
+    deletes an entity, every downstream index shifts and identity is
+    lost. IDs remain stable.
+    """
+    digest = hashlib.sha256(f"{source_path}|{index}".encode("utf-8")).hexdigest()
+    return f"{ENTITY_ID_PREFIX}{digest[:8]}"
 
 
 def execute_seed(
@@ -87,7 +106,10 @@ def build_semantic_core(
 ) -> dict[str, Any]:
     """Execute Multilingual source and return a modality-free semantic core."""
     seed = execute_seed(source, language=language, source_path=source_path)
-    entities = [_entity_from_seed_row(row, index) for index, row in enumerate(seed)]
+    entities = [
+        _entity_from_seed_row(row, index, source_path)
+        for index, row in enumerate(seed)
+    ]
     return {
         "kind": CORE_KIND,
         "version": 0,
@@ -154,7 +176,7 @@ def build_semantic_core_file(
     return core
 
 
-def _entity_from_seed_row(row: Any, index: int) -> dict[str, Any]:
+def _entity_from_seed_row(row: Any, index: int, source_path: str) -> dict[str, Any]:
     if not isinstance(row, list):
         raise ValueError(f"Polymodal entity {index} must be a list")
     if len(row) != SEED_ROW_ARITY:
@@ -180,6 +202,7 @@ def _entity_from_seed_row(row: Any, index: int) -> dict[str, Any]:
         raise ValueError(f"Polymodal entity {index} signal must be nonnegative")
 
     return {
+        "id": stable_entity_id(source_path, index),
         "index": index,
         "opcode": opcode,
         "name": opcode_ontology.get(opcode).name,

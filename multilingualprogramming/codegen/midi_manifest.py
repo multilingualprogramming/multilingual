@@ -50,7 +50,7 @@ def build_midi_manifest(
         "source": source_path,
         "capabilities": capability_contract(
             projection=MANIFEST_KIND,
-            preserves=["opcode", "phase", "channel"],
+            preserves=["id", "opcode", "phase", "channel"],
             derived=["intensity"],
             lossy=["signal", "intensity when velocity clips or base velocity is zero"],
             ambiguous=[],
@@ -98,6 +98,7 @@ def _event_from_semantic_entity(entity: dict[str, Any]) -> dict[str, Any]:
         velocity = max(0, min(127, round(op.midi.velocity * intensity)))
 
     return {
+        "id": entity["id"],
         "index": int(entity["index"]),
         "opcode": op.code,
         "name": op.name,

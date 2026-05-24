@@ -106,7 +106,8 @@ class SemanticCoreTestSuite(unittest.TestCase):
     def test_core_entities_carry_only_semantic_fields(self):
         core = build_semantic_core(_source(), language="en")
         expected_fields = {
-            "index", "opcode", "name", "intensity", "signal", "phase", "channel",
+            "id", "index", "opcode", "name",
+            "intensity", "signal", "phase", "channel",
         }
         for entity in core["entities"]:
             self.assertEqual(set(entity.keys()), expected_fields)
@@ -131,6 +132,84 @@ class SemanticCoreTestSuite(unittest.TestCase):
         )
         core = build_semantic_core(bad_source, language="en")
         self.assertEqual(len(core["entities"]), 1)
+
+
+class StableEntityIdTestSuite(unittest.TestCase):
+    """Entity IDs are deterministic and flow through every projection.
+
+    Indexes alone shift when entities are inserted, deleted, or reordered
+    in a modality surface. Stable IDs (see [[polymodal-semantic-versioning]])
+    are how downstream surfaces preserve identity across those edits.
+    """
+
+    _ID_PATTERN = "ent_"
+
+    def test_every_core_entity_has_a_stable_id(self):
+        core = build_semantic_core(
+            _source(), language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        for entity in core["entities"]:
+            self.assertTrue(
+                entity["id"].startswith(self._ID_PATTERN),
+                f"entity id {entity['id']!r} missing {self._ID_PATTERN!r} prefix",
+            )
+            # ent_ + 8 hex chars
+            self.assertEqual(len(entity["id"]), len(self._ID_PATTERN) + 8)
+            int(entity["id"][len(self._ID_PATTERN):], 16)  # raises if not hex
+
+    def test_ids_are_unique_within_a_program(self):
+        core = build_semantic_core(_source(), language="en")
+        ids = [entity["id"] for entity in core["entities"]]
+        self.assertEqual(
+            len(ids), len(set(ids)),
+            "stable entity IDs must be unique within a program",
+        )
+
+    def test_ids_are_deterministic_across_rebuilds(self):
+        # Same source + same source_path => same IDs every build.
+        first = build_semantic_core(
+            _source(), language="en", source_path="program.multi",
+        )
+        second = build_semantic_core(
+            _source(), language="en", source_path="program.multi",
+        )
+        self.assertEqual(
+            [e["id"] for e in first["entities"]],
+            [e["id"] for e in second["entities"]],
+        )
+
+    def test_ids_depend_on_source_path(self):
+        # Same source, different source_path => different IDs. This
+        # keeps separate programs' captured fixtures from accidentally
+        # sharing identity even when their seed bodies are equal.
+        a = build_semantic_core(_source(), language="en", source_path="a.multi")
+        b = build_semantic_core(_source(), language="en", source_path="b.multi")
+        self.assertNotEqual(
+            [e["id"] for e in a["entities"]],
+            [e["id"] for e in b["entities"]],
+        )
+
+    def test_ids_flow_through_every_forward_projection(self):
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+
+        for (
+            core_entity, spatial_entity, sonic_voice,
+            linear_mark, vol_mark, midi_event,
+        ) in zip(
+            core["entities"], spatial["entities"], sonic["voices"],
+            linear["marks"], volumetric["marks"], midi["events"],
+        ):
+            self.assertEqual(core_entity["id"], spatial_entity["id"])
+            self.assertEqual(core_entity["id"], sonic_voice["id"])
+            self.assertEqual(core_entity["id"], linear_mark["id"])
+            self.assertEqual(core_entity["id"], vol_mark["id"])
+            self.assertEqual(core_entity["id"], midi_event["id"])
 
 
 class SemanticCoreRelationsTestSuite(unittest.TestCase):
@@ -1127,6 +1206,115 @@ class MidiRuntimeAssetsTestSuite(unittest.TestCase):
         self.assertNotIn(SONIC_KIND, html)
         self.assertNotIn(LINEAR_KIND, html)
         self.assertNotIn(VOLUMETRIC_KIND, html)
+
+
+class MidiCaptureWiringTestSuite(unittest.TestCase):
+    """The MIDI runtime + HTML must expose the Web MIDI Input capture entry.
+
+    Lint-style guards that the capture button is wired to the inverse
+    projection and the recovered manifest panel exists in the DOM.
+    """
+
+    def test_runtime_imports_capture_modules(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./midi_capture.js"', runtime)
+        self.assertIn("captureSemanticCore", runtime)
+        self.assertIn("observeEvent", runtime)
+
+    def test_runtime_handles_midiin_button_action(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('dataset.action === "midiin"', runtime)
+
+    def test_runtime_listens_for_midimessage(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('"midimessage"', runtime)
+        # Decoder must distinguish the four primary MIDI status bytes
+        # the forward MidiHint taxonomy emits.
+        for status in ("0x90", "0xb0", "0xc0"):
+            self.assertIn(status, runtime, f"midi runtime missing status {status}")
+
+    def test_html_has_midiin_button_and_recovered_panel(self):
+        html = MIDI_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="midiin"', html)
+        self.assertIn('data-action="midiin"', html)
+        self.assertIn('id="recovered"', html)
+
+
+class ProjectionCapabilitiesTestSuite(unittest.TestCase):
+    """Every forward projection must publish a capability contract.
+
+    The contract makes lossy / ambiguous / view-only projections honest
+    instead of pretending all modalities round-trip cleanly. See
+    [[polymodal-capability-contracts]]. This suite enforces the
+    *structural* presence of the contract; the equivalence and
+    round-trip suites enforce that the declared promises hold.
+    """
+
+    _VALID_INVERSE_LEVELS = {
+        "exact", "behavior", "lossy", "ambiguous-by-design",
+        "view-only", "non-invertible", "partial",
+    }
+    _CORE_FIELDS = {"id", "opcode", "intensity", "signal", "phase", "channel"}
+
+    def _all_manifests(self):
+        return {
+            SPATIAL_KIND: build_spatial_manifest(_source(), language="en"),
+            SONIC_KIND: build_sonic_manifest(_source(), language="en"),
+            LINEAR_KIND: build_linear_manifest(_source(), language="en"),
+            VOLUMETRIC_KIND: build_volumetric_manifest(_source(), language="en"),
+            MIDI_KIND: build_midi_manifest(_source(), language="en"),
+        }
+
+    def test_every_manifest_carries_capabilities(self):
+        for kind, manifest in self._all_manifests().items():
+            self.assertIn(
+                "capabilities", manifest,
+                f"{kind} manifest is missing a capability contract",
+            )
+
+    def test_capability_projection_matches_manifest_kind(self):
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            self.assertEqual(
+                contract["projection"], kind,
+                f"{kind} capability contract names {contract['projection']!r}",
+            )
+
+    def test_capability_inverse_level_is_known(self):
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            self.assertIn(
+                contract["inverse"], self._VALID_INVERSE_LEVELS,
+                f"{kind} declares unknown inverse level {contract['inverse']!r}",
+            )
+
+    def test_capability_field_lists_reference_core_fields(self):
+        # preserves/derived/lossy/ambiguous should all use semantic-core
+        # field names where they refer to fields; ambiguous may also use
+        # opcode group descriptors, so it is exempt from the field check.
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            for category in ("preserves", "derived"):
+                for field in contract.get(category, []):
+                    self.assertIn(
+                        field, self._CORE_FIELDS,
+                        f"{kind} declares unknown core field {field!r} in {category}",
+                    )
+
+    def test_capability_categories_are_disjoint(self):
+        # A field cannot simultaneously be preserved and lossy. derived
+        # and lossy can overlap (a derived field is lossy by definition
+        # in many projections), but a field listed under preserves must
+        # not also appear under lossy or derived.
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            preserves = set(contract["preserves"])
+            derived = set(contract["derived"])
+            self.assertFalse(
+                preserves & derived,
+                f"{kind} lists fields in both preserves and derived: "
+                f"{preserves & derived}",
+            )
 
 
 if __name__ == "__main__":

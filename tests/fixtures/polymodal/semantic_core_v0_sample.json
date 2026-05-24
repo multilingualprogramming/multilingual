@@ -1,36 +1,67 @@
 {
-  "kind": "linear-seed-v0",
+  "kind": "semantic-core-v0",
   "version": 0,
   "source_language": "en",
   "source": "docs/browser/spatial-dynamics/program.multi",
-  "capabilities": {
-    "projection": "linear-seed-v0",
-    "preserves": [
-      "id",
-      "opcode",
-      "intensity",
-      "phase",
-      "channel"
-    ],
-    "derived": [],
-    "lossy": [
-      "signal"
-    ],
-    "ambiguous": [],
-    "inverse": "view-only"
-  },
-  "tempo_bpm": 96,
-  "bar_seconds": 4.0,
-  "marks": [
+  "ontology": [
+    {
+      "code": 1,
+      "name": "emit"
+    },
+    {
+      "code": 2,
+      "name": "diffuse"
+    },
+    {
+      "code": 3,
+      "name": "attract"
+    },
+    {
+      "code": 4,
+      "name": "repel"
+    },
+    {
+      "code": 5,
+      "name": "stabilize"
+    },
+    {
+      "code": 6,
+      "name": "oscillate"
+    },
+    {
+      "code": 7,
+      "name": "transform"
+    },
+    {
+      "code": 8,
+      "name": "resonate"
+    },
+    {
+      "code": 9,
+      "name": "split"
+    },
+    {
+      "code": 10,
+      "name": "merge"
+    },
+    {
+      "code": 11,
+      "name": "contain"
+    },
+    {
+      "code": 12,
+      "name": "propagate"
+    }
+  ],
+  "entities": [
     {
       "id": "ent_8d6b8920",
       "index": 0,
       "opcode": 11,
       "name": "contain",
-      "glyph": "band",
-      "color": "#252422",
-      "position": 0.0,
       "intensity": 1.0,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -38,10 +69,9 @@
       "index": 1,
       "opcode": 1,
       "name": "emit",
-      "glyph": "dot",
-      "color": "#de3c4b",
-      "position": 0.0,
       "intensity": 0.42,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -49,10 +79,9 @@
       "index": 2,
       "opcode": 2,
       "name": "diffuse",
-      "glyph": "band",
-      "color": "#3a86ff",
-      "position": 0.0,
       "intensity": 1.0,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -60,10 +89,9 @@
       "index": 3,
       "opcode": 7,
       "name": "transform",
-      "glyph": "double",
-      "color": "#00a896",
-      "position": 0.0,
       "intensity": 0.08,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -71,10 +99,9 @@
       "index": 4,
       "opcode": 9,
       "name": "split",
-      "glyph": "fork",
-      "color": "#fb5607",
-      "position": 0.0,
       "intensity": 1.4,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -82,10 +109,9 @@
       "index": 5,
       "opcode": 6,
       "name": "oscillate",
-      "glyph": "wave",
-      "color": "#8338ec",
-      "position": 0.0,
       "intensity": 0.16,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -93,10 +119,9 @@
       "index": 6,
       "opcode": 8,
       "name": "resonate",
-      "glyph": "pulse",
-      "color": "#ffbe0b",
-      "position": 0.0,
       "intensity": 1.0,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -104,10 +129,9 @@
       "index": 7,
       "opcode": 3,
       "name": "attract",
-      "glyph": "ramp",
-      "color": "#2d6a4f",
-      "position": 0.0,
       "intensity": 0.08,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
     },
     {
@@ -115,11 +139,26 @@
       "index": 8,
       "opcode": 4,
       "name": "repel",
-      "glyph": "fall",
-      "color": "#f77f00",
-      "position": 0.0,
       "intensity": 0.06,
+      "signal": 0.0,
+      "phase": 0.0,
       "channel": 0
+    }
+  ],
+  "relations": [
+    {
+      "kind": "containment",
+      "container": 0,
+      "members": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
     }
   ]
 }
