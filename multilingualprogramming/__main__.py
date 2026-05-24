@@ -49,6 +49,7 @@ from multilingualprogramming.source_extensions import (
     find_package_init,
     has_source_extension,
 )
+from multilingualprogramming.codegen.linear_manifest import build_linear_manifest_file
 from multilingualprogramming.codegen.opcode_ontology import write_ontology_manifest
 from multilingualprogramming.codegen.semantic_core import build_semantic_core_file
 from multilingualprogramming.codegen.sonic_projection import build_sonic_manifest_file
@@ -409,6 +410,17 @@ def cmd_ontology_export(args):
     manifest = write_ontology_manifest(args.out)
     print(f"[PASS] {args.out}")
     print(f"[ontology] {manifest['kind']} opcodes={len(manifest['opcodes'])}")
+
+
+def cmd_linear_build(args):
+    """Build a 1D linear JSON manifest from a Multilingual source file."""
+    manifest = build_linear_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[linear] {manifest['kind']} marks={len(manifest['marks'])}")
 
 
 def cmd_ir(args):
@@ -834,6 +846,20 @@ def main():  # pylint: disable=too-many-statements,too-many-locals
         help="Output JSON path (default: ontology.json)",
     )
 
+    linear_build_parser = subparsers.add_parser(
+        "linear-build",
+        help="Build a 1D linear timeline JSON manifest",
+    )
+    linear_build_parser.add_argument("file", help="Path to the source file")
+    linear_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    linear_build_parser.add_argument(
+        "--out", default="program.linear.json",
+        help="Output JSON manifest path (default: program.linear.json)",
+    )
+
     # ir subcommand
     ir_parser = subparsers.add_parser(
         "ir", help="Show the semantic IR for a source file"
@@ -908,6 +934,8 @@ def main():  # pylint: disable=too-many-statements,too-many-locals
         cmd_sonic_build(args)
     elif args.command == "ontology-export":
         cmd_ontology_export(args)
+    elif args.command == "linear-build":
+        cmd_linear_build(args)
     elif args.command == "ir":
         cmd_ir(args)
     elif args.command == "explain":

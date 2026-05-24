@@ -42,6 +42,21 @@ class SpatialHint:
 
 
 @dataclass(frozen=True)
+class LinearHint:
+    """How an opcode realizes in the 1D linear (timeline) modality.
+
+    Distinct from SpatialHint because the 1D rendering primitives do not
+    generalize from 2D shapes -- a "ring" or "membrane" has no natural
+    1D analog. The 1D glyph vocabulary describes marks along a single
+    axis: a dot, a horizontal segment, a vertical pulse, a wavy ribbon,
+    a ramp, a fork, etc.
+    """
+
+    glyph: str  # dot | segment | pulse | wave | ramp | fall | fork | join | band | shift | double
+    color: str
+
+
+@dataclass(frozen=True)
 class Opcode:
     """A stable polymodal behavior primitive."""
 
@@ -50,6 +65,7 @@ class Opcode:
     description: str
     sonic: SonicHint
     spatial: SpatialHint
+    linear: LinearHint
 
 
 OPCODES: tuple[Opcode, ...] = (
@@ -57,61 +73,73 @@ OPCODES: tuple[Opcode, ...] = (
         code=1, name="emit", description="Produce signal over time.",
         sonic=SonicHint(role="source", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="source", color="#de3c4b"),
+        linear=LinearHint(glyph="dot", color="#de3c4b"),
     ),
     Opcode(
         code=2, name="diffuse", description="Equalize signal with local neighbors.",
         sonic=SonicHint(role="effect", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="ring", color="#3a86ff"),
+        linear=LinearHint(glyph="band", color="#3a86ff"),
     ),
     Opcode(
         code=3, name="attract", description="Pull nearby entities through proximity.",
         sonic=SonicHint(role="modulator", waveform="triangle", envelope="swelling"),
         spatial=SpatialHint(shape="up", color="#2d6a4f"),
+        linear=LinearHint(glyph="ramp", color="#2d6a4f"),
     ),
     Opcode(
         code=4, name="repel", description="Push nearby entities away.",
         sonic=SonicHint(role="modulator", waveform="triangle", envelope="swelling"),
         spatial=SpatialHint(shape="down", color="#f77f00"),
+        linear=LinearHint(glyph="fall", color="#f77f00"),
     ),
     Opcode(
         code=5, name="stabilize", description="Dampen transient activation.",
         sonic=SonicHint(role="effect", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="square", color="#6c757d"),
+        linear=LinearHint(glyph="segment", color="#6c757d"),
     ),
     Opcode(
         code=6, name="oscillate", description="Produce periodic signal.",
         sonic=SonicHint(role="modulator", waveform="sine", envelope="tremolo"),
         spatial=SpatialHint(shape="phase", color="#8338ec"),
+        linear=LinearHint(glyph="wave", color="#8338ec"),
     ),
     Opcode(
         code=7, name="transform", description="Convert nearby signal into local signal.",
         sonic=SonicHint(role="effect", waveform="triangle", envelope="sustained"),
         spatial=SpatialHint(shape="diamond", color="#00a896"),
+        linear=LinearHint(glyph="double", color="#00a896"),
     ),
     Opcode(
         code=8, name="resonate", description="Amplify through phase alignment.",
         sonic=SonicHint(role="effect", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="double", color="#ffbe0b"),
+        linear=LinearHint(glyph="pulse", color="#ffbe0b"),
     ),
     Opcode(
         code=9, name="split", description="Divide activation into propagating entities.",
         sonic=SonicHint(role="trigger", waveform="square", envelope="percussive"),
         spatial=SpatialHint(shape="split", color="#fb5607"),
+        linear=LinearHint(glyph="fork", color="#fb5607"),
     ),
     Opcode(
         code=10, name="merge", description="Combine nearby activations.",
         sonic=SonicHint(role="trigger", waveform="square", envelope="percussive"),
         spatial=SpatialHint(shape="merge", color="#7209b7"),
+        linear=LinearHint(glyph="join", color="#7209b7"),
     ),
     Opcode(
         code=11, name="contain", description="Create a local membrane or boundary.",
         sonic=SonicHint(role="bus", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="membrane", color="#252422"),
+        linear=LinearHint(glyph="band", color="#252422"),
     ),
     Opcode(
         code=12, name="propagate", description="Move activation through space.",
         sonic=SonicHint(role="source", waveform="sawtooth", envelope="percussive"),
         spatial=SpatialHint(shape="arrow", color="#0077b6"),
+        linear=LinearHint(glyph="shift", color="#0077b6"),
     ),
 )
 
@@ -154,6 +182,10 @@ def to_json_table() -> list[dict]:
             "spatial": {
                 "shape": op.spatial.shape,
                 "color": op.spatial.color,
+            },
+            "linear": {
+                "glyph": op.linear.glyph,
+                "color": op.linear.color,
             },
         }
         for op in OPCODES

@@ -20,11 +20,16 @@ from argparse import Namespace
 from pathlib import Path
 
 from multilingualprogramming.__main__ import (
+    cmd_linear_build,
     cmd_ontology_export,
     cmd_polymodal_build,
     cmd_sonic_build,
 )
 from multilingualprogramming.codegen import opcode_ontology, sonic_capture
+from multilingualprogramming.codegen.linear_manifest import (
+    MANIFEST_KIND as LINEAR_KIND,
+    build_linear_manifest,
+)
 from multilingualprogramming.codegen.opcode_ontology import (
     ONTOLOGY_KIND,
     build_ontology_manifest,
@@ -52,6 +57,11 @@ SONIC_CAPTURE_JS = SONIC_DIR / "sonic_capture.js"
 MIC_CAPTURE_JS = SONIC_DIR / "microphone_capture.js"
 SONIC_RUNTIME_JS = SONIC_DIR / "sonic_runtime.js"
 SONIC_HTML = SONIC_DIR / "index.html"
+LINEAR_DIR = ROOT / "docs" / "browser" / "linear-dynamics"
+LINEAR_MANIFEST = LINEAR_DIR / "program.linear.json"
+LINEAR_ONTOLOGY = LINEAR_DIR / "ontology.json"
+LINEAR_RUNTIME_JS = LINEAR_DIR / "linear_runtime.js"
+LINEAR_HTML = LINEAR_DIR / "index.html"
 
 
 def _source():
@@ -102,32 +112,38 @@ class SemanticCoreTestSuite(unittest.TestCase):
 class PolymodalEquivalenceTestSuite(unittest.TestCase):
     """Two projections of the same program must agree on semantic identity."""
 
-    def test_spatial_and_sonic_have_same_entity_count(self):
+    def test_all_modalities_have_same_entity_count(self):
         core = build_semantic_core(_source(), language="en")
         spatial = build_spatial_manifest(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
         self.assertEqual(len(core["entities"]), len(spatial["entities"]))
         self.assertEqual(len(core["entities"]), len(sonic["voices"]))
+        self.assertEqual(len(core["entities"]), len(linear["marks"]))
 
     def test_opcode_order_preserved_across_modalities(self):
         core = build_semantic_core(_source(), language="en")
         spatial = build_spatial_manifest(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
 
         core_codes = [entity["opcode"] for entity in core["entities"]]
         spatial_codes = [row[0] for row in spatial["entities"]]
         sonic_codes = [voice["opcode"] for voice in sonic["voices"]]
+        linear_codes = [mark["opcode"] for mark in linear["marks"]]
 
         self.assertEqual(core_codes, spatial_codes)
         self.assertEqual(core_codes, sonic_codes)
+        self.assertEqual(core_codes, linear_codes)
 
-    def test_intensity_and_phase_preserved_in_both_projections(self):
+    def test_intensity_and_phase_preserved_across_projections(self):
         core = build_semantic_core(_source(), language="en")
         spatial = build_spatial_manifest(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
 
-        for core_entity, spatial_row, sonic_voice in zip(
-            core["entities"], spatial["entities"], sonic["voices"]
+        for core_entity, spatial_row, sonic_voice, linear_mark in zip(
+            core["entities"], spatial["entities"], sonic["voices"], linear["marks"],
         ):
             # Spatial row layout:
             # [behavior, x, y, radius, intensity, signal, vx, vy, phase, channel]
@@ -136,13 +152,26 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
             self.assertEqual(core_entity["channel"], spatial_row[9])
             # Sonic voice carries channel directly; amplitude/frequency derived
             self.assertEqual(core_entity["channel"], sonic_voice["channel"])
+            # Linear mark carries intensity directly; phase becomes position.
+            self.assertAlmostEqual(
+                core_entity["intensity"], linear_mark["intensity"], places=3,
+            )
+            self.assertAlmostEqual(
+                core_entity["phase"] % 1.0, linear_mark["position"], places=3,
+            )
+            self.assertEqual(core_entity["channel"], linear_mark["channel"])
 
     def test_modalities_share_ontology_names(self):
         core = build_semantic_core(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
-        for core_entity, sonic_voice in zip(core["entities"], sonic["voices"]):
+        linear = build_linear_manifest(_source(), language="en")
+        for core_entity, sonic_voice, linear_mark in zip(
+            core["entities"], sonic["voices"], linear["marks"],
+        ):
             self.assertEqual(core_entity["name"], sonic_voice["name"])
             self.assertEqual(core_entity["opcode"], sonic_voice["opcode"])
+            self.assertEqual(core_entity["name"], linear_mark["name"])
+            self.assertEqual(core_entity["opcode"], linear_mark["opcode"])
 
     def test_sonic_kinds_match_ontology_roles(self):
         sonic = build_sonic_manifest(_source(), language="en")
@@ -157,6 +186,52 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
         for voice in sonic["voices"]:
             if voice["role"] == "bus":
                 self.assertEqual(voice["amplitude"], 0.0)
+
+
+class LinearProjectionTestSuite(unittest.TestCase):
+    """Direct tests of the 1D linear (timeline) projection.
+
+    The linear projection is the third peer modality, exercising the
+    dimensionality axis distinct from the 2D spatial track. If linear
+    starts diverging from the semantic core or from the ontology's
+    linear hints, this suite fails.
+    """
+
+    def test_linear_manifest_shape(self):
+        linear = build_linear_manifest(_source(), language="en")
+        self.assertEqual(linear["kind"], LINEAR_KIND)
+        self.assertEqual(linear["version"], 0)
+        self.assertIn("marks", linear)
+        self.assertIn("bar_seconds", linear)
+
+    def test_linear_marks_use_ontology_glyph_and_color(self):
+        linear = build_linear_manifest(_source(), language="en")
+        for mark in linear["marks"]:
+            op = opcode_ontology.get(mark["opcode"])
+            self.assertEqual(mark["glyph"], op.linear.glyph)
+            self.assertEqual(mark["color"], op.linear.color)
+
+    def test_linear_positions_are_normalized(self):
+        linear = build_linear_manifest(_source(), language="en")
+        for mark in linear["marks"]:
+            self.assertGreaterEqual(mark["position"], 0.0)
+            self.assertLessEqual(mark["position"], 1.0)
+
+    def test_linear_glyphs_are_one_dimensional_vocabulary(self):
+        # 1D rendering must not inherit 2D-presuming shape names. The
+        # forbidden list is intentionally limited to names that carry
+        # explicit 2D geometry; quantifier-style names like "double"
+        # are allowed because they describe a count, not a shape.
+        forbidden_2d_shapes = {
+            "ring", "diamond", "arrow", "membrane", "source",
+            "phase", "up", "down", "square",
+        }
+        for op in opcode_ontology.OPCODES:
+            self.assertNotIn(
+                op.linear.glyph, forbidden_2d_shapes,
+                f"opcode {op.name!r} has 2D shape name in linear hint: "
+                f"{op.linear.glyph!r}",
+            )
 
 
 class SonicRoundTripTestSuite(unittest.TestCase):
@@ -294,6 +369,23 @@ class PolymodalCLITestSuite(unittest.TestCase):
         actual = json.loads(SONIC_MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
 
+    def test_linear_build_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.linear.json"
+            cmd_linear_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], LINEAR_KIND)
+            self.assertEqual(len(data["marks"]), 9)
+
+    def test_checked_in_linear_manifest_matches_source(self):
+        expected = build_linear_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(LINEAR_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
 
 class OntologyManifestTestSuite(unittest.TestCase):
     """The checked-in ontology JSON sidecar must match the Python ontology.
@@ -318,6 +410,18 @@ class OntologyManifestTestSuite(unittest.TestCase):
         expected = build_ontology_manifest()
         actual = json.loads(SONIC_ONTOLOGY.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
+
+    def test_checked_in_linear_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(LINEAR_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_ontology_manifest_includes_linear_hints(self):
+        manifest = build_ontology_manifest()
+        for entry in manifest["opcodes"]:
+            self.assertIn("linear", entry)
+            self.assertIn("glyph", entry["linear"])
+            self.assertIn("color", entry["linear"])
 
     def test_ontology_export_cli_writes_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -461,6 +565,27 @@ class SonicCaptureWiringTestSuite(unittest.TestCase):
         self.assertIn('id="capture"', html)
         self.assertIn('data-action="capture"', html)
         self.assertIn('id="recovered"', html)
+
+
+class LinearRuntimeAssetsTestSuite(unittest.TestCase):
+    """The 1D linear browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = LINEAR_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.linear.json"', runtime)
+        self.assertIn(LINEAR_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = LINEAR_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_strip_canvas_and_no_other_kinds(self):
+        html = LINEAR_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="strip"', html)
+        # Linear is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SPATIAL_KIND, html)
+        self.assertNotIn(SONIC_KIND, html)
 
 
 if __name__ == "__main__":
