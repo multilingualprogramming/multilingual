@@ -57,6 +57,22 @@ class LinearHint:
 
 
 @dataclass(frozen=True)
+class VolumetricHint:
+    """How an opcode realizes in the 3D volumetric modality.
+
+    Distinct from SpatialHint (2D) and LinearHint (1D). The 3D
+    primitives describe shapes that live natively in three-space and
+    have no 2D or 1D analog -- a "shell" is concentric 3D surfaces, a
+    "helix" is a 3D coil, a "cell" is an enclosing 3D volume. Adding
+    primitives to this vocabulary forces the equivalence test to
+    exercise the dimensionality axis without falling back on 2D names.
+    """
+
+    primitive: str  # point | cloud | cone | burst | cube | helix | twist | shell | branch | funnel | cell | flow
+    color: str
+
+
+@dataclass(frozen=True)
 class Opcode:
     """A stable polymodal behavior primitive."""
 
@@ -66,6 +82,7 @@ class Opcode:
     sonic: SonicHint
     spatial: SpatialHint
     linear: LinearHint
+    volumetric: VolumetricHint
 
 
 OPCODES: tuple[Opcode, ...] = (
@@ -74,72 +91,84 @@ OPCODES: tuple[Opcode, ...] = (
         sonic=SonicHint(role="source", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="source", color="#de3c4b"),
         linear=LinearHint(glyph="dot", color="#de3c4b"),
+        volumetric=VolumetricHint(primitive="point", color="#de3c4b"),
     ),
     Opcode(
         code=2, name="diffuse", description="Equalize signal with local neighbors.",
         sonic=SonicHint(role="effect", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="ring", color="#3a86ff"),
         linear=LinearHint(glyph="band", color="#3a86ff"),
+        volumetric=VolumetricHint(primitive="cloud", color="#3a86ff"),
     ),
     Opcode(
         code=3, name="attract", description="Pull nearby entities through proximity.",
         sonic=SonicHint(role="modulator", waveform="triangle", envelope="swelling"),
         spatial=SpatialHint(shape="up", color="#2d6a4f"),
         linear=LinearHint(glyph="ramp", color="#2d6a4f"),
+        volumetric=VolumetricHint(primitive="cone", color="#2d6a4f"),
     ),
     Opcode(
         code=4, name="repel", description="Push nearby entities away.",
         sonic=SonicHint(role="modulator", waveform="triangle", envelope="swelling"),
         spatial=SpatialHint(shape="down", color="#f77f00"),
         linear=LinearHint(glyph="fall", color="#f77f00"),
+        volumetric=VolumetricHint(primitive="burst", color="#f77f00"),
     ),
     Opcode(
         code=5, name="stabilize", description="Dampen transient activation.",
         sonic=SonicHint(role="effect", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="square", color="#6c757d"),
         linear=LinearHint(glyph="segment", color="#6c757d"),
+        volumetric=VolumetricHint(primitive="cube", color="#6c757d"),
     ),
     Opcode(
         code=6, name="oscillate", description="Produce periodic signal.",
         sonic=SonicHint(role="modulator", waveform="sine", envelope="tremolo"),
         spatial=SpatialHint(shape="phase", color="#8338ec"),
         linear=LinearHint(glyph="wave", color="#8338ec"),
+        volumetric=VolumetricHint(primitive="helix", color="#8338ec"),
     ),
     Opcode(
         code=7, name="transform", description="Convert nearby signal into local signal.",
         sonic=SonicHint(role="effect", waveform="triangle", envelope="sustained"),
         spatial=SpatialHint(shape="diamond", color="#00a896"),
         linear=LinearHint(glyph="double", color="#00a896"),
+        volumetric=VolumetricHint(primitive="twist", color="#00a896"),
     ),
     Opcode(
         code=8, name="resonate", description="Amplify through phase alignment.",
         sonic=SonicHint(role="effect", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="double", color="#ffbe0b"),
         linear=LinearHint(glyph="pulse", color="#ffbe0b"),
+        volumetric=VolumetricHint(primitive="shell", color="#ffbe0b"),
     ),
     Opcode(
         code=9, name="split", description="Divide activation into propagating entities.",
         sonic=SonicHint(role="trigger", waveform="square", envelope="percussive"),
         spatial=SpatialHint(shape="split", color="#fb5607"),
         linear=LinearHint(glyph="fork", color="#fb5607"),
+        volumetric=VolumetricHint(primitive="branch", color="#fb5607"),
     ),
     Opcode(
         code=10, name="merge", description="Combine nearby activations.",
         sonic=SonicHint(role="trigger", waveform="square", envelope="percussive"),
         spatial=SpatialHint(shape="merge", color="#7209b7"),
         linear=LinearHint(glyph="join", color="#7209b7"),
+        volumetric=VolumetricHint(primitive="funnel", color="#7209b7"),
     ),
     Opcode(
         code=11, name="contain", description="Create a local membrane or boundary.",
         sonic=SonicHint(role="bus", waveform="sine", envelope="sustained"),
         spatial=SpatialHint(shape="membrane", color="#252422"),
         linear=LinearHint(glyph="band", color="#252422"),
+        volumetric=VolumetricHint(primitive="cell", color="#252422"),
     ),
     Opcode(
         code=12, name="propagate", description="Move activation through space.",
         sonic=SonicHint(role="source", waveform="sawtooth", envelope="percussive"),
         spatial=SpatialHint(shape="arrow", color="#0077b6"),
         linear=LinearHint(glyph="shift", color="#0077b6"),
+        volumetric=VolumetricHint(primitive="flow", color="#0077b6"),
     ),
 )
 
@@ -186,6 +215,10 @@ def to_json_table() -> list[dict]:
             "linear": {
                 "glyph": op.linear.glyph,
                 "color": op.linear.color,
+            },
+            "volumetric": {
+                "primitive": op.volumetric.primitive,
+                "color": op.volumetric.color,
             },
         }
         for op in OPCODES

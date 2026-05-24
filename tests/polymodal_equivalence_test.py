@@ -24,6 +24,7 @@ from multilingualprogramming.__main__ import (
     cmd_ontology_export,
     cmd_polymodal_build,
     cmd_sonic_build,
+    cmd_volumetric_build,
 )
 from multilingualprogramming.codegen import opcode_ontology, sonic_capture
 from multilingualprogramming.codegen.linear_manifest import (
@@ -46,6 +47,10 @@ from multilingualprogramming.codegen.spatial_manifest import (
     MANIFEST_KIND as SPATIAL_KIND,
     build_spatial_manifest,
 )
+from multilingualprogramming.codegen.volumetric_manifest import (
+    MANIFEST_KIND as VOLUMETRIC_KIND,
+    build_volumetric_manifest,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +67,11 @@ LINEAR_MANIFEST = LINEAR_DIR / "program.linear.json"
 LINEAR_ONTOLOGY = LINEAR_DIR / "ontology.json"
 LINEAR_RUNTIME_JS = LINEAR_DIR / "linear_runtime.js"
 LINEAR_HTML = LINEAR_DIR / "index.html"
+VOLUMETRIC_DIR = ROOT / "docs" / "browser" / "volumetric-dynamics"
+VOLUMETRIC_MANIFEST = VOLUMETRIC_DIR / "program.volumetric.json"
+VOLUMETRIC_ONTOLOGY = VOLUMETRIC_DIR / "ontology.json"
+VOLUMETRIC_RUNTIME_JS = VOLUMETRIC_DIR / "volumetric_runtime.js"
+VOLUMETRIC_HTML = VOLUMETRIC_DIR / "index.html"
 
 
 def _source():
@@ -117,33 +127,40 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
         spatial = build_spatial_manifest(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
         self.assertEqual(len(core["entities"]), len(spatial["entities"]))
         self.assertEqual(len(core["entities"]), len(sonic["voices"]))
         self.assertEqual(len(core["entities"]), len(linear["marks"]))
+        self.assertEqual(len(core["entities"]), len(volumetric["marks"]))
 
     def test_opcode_order_preserved_across_modalities(self):
         core = build_semantic_core(_source(), language="en")
         spatial = build_spatial_manifest(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
 
         core_codes = [entity["opcode"] for entity in core["entities"]]
         spatial_codes = [row[0] for row in spatial["entities"]]
         sonic_codes = [voice["opcode"] for voice in sonic["voices"]]
         linear_codes = [mark["opcode"] for mark in linear["marks"]]
+        volumetric_codes = [mark["opcode"] for mark in volumetric["marks"]]
 
         self.assertEqual(core_codes, spatial_codes)
         self.assertEqual(core_codes, sonic_codes)
         self.assertEqual(core_codes, linear_codes)
+        self.assertEqual(core_codes, volumetric_codes)
 
     def test_intensity_and_phase_preserved_across_projections(self):
         core = build_semantic_core(_source(), language="en")
         spatial = build_spatial_manifest(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
 
-        for core_entity, spatial_row, sonic_voice, linear_mark in zip(
-            core["entities"], spatial["entities"], sonic["voices"], linear["marks"],
+        for core_entity, spatial_row, sonic_voice, linear_mark, vol_mark in zip(
+            core["entities"], spatial["entities"], sonic["voices"],
+            linear["marks"], volumetric["marks"],
         ):
             # Spatial row layout:
             # [behavior, x, y, radius, intensity, signal, vx, vy, phase, channel]
@@ -160,18 +177,29 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
                 core_entity["phase"] % 1.0, linear_mark["position"], places=3,
             )
             self.assertEqual(core_entity["channel"], linear_mark["channel"])
+            # Volumetric mark carries intensity directly; phase becomes z.
+            self.assertAlmostEqual(
+                core_entity["intensity"], vol_mark["intensity"], places=3,
+            )
+            self.assertAlmostEqual(
+                core_entity["phase"] % 1.0, vol_mark["z"], places=3,
+            )
+            self.assertEqual(core_entity["channel"], vol_mark["channel"])
 
     def test_modalities_share_ontology_names(self):
         core = build_semantic_core(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
-        for core_entity, sonic_voice, linear_mark in zip(
-            core["entities"], sonic["voices"], linear["marks"],
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        for core_entity, sonic_voice, linear_mark, vol_mark in zip(
+            core["entities"], sonic["voices"], linear["marks"], volumetric["marks"],
         ):
             self.assertEqual(core_entity["name"], sonic_voice["name"])
             self.assertEqual(core_entity["opcode"], sonic_voice["opcode"])
             self.assertEqual(core_entity["name"], linear_mark["name"])
             self.assertEqual(core_entity["opcode"], linear_mark["opcode"])
+            self.assertEqual(core_entity["name"], vol_mark["name"])
+            self.assertEqual(core_entity["opcode"], vol_mark["opcode"])
 
     def test_sonic_kinds_match_ontology_roles(self):
         sonic = build_sonic_manifest(_source(), language="en")
@@ -231,6 +259,60 @@ class LinearProjectionTestSuite(unittest.TestCase):
                 op.linear.glyph, forbidden_2d_shapes,
                 f"opcode {op.name!r} has 2D shape name in linear hint: "
                 f"{op.linear.glyph!r}",
+            )
+
+
+class VolumetricProjectionTestSuite(unittest.TestCase):
+    """Direct tests of the 3D volumetric projection.
+
+    Closes the 1D / 2D / 3D dimensionality loop. If volumetric starts
+    silently reusing names from sister modalities or drifts from the
+    semantic core, the polymodal claim that each dimensionality is an
+    independent peer falls apart.
+    """
+
+    def test_volumetric_manifest_shape(self):
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        self.assertEqual(volumetric["kind"], VOLUMETRIC_KIND)
+        self.assertEqual(volumetric["version"], 0)
+        self.assertIn("marks", volumetric)
+
+    def test_volumetric_marks_use_ontology_primitive_and_color(self):
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        for mark in volumetric["marks"]:
+            op = opcode_ontology.get(mark["opcode"])
+            self.assertEqual(mark["primitive"], op.volumetric.primitive)
+            self.assertEqual(mark["color"], op.volumetric.color)
+
+    def test_volumetric_z_is_normalized(self):
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        for mark in volumetric["marks"]:
+            self.assertGreaterEqual(mark["z"], 0.0)
+            self.assertLessEqual(mark["z"], 1.0)
+
+    def test_volumetric_primitives_are_three_dimensional_vocabulary(self):
+        # 3D primitive names must not collide with the 2D or 1D
+        # vocabularies. Sharing a name would re-introduce the
+        # dimensionality conflation the peer projection is meant to
+        # falsify.
+        forbidden_2d_shapes = {
+            "ring", "diamond", "arrow", "membrane", "source",
+            "phase", "up", "down", "square", "split", "merge", "double",
+        }
+        forbidden_1d_glyphs = {
+            "dot", "segment", "pulse", "wave", "ramp", "fall",
+            "fork", "join", "band", "shift",
+        }
+        for op in opcode_ontology.OPCODES:
+            self.assertNotIn(
+                op.volumetric.primitive, forbidden_2d_shapes,
+                f"opcode {op.name!r} reuses 2D shape name in volumetric "
+                f"hint: {op.volumetric.primitive!r}",
+            )
+            self.assertNotIn(
+                op.volumetric.primitive, forbidden_1d_glyphs,
+                f"opcode {op.name!r} reuses 1D glyph name in volumetric "
+                f"hint: {op.volumetric.primitive!r}",
             )
 
 
@@ -386,6 +468,23 @@ class PolymodalCLITestSuite(unittest.TestCase):
         actual = json.loads(LINEAR_MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
 
+    def test_volumetric_build_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.volumetric.json"
+            cmd_volumetric_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], VOLUMETRIC_KIND)
+            self.assertEqual(len(data["marks"]), 9)
+
+    def test_checked_in_volumetric_manifest_matches_source(self):
+        expected = build_volumetric_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(VOLUMETRIC_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
 
 class OntologyManifestTestSuite(unittest.TestCase):
     """The checked-in ontology JSON sidecar must match the Python ontology.
@@ -416,12 +515,24 @@ class OntologyManifestTestSuite(unittest.TestCase):
         actual = json.loads(LINEAR_ONTOLOGY.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
 
+    def test_checked_in_volumetric_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(VOLUMETRIC_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
     def test_ontology_manifest_includes_linear_hints(self):
         manifest = build_ontology_manifest()
         for entry in manifest["opcodes"]:
             self.assertIn("linear", entry)
             self.assertIn("glyph", entry["linear"])
             self.assertIn("color", entry["linear"])
+
+    def test_ontology_manifest_includes_volumetric_hints(self):
+        manifest = build_ontology_manifest()
+        for entry in manifest["opcodes"]:
+            self.assertIn("volumetric", entry)
+            self.assertIn("primitive", entry["volumetric"])
+            self.assertIn("color", entry["volumetric"])
 
     def test_ontology_export_cli_writes_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -586,6 +697,29 @@ class LinearRuntimeAssetsTestSuite(unittest.TestCase):
         # Linear is its own peer: it must not reference sister-modality kinds.
         self.assertNotIn(SPATIAL_KIND, html)
         self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(VOLUMETRIC_KIND, html)
+
+
+class VolumetricRuntimeAssetsTestSuite(unittest.TestCase):
+    """The 3D volumetric browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = VOLUMETRIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.volumetric.json"', runtime)
+        self.assertIn(VOLUMETRIC_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = VOLUMETRIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_volume_canvas_and_no_other_kinds(self):
+        html = VOLUMETRIC_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="volume"', html)
+        # Volumetric is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SPATIAL_KIND, html)
+        self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(LINEAR_KIND, html)
 
 
 if __name__ == "__main__":

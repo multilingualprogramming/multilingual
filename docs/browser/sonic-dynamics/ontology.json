@@ -18,6 +18,10 @@
       "linear": {
         "glyph": "dot",
         "color": "#de3c4b"
+      },
+      "volumetric": {
+        "primitive": "point",
+        "color": "#de3c4b"
       }
     },
     {
@@ -35,6 +39,10 @@
       },
       "linear": {
         "glyph": "band",
+        "color": "#3a86ff"
+      },
+      "volumetric": {
+        "primitive": "cloud",
         "color": "#3a86ff"
       }
     },
@@ -54,6 +62,10 @@
       "linear": {
         "glyph": "ramp",
         "color": "#2d6a4f"
+      },
+      "volumetric": {
+        "primitive": "cone",
+        "color": "#2d6a4f"
       }
     },
     {
@@ -71,6 +83,10 @@
       },
       "linear": {
         "glyph": "fall",
+        "color": "#f77f00"
+      },
+      "volumetric": {
+        "primitive": "burst",
         "color": "#f77f00"
       }
     },
@@ -90,6 +106,10 @@
       "linear": {
         "glyph": "segment",
         "color": "#6c757d"
+      },
+      "volumetric": {
+        "primitive": "cube",
+        "color": "#6c757d"
       }
     },
     {
@@ -107,6 +127,10 @@
       },
       "linear": {
         "glyph": "wave",
+        "color": "#8338ec"
+      },
+      "volumetric": {
+        "primitive": "helix",
         "color": "#8338ec"
       }
     },
@@ -126,6 +150,10 @@
       "linear": {
         "glyph": "double",
         "color": "#00a896"
+      },
+      "volumetric": {
+        "primitive": "twist",
+        "color": "#00a896"
       }
     },
     {
@@ -143,6 +171,10 @@
       },
       "linear": {
         "glyph": "pulse",
+        "color": "#ffbe0b"
+      },
+      "volumetric": {
+        "primitive": "shell",
         "color": "#ffbe0b"
       }
     },
@@ -162,6 +194,10 @@
       "linear": {
         "glyph": "fork",
         "color": "#fb5607"
+      },
+      "volumetric": {
+        "primitive": "branch",
+        "color": "#fb5607"
       }
     },
     {
@@ -179,6 +215,10 @@
       },
       "linear": {
         "glyph": "join",
+        "color": "#7209b7"
+      },
+      "volumetric": {
+        "primitive": "funnel",
         "color": "#7209b7"
       }
     },
@@ -198,6 +238,10 @@
       "linear": {
         "glyph": "band",
         "color": "#252422"
+      },
+      "volumetric": {
+        "primitive": "cell",
+        "color": "#252422"
       }
     },
     {
@@ -215,6 +259,10 @@
       },
       "linear": {
         "glyph": "shift",
+        "color": "#0077b6"
+      },
+      "volumetric": {
+        "primitive": "flow",
         "color": "#0077b6"
       }
     }
