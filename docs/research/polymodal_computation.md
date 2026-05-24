@@ -416,9 +416,9 @@ polymodal claim stronger:
    events into it.
 2. **Stable identity.** Add optional entity IDs to the semantic core and
    preserve them through every projection.
-3. **Projection capability metadata.** Require each projection to
-   declare preserved, lossy, ambiguous, view-only, and non-invertible
-   fields.
+3. **Richer capability enforcement.** Projection manifests now declare
+   capability metadata; future tests should use those contracts to
+   drive exact, lossy, and view-only round-trip expectations.
 4. **Golden manifests.** Store versioned fixture manifests for the
    semantic core and every projection, then require old fixtures to load
    identically or migrate explicitly.
@@ -479,8 +479,9 @@ multiple native perceptual forms while keeping one semantic identity.
 - **Compatibility profiles.** The textual language and the polymodal
   profile should remain distinct so ordinary `.multi` programs do not
   inherit cross-modal obligations.
-- **Perceptual contracts.** Projection metadata should make lossy,
-  ambiguous, and non-invertible surfaces explicit.
+- **Perceptual contract enforcement.** Projection metadata now marks
+  lossy, ambiguous, and partial-inverse surfaces; tests should
+  increasingly derive their expectations from those declarations.
 
 ## Design test
 

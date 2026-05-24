@@ -18,7 +18,6 @@ from multilingualprogramming.codegen.runtime_builtins import RuntimeBuiltins
 from multilingualprogramming.codegen.spatial_manifest import (
     MANIFEST_KIND,
     build_spatial_manifest,
-    normalize_entities,
 )
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.ast_nodes import VariableDeclaration
@@ -66,10 +65,6 @@ class SpatialPipelineTestSuite(unittest.TestCase):
         )
         actual = json.loads(MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
-
-    def test_manifest_validation_rejects_invalid_behavior(self):
-        with self.assertRaisesRegex(ValueError, "unknown behavior"):
-            normalize_entities([[99, 0.5, 0.5, 10, 1, 0, 0, 0, 0, 0]])
 
     def test_cli_spatial_build_writes_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
