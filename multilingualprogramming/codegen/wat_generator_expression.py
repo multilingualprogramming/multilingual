@@ -13,9 +13,16 @@ from multilingualprogramming.parser.ast_nodes import (
     FStringLiteral,
     Identifier,
     IndexAccess,
+    NumeralLiteral,
     StringLiteral,
 )
 from multilingualprogramming.codegen.wat_generator_support import _STR_NAMES, _name
+
+# B3 : builtins qui produisent un f64 réinterprétable comme i32 (résultat
+# garanti dans [-2^31, 2^31)). Permet à `_is_int_like_expr` de reconnaître
+# un appel comme « shape i32 » et donc à `+`/`*` enchaînés d'utiliser i32 ops
+# avec wraparound au lieu de f64.
+_INT_LIKE_BUILTINS = frozenset({"imul32", "iadd32", "shr_u32"})
 
 class WATGeneratorExpressionMixin:
     """Helpers for lowering complex expressions."""
@@ -172,10 +179,64 @@ class WATGeneratorExpressionMixin:
         raise ValueError(f"Unsupported string expression for WAT concat: {type(expr).__name__}")
 
     def _emit_numeric_binop(self, node: BinaryOp, indent: str):
+        if node.op in ("+", "*") and self._should_use_i32_arith(node):
+            self._emit_i32_arith_binop(node, indent)
+            return
         arith = {"+": "f64.add", "-": "f64.sub", "*": "f64.mul", "/": "f64.div"}
         self._gen_expr(node.left, indent)
         self._gen_expr(node.right, indent)
         self._emit(f"{indent}{arith.get(node.op, 'f64.add')}  ;; op={node.op!r}")
+
+    def _should_use_i32_arith(self, node: BinaryOp) -> bool:
+        # Require at least one side to be "earned" i32-shape (bitwise/shift,
+        # i32 builtin, tracked local, nested i32-arith). Plain literal*literal
+        # stays on f64 to avoid silently wrapping ordinary arithmetic.
+        left_real = self._is_int_like_expr(node.left)
+        right_real = self._is_int_like_expr(node.right)
+        if not (left_real or right_real):
+            return False
+        return (
+            (left_real or self._is_int_like_literal(node.left))
+            and (right_real or self._is_int_like_literal(node.right))
+        )
+
+    def _is_int_like_expr(self, expr) -> bool:
+        if isinstance(expr, Identifier):
+            return expr.name in self._int_like_locals
+        if isinstance(expr, BinaryOp):
+            if expr.op in ("&", "|", "^", "<<", ">>"):
+                return True
+            if expr.op in ("+", "*"):
+                return self._should_use_i32_arith(expr)
+            return False
+        if isinstance(expr, CallExpr):
+            return _name(expr.func) in _INT_LIKE_BUILTINS
+        return False
+
+    @staticmethod
+    def _is_int_like_literal(expr) -> bool:
+        if not isinstance(expr, NumeralLiteral):
+            return False
+        raw = str(expr.value)
+        if "." in raw or "e" in raw or "E" in raw or "j" in raw or "/" in raw:
+            return False
+        try:
+            v = int(raw)
+        except ValueError:
+            return False
+        return -(2**31) <= v < 2**31
+
+    def _emit_i32_arith_binop(self, node: BinaryOp, indent: str):
+        # Both operands are guaranteed to fit in i32 (either by prior bitwise
+        # provenance or by being a small integer literal), so `i32.trunc_f64_s`
+        # cannot trap. `i32.{add,mul}` wrap on overflow per WASM semantics.
+        instr = {"+": "i32.add", "*": "i32.mul"}[node.op]
+        self._gen_expr(node.left, indent)
+        self._emit(f"{indent}i32.trunc_f64_s")
+        self._gen_expr(node.right, indent)
+        self._emit(f"{indent}i32.trunc_f64_s")
+        self._emit(f"{indent}{instr}  ;; i32 wraparound (op={node.op!r})")
+        self._emit(f"{indent}f64.convert_i32_s")
 
     def _emit_bitwise_binop(self, node: BinaryOp, indent: str):
         instr = {"&": "i32.and", "|": "i32.or", "^": "i32.xor"}[node.op]

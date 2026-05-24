@@ -652,6 +652,61 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertEqual(self._call_export(prog, "u32_neg"), 4294967295.0)
         self.assertEqual(self._call_export(prog, "u32_pos"), 1234567.0)
 
+    def test_i32_wraparound_on_mul_and_add_for_int_shaped_operands(self):
+        # B3 : `*` et `+` doivent s'abaisser à `i32.mul`/`i32.add` (wraparound)
+        # quand les deux opérandes sont « i32-shaped » — soit issus d'un op
+        # bitwise/shift, soit d'un builtin i32 (imul32/iadd32/shr_u32), soit
+        # un local précédemment tracké, soit un littéral entier qui rentre
+        # dans i32. Permet d'écrire FNV/mulberry32 en `.multi` sans appeler
+        # imul32/iadd32 explicitement (cf. roadmap multilingual W2 → B3).
+        prog = _parse_source(
+            # mul_wrap : 2147483647 * 2 — un opérande tracké comme i32 (via
+            # `& 0xFFFFFFFF`) suffit à passer en i32.mul. Wraparound → -2.
+            "déf mul_wrap():\n"
+            "    soit a = 2147483647 & -1\n"
+            "    retour a * 2\n"
+            # add_wrap : 2e9 + 2e9 — opérande tracké via shift identité.
+            # 4e9 ne tient pas en i32 → wraparound → 4e9 - 2^32 = -294967296.
+            "déf add_wrap():\n"
+            "    soit a = 2000000000 << 0\n"
+            "    retour a + 2000000000\n"
+            # fnv1a_step : un pas de FNV-1a (hash ^= byte ; hash *= prime).
+            # Doit produire exactement le même résultat que via imul32 explicite.
+            # Le seed est passé en vue signée (FNV offset basis 2166136261 vaut
+            # -2128831035 en i32 signé) parce que `i32.trunc_f64_s` du bitwise
+            # ^ trappe sur les valeurs hors [-2^31, 2^31) — orthogonal à B3.
+            "déf fnv1a_step(seed_signed, octet):\n"
+            "    soit h = seed_signed ^ octet\n"
+            "    retour h * 16777619\n"
+            # chained : (a & m) + (b & m) — deux opérandes bitwise → i32.add wraparound.
+            "déf chained_bitwise_add():\n"
+            "    retour (2000000000 & -1) + (2000000000 & -1)\n"
+            # Régression : littéral pur * littéral pur NE doit PAS wraparound
+            # (sinon on casse l'arithmétique f64 ordinaire). 1e9 * 5 = 5e9.
+            "déf pure_literal_mul_stays_f64():\n"
+            "    retour 1000000000.0 * 5.0\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "mul_wrap"), -2.0)
+        self.assertEqual(self._call_export(prog, "add_wrap"), -294967296.0)
+        # FNV-1a : on calcule en Python la valeur attendue avec la même
+        # sémantique i32-wraparound que le code généré.
+        seed_unsigned = 2166136261
+        seed_signed = seed_unsigned - (1 << 32)  # -2128831035 en vue signée
+        octet = 0x41
+        h_u = (seed_unsigned ^ octet) & 0xFFFFFFFF
+        prod_u = (h_u * 16777619) & 0xFFFFFFFF
+        # Vue signée i32 (ce que le WAT retourne via f64.convert_i32_s).
+        expected = prod_u - (1 << 32) if prod_u >= (1 << 31) else prod_u
+        self.assertEqual(
+            self._call_export(prog, "fnv1a_step", float(seed_signed), float(octet)),
+            float(expected),
+        )
+        # chained : 2e9 + 2e9 (i32) = 4e9 → wrap → -294967296.
+        self.assertEqual(self._call_export(prog, "chained_bitwise_add"), -294967296.0)
+        # Régression : pas de faux positif sur arithmétique f64 pure.
+        self.assertEqual(self._call_export(prog, "pure_literal_mul_stays_f64"), 5e9)
+
     def test_pow_f64_negative_integer_exponent(self):
         # Regression : $pow_f64 avait le drapeau de signe inversé pour les
         # exposants entiers (neg = 0 < exp au lieu de exp < 0). Conséquence :

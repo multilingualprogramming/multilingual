@@ -474,6 +474,19 @@ class WATGeneratorRuntimeMixin:
                 result.append(elem)
         return result
 
+    def _update_int_like_tracking(self, name: str, value) -> None:
+        """Track *name* as i32-shaped iff *value* is provably so (B3).
+
+        Re-uses `_is_int_like_expr` from the expression mixin (recursive,
+        already understands bitwise/shift/i32-builtin/chained `+`*). Drops
+        the name from the set on re-assignment to a non-int-like value so
+        stale i32 wraparound never bites a now-f64 local.
+        """
+        if self._is_int_like_expr(value):
+            self._int_like_locals.add(name)
+        elif name in self._int_like_locals:
+            self._int_like_locals.discard(name)
+
     def _update_dict_tracking(self, name: str, value) -> None:
         """Refresh tracked static-dict metadata after storing into *name*."""
         if (isinstance(value, CallExpr)
@@ -495,6 +508,7 @@ class WATGeneratorRuntimeMixin:
         self._update_string_tracking(name, value, indent)
         self._update_collection_tracking(name, value)
         self._update_dict_tracking(name, value)
+        self._update_int_like_tracking(name, value)
         if isinstance(value, LambdaExpr):
             if self._lambda_table:
                 self._lambda_locals[name] = self._lambda_table[-1]

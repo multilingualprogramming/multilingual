@@ -150,6 +150,11 @@ class WATCodeGenerator(
         # Locals known to hold list/tuple pointers (heap-allocated).
         self._list_locals: set[str] = set()
         self._tuple_locals: set[str] = set()
+        # B3 : locals known to hold i32-shaped values (in [-2^31, 2^31)),
+        # earned via bitwise/shift ops, i32 builtins (imul32/iadd32/shr_u32),
+        # or chained `+`/`*` on int-like operands. Consumed by
+        # `_emit_numeric_binop` to dispatch to i32 wraparound on `+` and `*`.
+        self._int_like_locals: set[str] = set()
         # Compiler-known dict locals: var_name -> string-key to element index.
         self._dict_key_maps: dict[str, dict[str, int]] = {}
         # Import alias resolution for recognized builtin/math lowerings.
