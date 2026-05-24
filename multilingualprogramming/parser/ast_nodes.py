@@ -284,7 +284,7 @@ class FunctionDef(ASTNode):
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(self, name, params, body, decorators=None,
                  return_annotation=None, is_async=False, syntax_keyword="def",
-                 uses=None, **kwargs):
+                 uses=None, source_module=None, **kwargs):
         line = kwargs.get("line", 0)
         column = kwargs.get("column", 0)
         super().__init__(line, column)
@@ -296,6 +296,12 @@ class FunctionDef(ASTNode):
         self.is_async = is_async
         self.syntax_keyword = syntax_keyword
         self.uses = uses or []
+        # B6 : module d'origine pour la regroupement du manifeste ABI.
+        # Renseigné par le bundler en amont (côté hôte, ex. compile_wasm
+        # de fractales) quand plusieurs fichiers `.multi` sont fusionnés en
+        # un seul Program. None ⇒ fonction non attribuée (tombera dans le
+        # groupe « default » du manifeste si la regroupement est active).
+        self.source_module = source_module
 class ClassDef(ASTNode):
     """Class definition: class Name(bases): body."""
     def __init__(self, name, bases, body, decorators=None,

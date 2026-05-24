@@ -149,6 +149,67 @@ class WATABIManifestTestSuite(unittest.TestCase):
         self.assertEqual(export["mode"], "polyline")
         self.assertEqual(export["stream_output"]["kind"], "segments")
 
+    def test_manifest_omits_modules_when_no_source_module_attribution(self):
+        # B6 : si aucune FunctionDef n'a `source_module`, le manifeste reste
+        # plat — compat. arrière avec les consommateurs JS antérieurs.
+        fn = FunctionDef(
+            Identifier("compute"),
+            [_param("x")],
+            [ReturnStatement(NumeralLiteral("0"))],
+        )
+        manifest = WATCodeGenerator().generate_abi_manifest(_prog(fn))
+        self.assertNotIn("modules", manifest)
+        self.assertNotIn("source_module", manifest["exports"][0])
+
+    def test_manifest_groups_exports_by_source_module(self):
+        # B6 : quand le bundler (ex. fractales `compile_wasm`) attribue
+        # un `source_module` à chaque fonction, le manifeste expose un dict
+        # `modules: { mod_name: [fname, ...] }` ET inscrit `source_module`
+        # dans chaque entrée d'export. Permet à un consommateur JS de
+        # binder `wasm.fractales_transforms.transforme_julia` sans avoir
+        # à coder en dur une table de regroupement (workaround W12).
+        fn_a = FunctionDef(
+            Identifier("transforme_julia"),
+            [_param("x"), _param("y")],
+            [ReturnStatement(NumeralLiteral("0"))],
+            source_module="fractales_transforms",
+        )
+        fn_b = FunctionDef(
+            Identifier("transforme_mandelbrot"),
+            [_param("x"), _param("y")],
+            [ReturnStatement(NumeralLiteral("0"))],
+            source_module="fractales_transforms",
+        )
+        fn_c = FunctionDef(
+            Identifier("formatter_fixe_5"),
+            [_param("v")],
+            [ReturnStatement(NumeralLiteral("0"))],
+            source_module="fractales_partage",
+        )
+        # Fonction sans attribution — tombe dans le groupe « default ».
+        fn_orphan = FunctionDef(
+            Identifier("helper_global"),
+            [_param("n")],
+            [ReturnStatement(NumeralLiteral("0"))],
+        )
+        manifest = WATCodeGenerator().generate_abi_manifest(
+            _prog(fn_a, fn_b, fn_c, fn_orphan)
+        )
+        self.assertIn("modules", manifest)
+        modules = manifest["modules"]
+        self.assertEqual(
+            sorted(modules["fractales_transforms"]),
+            ["transforme_julia", "transforme_mandelbrot"],
+        )
+        self.assertEqual(modules["fractales_partage"], ["formatter_fixe_5"])
+        self.assertEqual(modules["default"], ["helper_global"])
+        # Chaque entrée d'export porte aussi son `source_module` quand renseigné.
+        by_name = {entry["name"]: entry for entry in manifest["exports"]}
+        self.assertEqual(by_name["transforme_julia"]["source_module"], "fractales_transforms")
+        self.assertEqual(by_name["formatter_fixe_5"]["source_module"], "fractales_partage")
+        # La fonction non-attribuée n'a PAS de clé `source_module` (None ⇒ omis).
+        self.assertNotIn("source_module", by_name["helper_global"])
+
 
 class WATStreamBufferExportsTestSuite(unittest.TestCase):
     """Verify stream helper exports are emitted for stream render modes."""
