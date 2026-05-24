@@ -50,6 +50,7 @@ from multilingualprogramming.source_extensions import (
     has_source_extension,
 )
 from multilingualprogramming.codegen.linear_manifest import build_linear_manifest_file
+from multilingualprogramming.codegen.midi_manifest import build_midi_manifest_file
 from multilingualprogramming.codegen.opcode_ontology import write_ontology_manifest
 from multilingualprogramming.codegen.semantic_core import build_semantic_core_file
 from multilingualprogramming.codegen.sonic_projection import build_sonic_manifest_file
@@ -435,6 +436,17 @@ def cmd_volumetric_build(args):
     )
     print(f"[PASS] {args.out}")
     print(f"[volumetric] {manifest['kind']} marks={len(manifest['marks'])}")
+
+
+def cmd_midi_build(args):
+    """Build a MIDI JSON manifest from a Multilingual source file."""
+    manifest = build_midi_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[midi] {manifest['kind']} events={len(manifest['events'])}")
 
 
 def cmd_ir(args):
@@ -888,6 +900,20 @@ def main():  # pylint: disable=too-many-statements,too-many-locals
         help="Output JSON manifest path (default: program.volumetric.json)",
     )
 
+    midi_build_parser = subparsers.add_parser(
+        "midi-build",
+        help="Build a MIDI event JSON manifest",
+    )
+    midi_build_parser.add_argument("file", help="Path to the source file")
+    midi_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    midi_build_parser.add_argument(
+        "--out", default="program.midi.json",
+        help="Output JSON manifest path (default: program.midi.json)",
+    )
+
     # ir subcommand
     ir_parser = subparsers.add_parser(
         "ir", help="Show the semantic IR for a source file"
@@ -966,6 +992,8 @@ def main():  # pylint: disable=too-many-statements,too-many-locals
         cmd_linear_build(args)
     elif args.command == "volumetric-build":
         cmd_volumetric_build(args)
+    elif args.command == "midi-build":
+        cmd_midi_build(args)
     elif args.command == "ir":
         cmd_ir(args)
     elif args.command == "explain":

@@ -1,0 +1,230 @@
+// SPDX-FileCopyrightText: 2026 John Samuel <johnsamuelwrites@gmail.com>
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// MIDI browser runtime.
+//
+// Peer of the linear/spatial/volumetric/sonic runtimes. Consumes a
+// midi-seed-v0 manifest and renders events as a piano-roll-style
+// visualization on canvas. The "Out" button optionally enables Web
+// MIDI output -- when on, the runtime sends note-on/note-off, control
+// change, and program change messages to the first available MIDI
+// output port so users with a connected synth can hear the program.
+// When off (the default), the runtime stays visual-only and works in
+// any browser without MIDI hardware.
+
+const MANIFEST_KIND = "midi-seed-v0";
+
+const startButton = document.getElementById("start");
+const stopButton = document.getElementById("stop");
+const midiOutButton = document.getElementById("midiout");
+const roll = document.getElementById("roll");
+const ctx = roll.getContext("2d");
+const palette = document.querySelector(".palette");
+
+let manifest = null;
+let running = false;
+let cursor = 0;
+let lastTick = performance.now();
+let midiAccess = null;
+let midiOutput = null;
+let activeNotes = new Set(); // pitch|channel keys for note-offs
+
+async function loadMidiManifest() {
+  const response = await fetch("./program.midi.json", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`program.midi.json ${response.status}`);
+  }
+  const data = await response.json();
+  if (data.kind !== MANIFEST_KIND || !Array.isArray(data.events)) {
+    throw new Error("invalid midi manifest");
+  }
+  manifest = data;
+}
+
+function resizeRoll() {
+  const scale = window.devicePixelRatio || 1;
+  roll.width = Math.floor(window.innerWidth * scale);
+  roll.height = Math.floor(window.innerHeight * scale);
+  roll.style.width = `${window.innerWidth}px`;
+  roll.style.height = `${window.innerHeight}px`;
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+}
+
+function start() {
+  if (running || !manifest) return;
+  running = true;
+  cursor = 0;
+  lastTick = performance.now();
+  startButton.setAttribute("aria-pressed", "true");
+  stopButton.setAttribute("aria-pressed", "false");
+}
+
+function stop() {
+  if (!running) return;
+  running = false;
+  cursor = 0;
+  startButton.setAttribute("aria-pressed", "false");
+  stopButton.setAttribute("aria-pressed", "true");
+  releaseAllNotes();
+}
+
+async function toggleMidiOut() {
+  const wantOn = midiOutButton.getAttribute("aria-pressed") !== "true";
+  if (!wantOn) {
+    releaseAllNotes();
+    midiOutput = null;
+    midiOutButton.setAttribute("aria-pressed", "false");
+    return;
+  }
+  if (!navigator.requestMIDIAccess) {
+    midiOutButton.setAttribute("aria-pressed", "false");
+    return;
+  }
+  try {
+    if (!midiAccess) {
+      midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+    }
+    const outputs = Array.from(midiAccess.outputs.values());
+    midiOutput = outputs[0] || null;
+    midiOutButton.setAttribute("aria-pressed", midiOutput ? "true" : "false");
+  } catch (_err) {
+    midiOutButton.setAttribute("aria-pressed", "false");
+  }
+}
+
+function sendEvent(event) {
+  if (!midiOutput) return;
+  const ch = Math.max(0, Math.min(15, event.channel)) & 0x0f;
+  if (event.role === "note") {
+    midiOutput.send([0x90 | ch, event.pitch & 0x7f, event.velocity & 0x7f]);
+    activeNotes.add(`${event.pitch}|${ch}`);
+  } else if (event.role === "drum") {
+    midiOutput.send([0x99, event.pitch & 0x7f, event.velocity & 0x7f]); // channel 10
+    activeNotes.add(`${event.pitch}|9`);
+  } else if (event.role === "cc") {
+    midiOutput.send([0xb0 | ch, event.pitch & 0x7f, event.velocity & 0x7f]);
+  } else if (event.role === "program") {
+    midiOutput.send([0xc0 | ch, event.pitch & 0x7f]);
+  }
+}
+
+function releaseAllNotes() {
+  if (!midiOutput) {
+    activeNotes.clear();
+    return;
+  }
+  for (const key of activeNotes) {
+    const [pitch, ch] = key.split("|").map((s) => parseInt(s, 10));
+    midiOutput.send([0x80 | (ch & 0x0f), pitch & 0x7f, 0]);
+  }
+  activeNotes.clear();
+}
+
+function eventFill(event) {
+  if (event.role === "note") return "#3a86ff";
+  if (event.role === "drum") return "#fb5607";
+  if (event.role === "cc") return "#8338ec";
+  if (event.role === "program") return "#ffbe0b";
+  return "rgba(241, 239, 228, 0.18)"; // bus
+}
+
+function draw() {
+  const now = performance.now();
+  const dt = (now - lastTick) / 1000;
+  lastTick = now;
+
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  ctx.clearRect(0, 0, width, height);
+
+  // Pitch axis baseline gridlines (octaves of C).
+  ctx.strokeStyle = "rgba(241, 239, 228, 0.08)";
+  ctx.lineWidth = 1;
+  const minPitch = 24;
+  const maxPitch = 96;
+  const pitchToY = (p) =>
+    height - 60 - ((p - minPitch) / (maxPitch - minPitch)) * (height - 120);
+  for (let p = minPitch; p <= maxPitch; p += 12) {
+    const y = pitchToY(p);
+    ctx.beginPath();
+    ctx.moveTo(40, y);
+    ctx.lineTo(width - 40, y);
+    ctx.stroke();
+  }
+
+  if (!manifest) {
+    requestAnimationFrame(draw);
+    return;
+  }
+
+  const usableWidth = width - 80;
+  const noteWidth = Math.max(12, usableWidth / 16);
+  const eventHeight = Math.max(8, (height - 120) / (maxPitch - minPitch));
+
+  for (const event of manifest.events) {
+    const x = 40 + event.start_offset * usableWidth;
+    const pitch = Math.max(minPitch, Math.min(maxPitch, event.pitch));
+    const y = pitchToY(pitch);
+    ctx.fillStyle = eventFill(event);
+    const alpha = event.role === "bus"
+      ? 0.4
+      : 0.35 + 0.55 * (event.velocity / 127);
+    ctx.globalAlpha = alpha;
+    if (event.role === "program") {
+      ctx.fillRect(x - 2, 24, 4, height - 144);
+    } else if (event.role === "cc") {
+      ctx.fillRect(x, y - 2, noteWidth, 4);
+    } else {
+      ctx.fillRect(x, y - eventHeight / 2, noteWidth, eventHeight);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (running) {
+    const bar = manifest.bar_seconds || 4;
+    const previousCursor = cursor;
+    cursor = (cursor + dt / bar) % 1;
+    if (midiOutput) {
+      // Fire events whose start_offset falls within [previousCursor, cursor).
+      // Treat cursor wrap as an interval ending at 1 then 0..cursor.
+      for (const event of manifest.events) {
+        const sent = previousCursor <= cursor
+          ? event.start_offset >= previousCursor && event.start_offset < cursor
+          : event.start_offset >= previousCursor || event.start_offset < cursor;
+        if (sent) sendEvent(event);
+      }
+    }
+    const cx = 40 + cursor * usableWidth;
+    ctx.strokeStyle = "rgba(247, 201, 72, 0.7)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, 24);
+    ctx.lineTo(cx, height - 40);
+    ctx.stroke();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+palette.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "start") {
+    start();
+  } else if (button.dataset.action === "stop") {
+    stop();
+  } else if (button.dataset.action === "midiout") {
+    toggleMidiOut();
+  }
+});
+
+window.addEventListener("resize", resizeRoll);
+
+loadMidiManifest()
+  .catch(() => {
+    manifest = null;
+  })
+  .finally(() => {
+    resizeRoll();
+    requestAnimationFrame(draw);
+  });

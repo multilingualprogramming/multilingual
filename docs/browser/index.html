@@ -173,7 +173,7 @@
           This GitHub Pages site demonstrates interactive execution through Pyodide,
           ahead-of-time deployment through precompiled WebAssembly bundles, and the
           polymodal computation track: one modality-free program projected into
-          linear, spatial, volumetric, and sonic browser runtimes.
+          linear, spatial, volumetric, sonic, and MIDI browser runtimes.
         </p>
         <div class="links">
           <a class="button button--solid" href="../playground.html">Open Pyodide Playground</a>
@@ -298,6 +298,24 @@
           </ul>
           <p class="route">browser/volumetric-dynamics/</p>
           <a class="button button--solid" href="./volumetric-dynamics/">Open Volumetric Dynamics</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Polymodal projection</span>
+          <h2>MIDI Dynamics</h2>
+          <p>
+            The same program.multi as Spatial Dynamics, projected into a
+            sequence of discrete MIDI events rendered as a piano roll. An
+            optional Web MIDI Out button forwards the events to a connected
+            synthesizer.
+          </p>
+          <ul>
+            <li>Discrete-event peer of the continuous-shape projections</li>
+            <li>Each opcode commits to a MIDI role (note / drum / cc / program / bus)</li>
+            <li>Stress-tests whether the ontology is genuinely modality-free</li>
+          </ul>
+          <p class="route">browser/midi-dynamics/</p>
+          <a class="button button--solid" href="./midi-dynamics/">Open MIDI Dynamics</a>
         </article>
       </section>
     </main>

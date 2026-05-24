@@ -73,6 +73,23 @@ class VolumetricHint:
 
 
 @dataclass(frozen=True)
+class MidiHint:
+    """How an opcode realizes in the MIDI modality.
+
+    Discrete-event peer of the continuous-shape projections. Each
+    opcode maps to a MIDI role (``note``, ``drum``, ``cc``,
+    ``program``, ``bus``) plus a base value: a MIDI note number for
+    note/drum roles, a CC number for cc roles, a program number for
+    program roles, and 0 for bus. Velocity is the peak velocity that
+    intensity scales against (0-127).
+    """
+
+    role: str  # note | drum | cc | program | bus
+    pitch: int  # 0-127 base value (note number / CC number / program number)
+    velocity: int  # 0-127 peak velocity
+
+
+@dataclass(frozen=True)
 class Opcode:
     """A stable polymodal behavior primitive."""
 
@@ -83,6 +100,7 @@ class Opcode:
     spatial: SpatialHint
     linear: LinearHint
     volumetric: VolumetricHint
+    midi: MidiHint
 
 
 OPCODES: tuple[Opcode, ...] = (
@@ -92,6 +110,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="source", color="#de3c4b"),
         linear=LinearHint(glyph="dot", color="#de3c4b"),
         volumetric=VolumetricHint(primitive="point", color="#de3c4b"),
+        midi=MidiHint(role="note", pitch=69, velocity=96),  # A4
     ),
     Opcode(
         code=2, name="diffuse", description="Equalize signal with local neighbors.",
@@ -99,6 +118,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="ring", color="#3a86ff"),
         linear=LinearHint(glyph="band", color="#3a86ff"),
         volumetric=VolumetricHint(primitive="cloud", color="#3a86ff"),
+        midi=MidiHint(role="cc", pitch=91, velocity=100),  # CC 91 reverb send
     ),
     Opcode(
         code=3, name="attract", description="Pull nearby entities through proximity.",
@@ -106,6 +126,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="up", color="#2d6a4f"),
         linear=LinearHint(glyph="ramp", color="#2d6a4f"),
         volumetric=VolumetricHint(primitive="cone", color="#2d6a4f"),
+        midi=MidiHint(role="cc", pitch=1, velocity=110),  # CC 1 mod wheel (rising)
     ),
     Opcode(
         code=4, name="repel", description="Push nearby entities away.",
@@ -113,6 +134,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="down", color="#f77f00"),
         linear=LinearHint(glyph="fall", color="#f77f00"),
         volumetric=VolumetricHint(primitive="burst", color="#f77f00"),
+        midi=MidiHint(role="cc", pitch=2, velocity=110),  # CC 2 breath (falling)
     ),
     Opcode(
         code=5, name="stabilize", description="Dampen transient activation.",
@@ -120,6 +142,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="square", color="#6c757d"),
         linear=LinearHint(glyph="segment", color="#6c757d"),
         volumetric=VolumetricHint(primitive="cube", color="#6c757d"),
+        midi=MidiHint(role="cc", pitch=11, velocity=80),  # CC 11 expression
     ),
     Opcode(
         code=6, name="oscillate", description="Produce periodic signal.",
@@ -127,6 +150,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="phase", color="#8338ec"),
         linear=LinearHint(glyph="wave", color="#8338ec"),
         volumetric=VolumetricHint(primitive="helix", color="#8338ec"),
+        midi=MidiHint(role="note", pitch=64, velocity=92),  # E4 (oscillating)
     ),
     Opcode(
         code=7, name="transform", description="Convert nearby signal into local signal.",
@@ -134,6 +158,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="diamond", color="#00a896"),
         linear=LinearHint(glyph="double", color="#00a896"),
         volumetric=VolumetricHint(primitive="twist", color="#00a896"),
+        midi=MidiHint(role="program", pitch=8, velocity=0),  # program 8 (celesta)
     ),
     Opcode(
         code=8, name="resonate", description="Amplify through phase alignment.",
@@ -141,6 +166,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="double", color="#ffbe0b"),
         linear=LinearHint(glyph="pulse", color="#ffbe0b"),
         volumetric=VolumetricHint(primitive="shell", color="#ffbe0b"),
+        midi=MidiHint(role="cc", pitch=93, velocity=100),  # CC 93 chorus depth
     ),
     Opcode(
         code=9, name="split", description="Divide activation into propagating entities.",
@@ -148,6 +174,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="split", color="#fb5607"),
         linear=LinearHint(glyph="fork", color="#fb5607"),
         volumetric=VolumetricHint(primitive="branch", color="#fb5607"),
+        midi=MidiHint(role="drum", pitch=36, velocity=110),  # kick drum (GM)
     ),
     Opcode(
         code=10, name="merge", description="Combine nearby activations.",
@@ -155,6 +182,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="merge", color="#7209b7"),
         linear=LinearHint(glyph="join", color="#7209b7"),
         volumetric=VolumetricHint(primitive="funnel", color="#7209b7"),
+        midi=MidiHint(role="drum", pitch=38, velocity=110),  # snare (GM)
     ),
     Opcode(
         code=11, name="contain", description="Create a local membrane or boundary.",
@@ -162,6 +190,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="membrane", color="#252422"),
         linear=LinearHint(glyph="band", color="#252422"),
         volumetric=VolumetricHint(primitive="cell", color="#252422"),
+        midi=MidiHint(role="bus", pitch=0, velocity=0),  # silent (contain routes only)
     ),
     Opcode(
         code=12, name="propagate", description="Move activation through space.",
@@ -169,6 +198,7 @@ OPCODES: tuple[Opcode, ...] = (
         spatial=SpatialHint(shape="arrow", color="#0077b6"),
         linear=LinearHint(glyph="shift", color="#0077b6"),
         volumetric=VolumetricHint(primitive="flow", color="#0077b6"),
+        midi=MidiHint(role="note", pitch=74, velocity=104),  # D5 (propagating, staccato)
     ),
 )
 
@@ -219,6 +249,11 @@ def to_json_table() -> list[dict]:
             "volumetric": {
                 "primitive": op.volumetric.primitive,
                 "color": op.volumetric.color,
+            },
+            "midi": {
+                "role": op.midi.role,
+                "pitch": op.midi.pitch,
+                "velocity": op.midi.velocity,
             },
         }
         for op in OPCODES

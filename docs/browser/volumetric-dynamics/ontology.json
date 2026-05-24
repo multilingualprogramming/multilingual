@@ -22,6 +22,11 @@
       "volumetric": {
         "primitive": "point",
         "color": "#de3c4b"
+      },
+      "midi": {
+        "role": "note",
+        "pitch": 69,
+        "velocity": 96
       }
     },
     {
@@ -44,6 +49,11 @@
       "volumetric": {
         "primitive": "cloud",
         "color": "#3a86ff"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 91,
+        "velocity": 100
       }
     },
     {
@@ -66,6 +76,11 @@
       "volumetric": {
         "primitive": "cone",
         "color": "#2d6a4f"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 1,
+        "velocity": 110
       }
     },
     {
@@ -88,6 +103,11 @@
       "volumetric": {
         "primitive": "burst",
         "color": "#f77f00"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 2,
+        "velocity": 110
       }
     },
     {
@@ -110,6 +130,11 @@
       "volumetric": {
         "primitive": "cube",
         "color": "#6c757d"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 11,
+        "velocity": 80
       }
     },
     {
@@ -132,6 +157,11 @@
       "volumetric": {
         "primitive": "helix",
         "color": "#8338ec"
+      },
+      "midi": {
+        "role": "note",
+        "pitch": 64,
+        "velocity": 92
       }
     },
     {
@@ -154,6 +184,11 @@
       "volumetric": {
         "primitive": "twist",
         "color": "#00a896"
+      },
+      "midi": {
+        "role": "program",
+        "pitch": 8,
+        "velocity": 0
       }
     },
     {
@@ -176,6 +211,11 @@
       "volumetric": {
         "primitive": "shell",
         "color": "#ffbe0b"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 93,
+        "velocity": 100
       }
     },
     {
@@ -198,6 +238,11 @@
       "volumetric": {
         "primitive": "branch",
         "color": "#fb5607"
+      },
+      "midi": {
+        "role": "drum",
+        "pitch": 36,
+        "velocity": 110
       }
     },
     {
@@ -220,6 +265,11 @@
       "volumetric": {
         "primitive": "funnel",
         "color": "#7209b7"
+      },
+      "midi": {
+        "role": "drum",
+        "pitch": 38,
+        "velocity": 110
       }
     },
     {
@@ -242,6 +292,11 @@
       "volumetric": {
         "primitive": "cell",
         "color": "#252422"
+      },
+      "midi": {
+        "role": "bus",
+        "pitch": 0,
+        "velocity": 0
       }
     },
     {
@@ -264,6 +319,11 @@
       "volumetric": {
         "primitive": "flow",
         "color": "#0077b6"
+      },
+      "midi": {
+        "role": "note",
+        "pitch": 74,
+        "velocity": 104
       }
     }
   ]

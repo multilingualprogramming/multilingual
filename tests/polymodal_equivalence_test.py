@@ -21,6 +21,7 @@ from pathlib import Path
 
 from multilingualprogramming.__main__ import (
     cmd_linear_build,
+    cmd_midi_build,
     cmd_ontology_export,
     cmd_polymodal_build,
     cmd_sonic_build,
@@ -30,6 +31,10 @@ from multilingualprogramming.codegen import opcode_ontology, sonic_capture
 from multilingualprogramming.codegen.linear_manifest import (
     MANIFEST_KIND as LINEAR_KIND,
     build_linear_manifest,
+)
+from multilingualprogramming.codegen.midi_manifest import (
+    MANIFEST_KIND as MIDI_KIND,
+    build_midi_manifest,
 )
 from multilingualprogramming.codegen.opcode_ontology import (
     ONTOLOGY_KIND,
@@ -72,6 +77,14 @@ VOLUMETRIC_MANIFEST = VOLUMETRIC_DIR / "program.volumetric.json"
 VOLUMETRIC_ONTOLOGY = VOLUMETRIC_DIR / "ontology.json"
 VOLUMETRIC_RUNTIME_JS = VOLUMETRIC_DIR / "volumetric_runtime.js"
 VOLUMETRIC_HTML = VOLUMETRIC_DIR / "index.html"
+MIDI_DIR = ROOT / "docs" / "browser" / "midi-dynamics"
+MIDI_MANIFEST = MIDI_DIR / "program.midi.json"
+MIDI_ONTOLOGY = MIDI_DIR / "ontology.json"
+MIDI_RUNTIME_JS = MIDI_DIR / "midi_runtime.js"
+MIDI_HTML = MIDI_DIR / "index.html"
+SPATIAL_DIR = ROOT / "docs" / "browser" / "spatial-dynamics"
+SPATIAL_MANIFEST = SPATIAL_DIR / "program.spatial.json"
+SPATIAL_ONTOLOGY = SPATIAL_DIR / "ontology.json"
 
 
 def _source():
@@ -224,10 +237,12 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
         volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
         self.assertEqual(len(core["entities"]), len(spatial["entities"]))
         self.assertEqual(len(core["entities"]), len(sonic["voices"]))
         self.assertEqual(len(core["entities"]), len(linear["marks"]))
         self.assertEqual(len(core["entities"]), len(volumetric["marks"]))
+        self.assertEqual(len(core["entities"]), len(midi["events"]))
 
     def test_opcode_order_preserved_across_modalities(self):
         core = build_semantic_core(_source(), language="en")
@@ -235,17 +250,20 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
         volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
 
         core_codes = [entity["opcode"] for entity in core["entities"]]
-        spatial_codes = [row[0] for row in spatial["entities"]]
+        spatial_codes = [entity["opcode"] for entity in spatial["entities"]]
         sonic_codes = [voice["opcode"] for voice in sonic["voices"]]
         linear_codes = [mark["opcode"] for mark in linear["marks"]]
         volumetric_codes = [mark["opcode"] for mark in volumetric["marks"]]
+        midi_codes = [event["opcode"] for event in midi["events"]]
 
         self.assertEqual(core_codes, spatial_codes)
         self.assertEqual(core_codes, sonic_codes)
         self.assertEqual(core_codes, linear_codes)
         self.assertEqual(core_codes, volumetric_codes)
+        self.assertEqual(core_codes, midi_codes)
 
     def test_intensity_and_phase_preserved_across_projections(self):
         core = build_semantic_core(_source(), language="en")
@@ -253,16 +271,18 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
         volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
 
-        for core_entity, spatial_row, sonic_voice, linear_mark, vol_mark in zip(
+        for (
+            core_entity, spatial_entity, sonic_voice, linear_mark, vol_mark, midi_event,
+        ) in zip(
             core["entities"], spatial["entities"], sonic["voices"],
-            linear["marks"], volumetric["marks"],
+            linear["marks"], volumetric["marks"], midi["events"],
         ):
-            # Spatial row layout:
-            # [behavior, x, y, radius, intensity, signal, vx, vy, phase, channel]
-            self.assertAlmostEqual(core_entity["intensity"], spatial_row[4])
-            self.assertAlmostEqual(core_entity["phase"], spatial_row[8])
-            self.assertEqual(core_entity["channel"], spatial_row[9])
+            # Spatial entity carries semantic fields directly (post-unification).
+            self.assertAlmostEqual(core_entity["intensity"], spatial_entity["intensity"])
+            self.assertAlmostEqual(core_entity["phase"], spatial_entity["phase"])
+            self.assertEqual(core_entity["channel"], spatial_entity["channel"])
             # Sonic voice carries channel directly; amplitude/frequency derived
             self.assertEqual(core_entity["channel"], sonic_voice["channel"])
             # Linear mark carries intensity directly; phase becomes position.
@@ -281,21 +301,52 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
                 core_entity["phase"] % 1.0, vol_mark["z"], places=3,
             )
             self.assertEqual(core_entity["channel"], vol_mark["channel"])
+            # MIDI event carries channel directly; phase becomes start_offset;
+            # velocity is intensity-scaled (not preserved verbatim, so the
+            # weaker assertion on velocity range lives in MidiProjectionTestSuite).
+            self.assertEqual(core_entity["channel"], midi_event["channel"])
+            self.assertAlmostEqual(
+                core_entity["phase"] % 1.0, midi_event["start_offset"], places=3,
+            )
 
     def test_modalities_share_ontology_names(self):
         core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
         sonic = build_sonic_manifest(_source(), language="en")
         linear = build_linear_manifest(_source(), language="en")
         volumetric = build_volumetric_manifest(_source(), language="en")
-        for core_entity, sonic_voice, linear_mark, vol_mark in zip(
-            core["entities"], sonic["voices"], linear["marks"], volumetric["marks"],
+        midi = build_midi_manifest(_source(), language="en")
+        for (
+            core_entity, spatial_entity, sonic_voice, linear_mark, vol_mark, midi_event,
+        ) in zip(
+            core["entities"], spatial["entities"], sonic["voices"],
+            linear["marks"], volumetric["marks"], midi["events"],
         ):
+            self.assertEqual(core_entity["name"], spatial_entity["name"])
+            self.assertEqual(core_entity["opcode"], spatial_entity["opcode"])
             self.assertEqual(core_entity["name"], sonic_voice["name"])
             self.assertEqual(core_entity["opcode"], sonic_voice["opcode"])
             self.assertEqual(core_entity["name"], linear_mark["name"])
             self.assertEqual(core_entity["opcode"], linear_mark["opcode"])
             self.assertEqual(core_entity["name"], vol_mark["name"])
             self.assertEqual(core_entity["opcode"], vol_mark["opcode"])
+            self.assertEqual(core_entity["name"], midi_event["name"])
+            self.assertEqual(core_entity["opcode"], midi_event["opcode"])
+
+    def test_relations_flow_through_to_spatial_projection(self):
+        # Spatial unification: relations derived at the semantic core
+        # must appear in the spatial manifest so every peer sees the
+        # same structural facts.
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        self.assertEqual(core["relations"], spatial["relations"])
+
+    def test_spatial_entities_use_ontology_shape_and_color(self):
+        spatial = build_spatial_manifest(_source(), language="en")
+        for entity in spatial["entities"]:
+            op = opcode_ontology.get(entity["opcode"])
+            self.assertEqual(entity["shape"], op.spatial.shape)
+            self.assertEqual(entity["color"], op.spatial.color)
 
     def test_sonic_kinds_match_ontology_roles(self):
         sonic = build_sonic_manifest(_source(), language="en")
@@ -356,6 +407,52 @@ class LinearProjectionTestSuite(unittest.TestCase):
                 f"opcode {op.name!r} has 2D shape name in linear hint: "
                 f"{op.linear.glyph!r}",
             )
+
+
+class MidiProjectionTestSuite(unittest.TestCase):
+    """Direct tests of the MIDI projection.
+
+    MIDI is the discrete-event peer. Where the spatial / linear /
+    volumetric / sonic projections describe continuous shapes, MIDI
+    describes the program as note-ons, control changes, drum hits,
+    and program changes. If the ontology only mapped cleanly to
+    continuous-shape projections, this suite is where that would
+    crack.
+    """
+
+    _VALID_ROLES = {"note", "drum", "cc", "program", "bus"}
+
+    def test_midi_manifest_shape(self):
+        midi = build_midi_manifest(_source(), language="en")
+        self.assertEqual(midi["kind"], MIDI_KIND)
+        self.assertEqual(midi["version"], 0)
+        self.assertIn("events", midi)
+
+    def test_midi_events_use_ontology_role_and_pitch(self):
+        midi = build_midi_manifest(_source(), language="en")
+        for event in midi["events"]:
+            op = opcode_ontology.get(event["opcode"])
+            self.assertEqual(event["role"], op.midi.role)
+            self.assertEqual(event["pitch"], op.midi.pitch)
+
+    def test_midi_event_fields_are_in_midi_byte_range(self):
+        midi = build_midi_manifest(_source(), language="en")
+        for event in midi["events"]:
+            self.assertIn(event["role"], self._VALID_ROLES)
+            self.assertGreaterEqual(event["pitch"], 0)
+            self.assertLessEqual(event["pitch"], 127)
+            self.assertGreaterEqual(event["velocity"], 0)
+            self.assertLessEqual(event["velocity"], 127)
+            self.assertGreaterEqual(event["start_offset"], 0.0)
+            self.assertLessEqual(event["start_offset"], 1.0)
+
+    def test_midi_buses_are_silent(self):
+        # contain entities have role=bus and must emit zero velocity
+        # under the forward projection, mirroring sonic.
+        midi = build_midi_manifest(_source(), language="en")
+        for event in midi["events"]:
+            if event["role"] == "bus":
+                self.assertEqual(event["velocity"], 0)
 
 
 class VolumetricProjectionTestSuite(unittest.TestCase):
@@ -581,6 +678,32 @@ class PolymodalCLITestSuite(unittest.TestCase):
         actual = json.loads(VOLUMETRIC_MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
 
+    def test_midi_build_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.midi.json"
+            cmd_midi_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], MIDI_KIND)
+            self.assertEqual(len(data["events"]), 9)
+
+    def test_checked_in_midi_manifest_matches_source(self):
+        expected = build_midi_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(MIDI_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_checked_in_spatial_manifest_matches_source(self):
+        expected = build_spatial_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(SPATIAL_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
 
 class OntologyManifestTestSuite(unittest.TestCase):
     """The checked-in ontology JSON sidecar must match the Python ontology.
@@ -616,6 +739,16 @@ class OntologyManifestTestSuite(unittest.TestCase):
         actual = json.loads(VOLUMETRIC_ONTOLOGY.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
 
+    def test_checked_in_midi_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(MIDI_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_checked_in_spatial_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(SPATIAL_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
     def test_ontology_manifest_includes_linear_hints(self):
         manifest = build_ontology_manifest()
         for entry in manifest["opcodes"]:
@@ -629,6 +762,14 @@ class OntologyManifestTestSuite(unittest.TestCase):
             self.assertIn("volumetric", entry)
             self.assertIn("primitive", entry["volumetric"])
             self.assertIn("color", entry["volumetric"])
+
+    def test_ontology_manifest_includes_midi_hints(self):
+        manifest = build_ontology_manifest()
+        for entry in manifest["opcodes"]:
+            self.assertIn("midi", entry)
+            self.assertIn("role", entry["midi"])
+            self.assertIn("pitch", entry["midi"])
+            self.assertIn("velocity", entry["midi"])
 
     def test_ontology_export_cli_writes_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -816,6 +957,30 @@ class VolumetricRuntimeAssetsTestSuite(unittest.TestCase):
         self.assertNotIn(SPATIAL_KIND, html)
         self.assertNotIn(SONIC_KIND, html)
         self.assertNotIn(LINEAR_KIND, html)
+        self.assertNotIn(MIDI_KIND, html)
+
+
+class MidiRuntimeAssetsTestSuite(unittest.TestCase):
+    """The MIDI browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.midi.json"', runtime)
+        self.assertIn(MIDI_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_roll_canvas_and_no_other_kinds(self):
+        html = MIDI_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="roll"', html)
+        # MIDI is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SPATIAL_KIND, html)
+        self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(LINEAR_KIND, html)
+        self.assertNotIn(VOLUMETRIC_KIND, html)
 
 
 if __name__ == "__main__":

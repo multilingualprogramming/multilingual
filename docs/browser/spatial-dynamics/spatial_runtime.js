@@ -91,19 +91,19 @@ class World {
     ];
   }
 
-  seedFromRows(rows) {
-    this.entities = rows.map((row) => new Entity(
-      row[0],
-      row[1] * this.width,
-      row[2] * this.height,
+  seedFromRows(entities) {
+    this.entities = entities.map((row) => new Entity(
+      row.opcode,
+      row.x_ratio * this.width,
+      row.y_ratio * this.height,
       {
-        radius: row[3],
-        intensity: row[4],
-        signal: row[5],
-        vx: row[6],
-        vy: row[7],
-        phase: row[8],
-        channel: row[9],
+        radius: row.radius,
+        intensity: row.intensity,
+        signal: row.signal,
+        vx: row.vx,
+        vy: row.vy,
+        phase: row.phase,
+        channel: row.channel,
       },
     ));
   }
