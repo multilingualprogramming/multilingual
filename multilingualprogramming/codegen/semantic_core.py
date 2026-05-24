@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +55,10 @@ def execute_seed(
     namespace = make_exec_globals(language)
 
     with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(python_source, source_path or "<polymodal>", "exec"), namespace)
+        # Polymodal seeds are trusted Multilingual programs compiled by this package.
+        exec(  # pylint: disable=exec-used
+            compile(python_source, source_path or "<polymodal>", "exec"), namespace
+        )
 
     if "seed" not in namespace:
         raise ValueError("Polymodal program must define `seed`")
@@ -93,8 +97,6 @@ def build_semantic_core_file(
     language: str = "en",
 ) -> dict[str, Any]:
     """Build and write a semantic core manifest to disk as JSON."""
-    import json
-
     src = Path(source_path)
     out = Path(output_path)
     core = build_semantic_core(
@@ -144,5 +146,3 @@ def _entity_from_seed_row(row: Any, index: int) -> dict[str, Any]:
         "phase": phase,
         "channel": channel,
     }
-
-

@@ -612,7 +612,7 @@ def _maybe_dispatch_direct_file_run(argv):
     return True
 
 
-def main():  # pylint: disable=too-many-statements
+def main():  # pylint: disable=too-many-statements,too-many-locals
     """Run the CLI entry point and dispatch subcommands."""
     argv = sys.argv[1:]
     if _maybe_dispatch_direct_file_run(argv):

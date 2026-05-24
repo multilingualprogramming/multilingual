@@ -118,7 +118,8 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
         for core_entity, spatial_row, sonic_voice in zip(
             core["entities"], spatial["entities"], sonic["voices"]
         ):
-            # Spatial row layout: [behavior, x, y, radius, intensity, signal, vx, vy, phase, channel]
+            # Spatial row layout:
+            # [behavior, x, y, radius, intensity, signal, vx, vy, phase, channel]
             self.assertAlmostEqual(core_entity["intensity"], spatial_row[4])
             self.assertAlmostEqual(core_entity["phase"], spatial_row[8])
             self.assertEqual(core_entity["channel"], spatial_row[9])
