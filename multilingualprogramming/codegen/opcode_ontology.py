@@ -18,7 +18,9 @@ drift apart.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Iterable
 
 
@@ -161,3 +163,27 @@ def to_json_table() -> list[dict]:
 def codes_for_names(names: Iterable[str]) -> list[int]:
     """Helper to convert a list of opcode names to their stable integers."""
     return [get_by_name(name).code for name in names]
+
+
+ONTOLOGY_KIND = "opcode-ontology-v0"
+
+
+def build_ontology_manifest() -> dict:
+    """Return a self-describing ontology manifest for cross-runtime use."""
+    return {
+        "kind": ONTOLOGY_KIND,
+        "version": 0,
+        "opcodes": to_json_table(),
+    }
+
+
+def write_ontology_manifest(output_path: str | Path) -> dict:
+    """Write the ontology manifest as JSON for browser runtimes to fetch."""
+    manifest = build_ontology_manifest()
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return manifest

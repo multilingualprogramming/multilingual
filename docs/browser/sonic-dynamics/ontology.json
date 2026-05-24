@@ -1,0 +1,174 @@
+{
+  "kind": "opcode-ontology-v0",
+  "version": 0,
+  "opcodes": [
+    {
+      "code": 1,
+      "name": "emit",
+      "description": "Produce signal over time.",
+      "sonic": {
+        "role": "source",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "source",
+        "color": "#de3c4b"
+      }
+    },
+    {
+      "code": 2,
+      "name": "diffuse",
+      "description": "Equalize signal with local neighbors.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "ring",
+        "color": "#3a86ff"
+      }
+    },
+    {
+      "code": 3,
+      "name": "attract",
+      "description": "Pull nearby entities through proximity.",
+      "sonic": {
+        "role": "modulator",
+        "waveform": "triangle",
+        "envelope": "swelling"
+      },
+      "spatial": {
+        "shape": "up",
+        "color": "#2d6a4f"
+      }
+    },
+    {
+      "code": 4,
+      "name": "repel",
+      "description": "Push nearby entities away.",
+      "sonic": {
+        "role": "modulator",
+        "waveform": "triangle",
+        "envelope": "swelling"
+      },
+      "spatial": {
+        "shape": "down",
+        "color": "#f77f00"
+      }
+    },
+    {
+      "code": 5,
+      "name": "stabilize",
+      "description": "Dampen transient activation.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "square",
+        "color": "#6c757d"
+      }
+    },
+    {
+      "code": 6,
+      "name": "oscillate",
+      "description": "Produce periodic signal.",
+      "sonic": {
+        "role": "modulator",
+        "waveform": "sine",
+        "envelope": "tremolo"
+      },
+      "spatial": {
+        "shape": "phase",
+        "color": "#8338ec"
+      }
+    },
+    {
+      "code": 7,
+      "name": "transform",
+      "description": "Convert nearby signal into local signal.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "triangle",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "diamond",
+        "color": "#00a896"
+      }
+    },
+    {
+      "code": 8,
+      "name": "resonate",
+      "description": "Amplify through phase alignment.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "double",
+        "color": "#ffbe0b"
+      }
+    },
+    {
+      "code": 9,
+      "name": "split",
+      "description": "Divide activation into propagating entities.",
+      "sonic": {
+        "role": "trigger",
+        "waveform": "square",
+        "envelope": "percussive"
+      },
+      "spatial": {
+        "shape": "split",
+        "color": "#fb5607"
+      }
+    },
+    {
+      "code": 10,
+      "name": "merge",
+      "description": "Combine nearby activations.",
+      "sonic": {
+        "role": "trigger",
+        "waveform": "square",
+        "envelope": "percussive"
+      },
+      "spatial": {
+        "shape": "merge",
+        "color": "#7209b7"
+      }
+    },
+    {
+      "code": 11,
+      "name": "contain",
+      "description": "Create a local membrane or boundary.",
+      "sonic": {
+        "role": "bus",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "membrane",
+        "color": "#252422"
+      }
+    },
+    {
+      "code": 12,
+      "name": "propagate",
+      "description": "Move activation through space.",
+      "sonic": {
+        "role": "source",
+        "waveform": "sawtooth",
+        "envelope": "percussive"
+      },
+      "spatial": {
+        "shape": "arrow",
+        "color": "#0077b6"
+      }
+    }
+  ]
+}

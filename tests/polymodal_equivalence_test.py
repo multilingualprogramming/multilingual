@@ -20,10 +20,15 @@ from argparse import Namespace
 from pathlib import Path
 
 from multilingualprogramming.__main__ import (
+    cmd_ontology_export,
     cmd_polymodal_build,
     cmd_sonic_build,
 )
 from multilingualprogramming.codegen import opcode_ontology, sonic_capture
+from multilingualprogramming.codegen.opcode_ontology import (
+    ONTOLOGY_KIND,
+    build_ontology_manifest,
+)
 from multilingualprogramming.codegen.semantic_core import (
     CORE_KIND,
     build_semantic_core,
@@ -40,7 +45,10 @@ from multilingualprogramming.codegen.spatial_manifest import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM = ROOT / "docs" / "browser" / "spatial-dynamics" / "program.multi"
-SONIC_MANIFEST = ROOT / "docs" / "browser" / "sonic-dynamics" / "program.sonic.json"
+SONIC_DIR = ROOT / "docs" / "browser" / "sonic-dynamics"
+SONIC_MANIFEST = SONIC_DIR / "program.sonic.json"
+SONIC_ONTOLOGY = SONIC_DIR / "ontology.json"
+SONIC_CAPTURE_JS = SONIC_DIR / "sonic_capture.js"
 
 
 def _source():
@@ -282,6 +290,85 @@ class PolymodalCLITestSuite(unittest.TestCase):
         )
         actual = json.loads(SONIC_MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(actual, expected)
+
+
+class OntologyManifestTestSuite(unittest.TestCase):
+    """The checked-in ontology JSON sidecar must match the Python ontology.
+
+    Browser runtimes fetch ``ontology.json`` and rely on it as the
+    single source of truth shared with the Python projections. If this
+    parity drifts, the JS inverse and the Python inverse start
+    classifying observations differently -- which is a regression of
+    the polymodal architectural claim.
+    """
+
+    def test_build_ontology_manifest_shape(self):
+        manifest = build_ontology_manifest()
+        self.assertEqual(manifest["kind"], ONTOLOGY_KIND)
+        self.assertEqual(manifest["version"], 0)
+        self.assertEqual(
+            {op["code"] for op in manifest["opcodes"]},
+            opcode_ontology.known_codes(),
+        )
+
+    def test_checked_in_sonic_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(SONIC_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_ontology_export_cli_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "ontology.json"
+            cmd_ontology_export(Namespace(out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], ONTOLOGY_KIND)
+            self.assertEqual(len(data["opcodes"]), len(opcode_ontology.OPCODES))
+
+
+class SonicCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the JS inverse projection.
+
+    A real browser-side execution test would need a headless runtime;
+    these lint-style checks instead ensure the JS exports the same
+    surface as the Python inverse and fetches the shared ontology
+    sidecar rather than redefining it inline.
+    """
+
+    def _source(self):
+        return SONIC_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_js_exports_inverse_surface(self):
+        source = self._source()
+        for symbol in (
+            "export function loadOntology",
+            "export function invertibleOpcodes",
+            "export function observeVoice",
+            "export function captureSemanticCore",
+        ):
+            self.assertIn(symbol, source, f"sonic_capture.js missing {symbol!r}")
+
+    def test_capture_js_fetches_ontology_sidecar(self):
+        source = self._source()
+        self.assertIn('"./ontology.json"', source)
+        self.assertIn(ONTOLOGY_KIND, source)
+
+    def test_capture_js_produces_semantic_core_kind(self):
+        # The recovered manifest must carry the same kind constant the
+        # Python inverse uses, so downstream consumers can treat them
+        # interchangeably.
+        self.assertIn(CORE_KIND, self._source())
+
+    def test_capture_js_does_not_hardcode_opcode_table(self):
+        # Hardcoded opcode names in JS would let it silently drift from
+        # the Python ontology. The JS must derive everything from the
+        # fetched sidecar.
+        source = self._source()
+        for name in ("emit", "oscillate", "transform", "propagate", "contain"):
+            self.assertNotIn(
+                f'"{name}"', source,
+                f"sonic_capture.js hardcodes opcode name {name!r}; "
+                f"it must read from the ontology sidecar instead.",
+            )
 
 
 class SonicRuntimeAssetsTestSuite(unittest.TestCase):

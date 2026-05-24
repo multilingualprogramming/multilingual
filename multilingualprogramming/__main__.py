@@ -49,6 +49,7 @@ from multilingualprogramming.source_extensions import (
     find_package_init,
     has_source_extension,
 )
+from multilingualprogramming.codegen.opcode_ontology import write_ontology_manifest
 from multilingualprogramming.codegen.semantic_core import build_semantic_core_file
 from multilingualprogramming.codegen.sonic_projection import build_sonic_manifest_file
 from multilingualprogramming.codegen.spatial_manifest import build_spatial_manifest_file
@@ -401,6 +402,13 @@ def cmd_sonic_build(args):
     )
     print(f"[PASS] {args.out}")
     print(f"[sonic] {manifest['kind']} voices={len(manifest['voices'])}")
+
+
+def cmd_ontology_export(args):
+    """Write the shared opcode ontology as JSON for browser runtimes."""
+    manifest = write_ontology_manifest(args.out)
+    print(f"[PASS] {args.out}")
+    print(f"[ontology] {manifest['kind']} opcodes={len(manifest['opcodes'])}")
 
 
 def cmd_ir(args):
@@ -817,6 +825,15 @@ def main():  # pylint: disable=too-many-statements,too-many-locals
         help="Output JSON manifest path (default: program.sonic.json)",
     )
 
+    ontology_export_parser = subparsers.add_parser(
+        "ontology-export",
+        help="Write the shared opcode ontology JSON (for browser runtimes)",
+    )
+    ontology_export_parser.add_argument(
+        "--out", default="ontology.json",
+        help="Output JSON path (default: ontology.json)",
+    )
+
     # ir subcommand
     ir_parser = subparsers.add_parser(
         "ir", help="Show the semantic IR for a source file"
@@ -889,6 +906,8 @@ def main():  # pylint: disable=too-many-statements,too-many-locals
         cmd_polymodal_build(args)
     elif args.command == "sonic-build":
         cmd_sonic_build(args)
+    elif args.command == "ontology-export":
+        cmd_ontology_export(args)
     elif args.command == "ir":
         cmd_ir(args)
     elif args.command == "explain":
