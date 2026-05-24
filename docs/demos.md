@@ -40,17 +40,69 @@ multilingual spatial-build docs/browser/spatial-dynamics/program.multi \
 ### Sonic dynamics (polymodal projection)
 
 The same `program.multi` rendered as a WebAudio composition rather than
-a 2D scene. Demonstrates the polymodal architecture: one program, two
-peer realizations sharing a modality-free semantic core.
+a 2D scene. The browser runtime also exposes a microphone-capture path
+that runs the inverse sonic projection in real time
+(audio → `ObservedVoice` records → `semantic-core-v0`).
 
 **[Open the Sonic Dynamics prototype](browser/sonic-dynamics/)**
 
 ```bash
 multilingual sonic-build docs/browser/spatial-dynamics/program.multi \
   --out docs/browser/sonic-dynamics/program.sonic.json
+```
 
+### Linear dynamics (1D polymodal projection)
+
+The same `program.multi` rendered as a one-dimensional timeline strip.
+Each entity becomes a positioned mark along a single axis; channel
+drives the vertical lane.
+
+**[Open the Linear Dynamics prototype](browser/linear-dynamics/)**
+
+```bash
+multilingual linear-build docs/browser/spatial-dynamics/program.multi \
+  --out docs/browser/linear-dynamics/program.linear.json
+```
+
+### Volumetric dynamics (3D polymodal projection)
+
+The same `program.multi` rendered as a rotating three-dimensional
+scene using canvas 2D with a hand-rolled rotation and perspective —
+no WebGL or 3D library required.
+
+**[Open the Volumetric Dynamics prototype](browser/volumetric-dynamics/)**
+
+```bash
+multilingual volumetric-build docs/browser/spatial-dynamics/program.multi \
+  --out docs/browser/volumetric-dynamics/program.volumetric.json
+```
+
+### MIDI dynamics (discrete-event polymodal projection)
+
+The same `program.multi` rendered as a flat list of MIDI events
+visualized as a piano roll. An optional "Web MIDI Out" button forwards
+the events to a connected synthesizer. Exists to falsify the claim
+that the ontology only maps cleanly to continuous-shape modalities.
+
+**[Open the MIDI Dynamics prototype](browser/midi-dynamics/)**
+
+```bash
+multilingual midi-build docs/browser/spatial-dynamics/program.multi \
+  --out docs/browser/midi-dynamics/program.midi.json
+```
+
+### Semantic core and shared ontology
+
+Every projection above is derived from the same modality-free semantic
+core. The ontology sidecar is exported separately so browser runtimes
+fetch the same opcode table the Python projections use.
+
+```bash
 multilingual polymodal-build docs/browser/spatial-dynamics/program.multi \
   --out /tmp/program.semantic.json
+
+multilingual ontology-export \
+  --out docs/browser/spatial-dynamics/ontology.json
 ```
 
 See [Polymodal Computation](research/polymodal_computation.md) for the
