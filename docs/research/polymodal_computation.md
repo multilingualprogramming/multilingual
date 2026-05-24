@@ -33,6 +33,130 @@ piano roll are all realizations of the same semantic core.
 | Modality capture | How can authoring happen in this modality? | Inverse of projection — sonic captures landed first (Python + browser microphone), other modalities follow |
 
 The semantic core is the canonical program. Every modality is a peer.
+Text is one of those authoring surfaces for polymodal programs, but it
+is not the only one and it is not required to be the interchange format
+between modalities.
+
+## Compatibility principle
+
+Polymodal computation must not break the existing textual Multilingual
+language. The safe boundary is:
+
+```text
+text .multi
+spatial edits
+sonic capture
+MIDI capture
+3D edits
+haptic / kinetic input
+        |
+        v
+semantic-core-vN
+        |
+        v
+text projection / WAT / Python / modality projections
+```
+
+The textual language keeps its parser, AST, language packs, Python
+backend, WAT/WASM backend, and compatibility tests. Polymodal
+computation is an additional semantic profile layered beside the
+current language, not a replacement for source syntax.
+
+This distinction is load-bearing:
+
+- **Compatibility belongs to the textual language.** Existing `.multi`
+  and `.ml` programs should continue to parse, transpile, execute, and
+  compile as before.
+- **Equivalence belongs to the semantic core.** A polymodal program is
+  equivalent across surfaces only to the extent that each surface
+  preserves the declared semantic facts of `semantic-core-vN`.
+- **Text regeneration is optional.** A spatial or sonic capture should
+  reconstruct the semantic core directly; generated text may be useful
+  for inspection, teaching, or archival purposes, but it should not be
+  the authority through which every modality must pass.
+
+Not every Multilingual program needs to be polymodal. The project can
+support a broad language and a stricter polymodal profile:
+
+```text
+Multilingual language
+  includes ordinary textual programs
+  includes Python/WAT-compatible programs
+  includes polymodal seed programs
+```
+
+Only programs in the polymodal profile are required to satisfy
+cross-modal equivalence. This protects existing source compatibility
+while letting the research track evolve quickly.
+
+## Semantic versioning of program identity
+
+The semantic core must be versioned aggressively. A `semantic-core-v0`
+manifest should always mean what it meant when it was emitted. If a
+future `semantic-core-v1` adds explicit coupling, temporal ordering,
+stable entity IDs, richer relation kinds, or perceptual capability
+metadata, old manifests should be handled by explicit migration:
+
+```text
+semantic-core-v0 -> semantic-core-v1
+```
+
+The migration may enrich or annotate old programs, but it must not
+silently reinterpret old fields. This gives the project two kinds of
+stability at once: textual source compatibility for existing
+Multilingual programs, and manifest compatibility for polymodal
+programs.
+
+As editing becomes bidirectional, entity identity should move from
+index-only ordering toward stable IDs:
+
+```json
+{
+  "id": "ent_7f3a",
+  "index": 0,
+  "opcode": 6,
+  "intensity": 0.8,
+  "signal": 0.4,
+  "phase": 0.25,
+  "channel": 2
+}
+```
+
+Indexes remain useful for deterministic ordering and compact manifests.
+Stable IDs preserve identity when a user drags, deletes, records,
+inserts, groups, or reorders entities in a non-textual surface.
+
+## Perceptual capability contracts
+
+Every modality should declare what it preserves, what it loses, and
+what it cannot disambiguate. Equivalence should be checked against that
+contract rather than assumed.
+
+```json
+{
+  "projection": "sonic-seed-v0",
+  "preserves": ["opcode", "intensity", "phase", "channel"],
+  "lossy": ["signal"],
+  "ambiguous": ["diffuse/stabilize/resonate", "attract/repel"]
+}
+```
+
+This makes room for several equivalence levels:
+
+| Level | Meaning |
+|---|---|
+| Exact-equivalent | The modality can recover the declared semantic facts exactly. |
+| Behavior-equivalent | The modality preserves behavior even if presentation details differ. |
+| Lossy-equivalent | The modality preserves a documented subset and marks the rest as lost. |
+| Ambiguous-by-design | The modality cannot distinguish some semantic identities and says so. |
+| View-only | The modality renders the program but does not claim inverse recovery. |
+| Non-invertible | The modality is useful as output, but not as an authoring surface. |
+
+The sonic round-trip already follows this discipline: opcodes whose
+`(role, waveform, envelope)` tuple is unique are invertible, while
+shared signatures are excluded from the invertible subset instead of
+pretending to be lossless. Future MIDI, spatial, volumetric, haptic,
+and kinetic capture paths should make the same kind of declaration.
 
 ## The opcode ontology
 
@@ -175,6 +299,24 @@ gains explicit syntactic surface for them: inferring those from raw
 structure risks codifying arbitrary heuristics that become hard to
 change.
 
+Future relation kinds should become first-class semantic facts rather
+than projection heuristics:
+
+- **Coupling.** Entity A modulates or depends on entity B.
+- **Inhibition.** Entity A suppresses entity B when a threshold is met.
+- **Temporal ordering.** Entity A precedes, triggers, or schedules
+  entity B.
+- **Synchronization.** Entities share phase, clock, pulse, or cadence.
+- **Routing.** Signals move through explicit paths or channels.
+- **Causality.** A relation records that one event or state transition
+  produces another.
+
+These relations should enter the semantic core through explicit
+authoring surfaces or language syntax, not through hidden inference.
+Once present in `semantic-core-vN`, every peer modality can decide how
+to expose them: as spatial force, sonic modulation, MIDI routing,
+volumetric structure, haptic resistance, or textual declarations.
+
 ## Sonic round-trip (current bidirectional path)
 
 Sonic was the first modality to land a bidirectional path:
@@ -208,6 +350,93 @@ sonic signature (split/merge, attract/repel, diffuse/stabilize/resonate)
 are explicitly excluded from the invertible set — ambiguous-by-design
 rather than silently lossy.
 
+## Long-term authoring model
+
+The long-term environment should be a live polymodal workspace rather
+than a source editor with previews. A user should be able to edit the
+same program through several peer surfaces:
+
+- draw or move entities in 2D space,
+- hear and modify the sonic projection,
+- record or edit MIDI events,
+- manipulate a volumetric scene,
+- use touch, gesture, or haptic input,
+- inspect the semantic core as a diagnostic view,
+- optionally project the core back into textual Multilingual.
+
+The shared state should be the semantic core:
+
+```text
+semantic-core-vN
+  <-> spatial runtime
+  <-> sonic runtime
+  <-> MIDI runtime
+  <-> volumetric runtime
+  <-> haptic / kinetic runtimes
+  <-> textual projection
+```
+
+This is different from a conventional IDE. The text surface is a peer
+interface for programs that choose to expose one, not the sovereign
+representation that every other modality must imitate.
+
+## Research milestones
+
+The next milestones should preserve compatibility while making the
+polymodal claim stronger:
+
+1. **MIDI round-trip.** Add Web MIDI In and a Python/JS inverse that
+   reconstructs the same `semantic-core-v0` fields from
+   `MidiEvent`-shaped observations.
+2. **Stable identity.** Add optional entity IDs to the semantic core and
+   preserve them through every projection.
+3. **Projection capability metadata.** Require each projection to
+   declare preserved, lossy, ambiguous, view-only, and non-invertible
+   fields.
+4. **Golden manifests.** Store versioned fixture manifests for the
+   semantic core and every projection, then require old fixtures to load
+   identically or migrate explicitly.
+5. **Spatial authoring.** Let the 2D runtime edit a manifest and recover
+   semantic-core identity without routing changes through generated
+   text.
+6. **Live synchronized runtime.** Keep spatial, sonic, MIDI, and
+   semantic-core views synchronized as one program state changes.
+7. **Explicit relation syntax.** Add coupling and temporal-ordering
+   relations only when the source language or authoring surfaces can
+   express them deliberately.
+8. **Pattern recognition.** Recognize stable dynamic structures such as
+   gates, memory loops, oscillator networks, membranes, routers,
+   attractor basins, and feedback circuits as higher-level semantic
+   patterns.
+
+The strongest near-term proof is:
+
+> Two independent authoring modalities can modify the same semantic
+> core, and equivalence tests prove that the declared semantic identity
+> survives.
+
+## Potential applications
+
+Polymodal computation has applications wherever computation needs to be
+understood, authored, or controlled through more than one human sensory
+or cognitive channel.
+
+| Area | Why polymodal computation matters |
+|---|---|
+| Accessibility | Blind, deaf, motor-impaired, and neurodiverse programmers can use peer authoring surfaces instead of accessibility layers added after the fact. |
+| Education | Learners can encounter computation as rhythm, movement, containment, propagation, resonance, and transformation before syntax. |
+| Creative coding | One semantic program can become animation, sound, MIDI, spatial sculpture, or live performance state. |
+| Scientific simulation | Diffusion, attraction, repulsion, stabilization, oscillation, propagation, and containment map naturally onto dynamic systems. |
+| Robotics | Spatial, kinetic, and haptic modalities can express target seeking, obstacle avoidance, damping, gait, routing, and boundary constraints. |
+| Music as computation | MIDI and sonic capture let executable structure be played, heard, recovered, and transformed. |
+| Collaborative tools | Different collaborators can use different modalities while sharing one semantic program. |
+| AI agent debugging | Goals, constraints, uncertainty, conflicts, tool calls, and plan propagation can become perceptible structures. |
+| Digital twins | Industrial, building, transport, and distributed systems can be inspected as synchronized spatial, sonic, and semantic state. |
+
+The project should avoid framing these as visualizations of ordinary
+programs. The more interesting claim is that computation can have
+multiple native perceptual forms while keeping one semantic identity.
+
 ## Open work
 
 - **Bidirectional MIDI capture.** Web MIDI In can produce the same
@@ -221,6 +450,11 @@ rather than silently lossy.
 - **Glyph-only authoring.** `.multi` still uses English-spelled
   primitive names. Once the polymodal split is real, replacing them
   with stable glyphs / numeric opcodes is incremental.
+- **Compatibility profiles.** The textual language and the polymodal
+  profile should remain distinct so ordinary `.multi` programs do not
+  inherit cross-modal obligations.
+- **Perceptual contracts.** Projection metadata should make lossy,
+  ambiguous, and non-invertible surfaces explicit.
 
 ## Design test
 
@@ -231,6 +465,11 @@ following hold:
 - A new primitive is added in one modality without an ontology entry.
 - A projection adds entities that have no counterpart in the semantic core.
 - Cross-modal equivalence tests are weakened or skipped to ship a feature.
+- A polymodal feature changes the behavior of ordinary textual programs
+  outside the polymodal profile.
+- A capture path routes through generated text as the only way to
+  recover semantic identity.
+- A lossy or ambiguous projection claims exact equivalence.
 - A modality's hint vocabulary silently reuses names from another
   dimensionality (e.g., 1D glyphs reaching for 2D shape names),
   collapsing the distinction the peer projections are meant to preserve.
