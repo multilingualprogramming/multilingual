@@ -49,6 +49,8 @@ from multilingualprogramming.source_extensions import (
     find_package_init,
     has_source_extension,
 )
+from multilingualprogramming.codegen.semantic_core import build_semantic_core_file
+from multilingualprogramming.codegen.sonic_projection import build_sonic_manifest_file
 from multilingualprogramming.codegen.spatial_manifest import build_spatial_manifest_file
 from multilingualprogramming.version import __version__
 
@@ -377,6 +379,28 @@ def cmd_spatial_build(args):
     )
     print(f"[PASS] {args.out}")
     print(f"[spatial] {manifest['kind']} entities={len(manifest['entities'])}")
+
+
+def cmd_polymodal_build(args):
+    """Build a modality-free semantic core manifest from Multilingual source."""
+    core = build_semantic_core_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[polymodal] {core['kind']} entities={len(core['entities'])}")
+
+
+def cmd_sonic_build(args):
+    """Build a sonic JSON manifest from a Multilingual source file."""
+    manifest = build_sonic_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[sonic] {manifest['kind']} voices={len(manifest['voices'])}")
 
 
 def cmd_ir(args):
@@ -765,6 +789,34 @@ def main():  # pylint: disable=too-many-statements
         help="Output JSON manifest path (default: program.spatial.json)",
     )
 
+    polymodal_build_parser = subparsers.add_parser(
+        "polymodal-build",
+        help="Build a modality-free semantic core manifest",
+    )
+    polymodal_build_parser.add_argument("file", help="Path to the source file")
+    polymodal_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    polymodal_build_parser.add_argument(
+        "--out", default="program.semantic.json",
+        help="Output JSON manifest path (default: program.semantic.json)",
+    )
+
+    sonic_build_parser = subparsers.add_parser(
+        "sonic-build",
+        help="Build a sonic projection JSON manifest",
+    )
+    sonic_build_parser.add_argument("file", help="Path to the source file")
+    sonic_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    sonic_build_parser.add_argument(
+        "--out", default="program.sonic.json",
+        help="Output JSON manifest path (default: program.sonic.json)",
+    )
+
     # ir subcommand
     ir_parser = subparsers.add_parser(
         "ir", help="Show the semantic IR for a source file"
@@ -833,6 +885,10 @@ def main():  # pylint: disable=too-many-statements
         cmd_build_ui_bundle(args)
     elif args.command == "spatial-build":
         cmd_spatial_build(args)
+    elif args.command == "polymodal-build":
+        cmd_polymodal_build(args)
+    elif args.command == "sonic-build":
+        cmd_sonic_build(args)
     elif args.command == "ir":
         cmd_ir(args)
     elif args.command == "explain":

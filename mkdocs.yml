@@ -86,6 +86,7 @@ nav:
     - Design Overview: design.md
     - Vision: vision.md
     - Fixed-Semantic Spatial Computation: research/fixed_semantic_spatial_computation.md
+    - Polymodal Computation: research/polymodal_computation.md
     - Core Spec: core_spec.md
     - Core 1.0 Spec: spec/core_1_0.md
     - Frontend Contracts: frontend_contracts.md

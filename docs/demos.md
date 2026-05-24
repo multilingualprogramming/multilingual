@@ -37,6 +37,25 @@ multilingual spatial-build docs/browser/spatial-dynamics/program.multi \
   --out docs/browser/spatial-dynamics/program.spatial.json
 ```
 
+### Sonic dynamics (polymodal projection)
+
+The same `program.multi` rendered as a WebAudio composition rather than
+a 2D scene. Demonstrates the polymodal architecture: one program, two
+peer realizations sharing a modality-free semantic core.
+
+**[Open the Sonic Dynamics prototype](browser/sonic-dynamics/)**
+
+```bash
+multilingual sonic-build docs/browser/spatial-dynamics/program.multi \
+  --out docs/browser/sonic-dynamics/program.sonic.json
+
+multilingual polymodal-build docs/browser/spatial-dynamics/program.multi \
+  --out /tmp/program.semantic.json
+```
+
+See [Polymodal Computation](research/polymodal_computation.md) for the
+layered design and cross-modal equivalence guarantees.
+
 ### Reactive counter
 
 A compact reactive web app using state changes and canvas updates.

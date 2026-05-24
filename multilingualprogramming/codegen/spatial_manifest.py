@@ -4,22 +4,29 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-"""Build JSON manifests from Multilingual spatial seed programs."""
+"""Build spatial JSON manifests for the 2D projection of a polymodal program.
+
+This is one of several modality projections. The semantic identity of the
+program lives in :mod:`multilingualprogramming.codegen.semantic_core`; this
+module specializes it for the 2D spatial runtime by extracting position,
+radius, and velocity hints from the authoring seed.
+"""
 
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 from pathlib import Path
 from typing import Any
 
-from multilingualprogramming.codegen.executor import ProgramExecutor
-from multilingualprogramming.codegen.runtime_builtins import make_exec_globals
+from multilingualprogramming.codegen import opcode_ontology
+from multilingualprogramming.codegen.semantic_core import (
+    SEED_ROW_ARITY,
+    execute_seed,
+)
 
 MANIFEST_KIND = "spatial-seed-v0"
-ENTITY_ARITY = 10
-KNOWN_BEHAVIORS = set(range(1, 13))
+ENTITY_ARITY = SEED_ROW_ARITY
+KNOWN_BEHAVIORS = opcode_ontology.known_codes()
 
 
 def build_spatial_manifest(
@@ -28,22 +35,8 @@ def build_spatial_manifest(
     source_path: str = "",
 ) -> dict[str, Any]:
     """Execute Multilingual source and return a validated spatial manifest."""
-    python_source = ProgramExecutor(
-        language=language,
-        check_semantics=False,
-    ).transpile(source)
-    namespace = make_exec_globals(language)
-
-    with contextlib.redirect_stdout(io.StringIO()):
-        # Spatial seeds are trusted Multilingual programs compiled by this package.
-        exec(  # pylint: disable=exec-used
-            compile(python_source, source_path or "<spatial>", "exec"), namespace
-        )
-
-    if "seed" not in namespace:
-        raise ValueError("Spatial program must define `seed`")
-
-    entities = normalize_entities(namespace["seed"])
+    seed = execute_seed(source, language=language, source_path=source_path)
+    entities = normalize_entities(seed)
     return {
         "kind": MANIFEST_KIND,
         "version": 0,
