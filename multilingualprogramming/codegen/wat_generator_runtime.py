@@ -1171,11 +1171,6 @@ class WATGeneratorRuntimeMixin:
         mixed tuple/non-tuple returns disable the optimization (function falls
         back to single-value semantics).
         """
-        from multilingualprogramming.parser.ast_nodes import (  # pylint: disable=import-outside-toplevel
-            TupleLiteral as _TupleLiteral,
-            IfStatement as _IfStatement,
-        )
-
         seen_arities: set[int] = set()
         has_non_tuple_return: list[bool] = [False]
 
@@ -1184,7 +1179,7 @@ class WATGeneratorRuntimeMixin:
                 if stmt.value is None:
                     has_non_tuple_return[0] = True
                     return
-                if isinstance(stmt.value, _TupleLiteral):
+                if isinstance(stmt.value, TupleLiteral):
                     # tuple de 1 élément ≡ scalaire (cas rare ; on l'ignore).
                     if len(stmt.value.elements) >= 2:
                         # Refuse les éléments string — multi-valeur ne porte que
@@ -1196,7 +1191,7 @@ class WATGeneratorRuntimeMixin:
                         return
                 has_non_tuple_return[0] = True
                 return
-            if isinstance(stmt, _IfStatement):
+            if isinstance(stmt, IfStatement):
                 for inner in stmt.body + (stmt.else_body or []):
                     _collect(inner)
                 return

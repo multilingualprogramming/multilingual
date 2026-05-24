@@ -8,6 +8,7 @@
 # pylint: disable=duplicate-code
 
 import importlib.util
+import math as _m
 import os
 import tempfile
 import unittest
@@ -538,7 +539,6 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # Regression : la version 6-termes sans réduction (x-1)/(x+1) plafonnait
         # à ~5% d'erreur pour atan(1) (= π/4). La double réduction (1/x ET
         # (x-1)/(x+1)) + 12 termes Taylor doit donner ≥10 décimales correctes.
-        import math as _m
         prog = _parse_source(
             "déf a0():\n    retour math.atan(0.0)\n"
             "déf a_un():\n    retour math.atan(1.0)\n"             # π/4
@@ -562,7 +562,9 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertAlmostEqual(self._call_export(prog, "a_demi"), _m.atan(0.5), places=10)
         self.assertAlmostEqual(self._call_export(prog, "a_neg_demi"), -_m.atan(0.5), places=10)
         self.assertAlmostEqual(self._call_export(prog, "a_tan_pi8"), _m.pi / 8, places=10)
-        self.assertAlmostEqual(self._call_export(prog, "a_juste_au_dessus"), _m.atan(0.42), places=10)
+        self.assertAlmostEqual(
+            self._call_export(prog, "a_juste_au_dessus"), _m.atan(0.42), places=10
+        )
         self.assertAlmostEqual(self._call_export(prog, "a_petit"), _m.atan(0.1), places=12)
         self.assertAlmostEqual(self._call_export(prog, "a_grand"), _m.atan(10.0), places=10)
         self.assertAlmostEqual(self._call_export(prog, "a_tres_grand"), _m.atan(1000.0), places=10)
@@ -632,11 +634,11 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # mulberry32 / d'un hash FNV portés à `.multi`. Vérifie la sémantique
         # de wraparound i32 et la conversion signée→non-signée.
         prog = _parse_source(
-            "déf mul_wrap():\n    retour imul32(2147483647.0, 2.0)\n"     # → -2 (i32 wrap)
-            "déf mul_fnv_prime():\n    retour imul32(123.0, 16777619.0)\n"  # 123 * FNV prime = 2063547137
-            "déf add_wrap():\n    retour iadd32(2000000000.0, 2000000000.0)\n"  # → -294967296
-            "déf shr_u_signed():\n    retour shr_u32(-1.0, 1.0)\n"          # 0xFFFFFFFF >>> 1 = 0x7FFFFFFF = 2147483647
-            "déf u32_neg():\n    retour u32_to_f64(-1.0)\n"                # -1 i32 → 4294967295 as f64
+            "déf mul_wrap():\n    retour imul32(2147483647.0, 2.0)\n"
+            "déf mul_fnv_prime():\n    retour imul32(123.0, 16777619.0)\n"
+            "déf add_wrap():\n    retour iadd32(2000000000.0, 2000000000.0)\n"
+            "déf shr_u_signed():\n    retour shr_u32(-1.0, 1.0)\n"
+            "déf u32_neg():\n    retour u32_to_f64(-1.0)\n"
             "déf u32_pos():\n    retour u32_to_f64(1234567.0)\n",          # identity
             language="fr",
         )
@@ -830,7 +832,10 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
             "    soit den_re = x + 1.0\n"
             "    soit den_im = y\n"
             "    soit d2 = den_re * den_re + den_im * den_im\n"
-            "    retour (((x - 1.0) * den_re + y * den_im) / d2, (y * den_re - (x - 1.0) * den_im) / d2)\n"
+            "    retour ("
+            "((x - 1.0) * den_re + y * den_im) / d2, "
+            "(y * den_re - (x - 1.0) * den_im) / d2"
+            ")\n"
             "déf cayley_x(x, y):\n    soit cx, cy = cayley(x, y)\n    retour cx\n"
             "déf cayley_y(x, y):\n    soit cx, cy = cayley(x, y)\n    retour cy\n",
             language="fr",
@@ -840,7 +845,9 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertEqual(self._call_export(prog, "utilise_y", 3.0, 5.0), 10.0)
         self.assertEqual(self._call_export(prog, "utilise_somme", 3.0, 5.0), 14.0)
         # Cayley: z=2+0i → (1)/(3) = 0.333... ; (0)/(3) = 0
-        self.assertAlmostEqual(self._call_export(prog, "cayley_x", 2.0, 0.0), 1.0 / 3.0, places=12)
+        self.assertAlmostEqual(
+            self._call_export(prog, "cayley_x", 2.0, 0.0), 1.0 / 3.0, places=12
+        )
         self.assertAlmostEqual(self._call_export(prog, "cayley_y", 2.0, 0.0), 0.0, places=12)
 
     def test_ml_list_count_and_item_helpers(self):
@@ -848,10 +855,16 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # layout des listes heap-backed sans que le caller hôte doive
         # calculer les offsets bruts. Vérifie sur une liste créée via [0]*n.
         prog = _parse_source(
-            "déf make_liste():\n    soit l = [0.0]*5\n    l[0] = 11.0\n    l[1] = 22.0\n    l[2] = 33.0\n    l[3] = 44.0\n    l[4] = 55.0\n    retour l\n",
+            "déf make_liste():\n"
+            "    soit l = [0.0]*5\n"
+            "    l[0] = 11.0\n"
+            "    l[1] = 22.0\n"
+            "    l[2] = 33.0\n"
+            "    l[3] = 44.0\n"
+            "    l[4] = 55.0\n"
+            "    retour l\n",
             language="fr",
         )
-        from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
         wat = WATCodeGenerator().generate(prog)
         import wasmtime  # pylint: disable=import-outside-toplevel,import-error
         wasm = wasmtime.wat2wasm(wat)
@@ -877,7 +890,6 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
             "déf fmt(v, n):\n    retour format_fixed(v, n)\n",
             language="fr",
         )
-        from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
         wat = WATCodeGenerator().generate(prog)
         import wasmtime  # pylint: disable=import-outside-toplevel,import-error
         wasm = wasmtime.wat2wasm(wat)
@@ -920,7 +932,6 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # Lire le résultat string : déclare un export "go" qui invoque
         # concat_fstring(42) et utilise read_string sur le résultat. Plus
         # simple : on vérifie juste que la compilation passe sans erreur.
-        from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
         wat = WATCodeGenerator().generate(prog)
         self.assertIn("call $__str_concat", wat)
         self.assertIn("global.get $__last_str_len", wat)
@@ -951,13 +962,14 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # désormais retomber sur exp(b·ln(a)) pour base > 0. Précision
         # limitée par math.exp/math.log (~1e-6) donc tolérance places=4
         # sur les exposants non-entiers.
-        import math as _m
         prog = _parse_source(
             "déf p(base, exp):\n    retour base ** exp\n",
             language="fr",
         )
         # Cas non-entier positif : 2^0.5 = sqrt(2) — déjà spécial-casé, exact.
-        self.assertAlmostEqual(self._call_export(prog, "p", 2.0, 0.5), _m.sqrt(2), places=12)
+        self.assertAlmostEqual(
+            self._call_export(prog, "p", 2.0, 0.5), _m.sqrt(2), places=12
+        )
         # Cas non-entier général : 2^1.5 = 2*sqrt(2) ≈ 2.828
         self.assertAlmostEqual(self._call_export(prog, "p", 2.0, 1.5), 2.0 ** 1.5, places=4)
         # 10^2.3 ≈ 199.526
@@ -968,7 +980,7 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertAlmostEqual(self._call_export(prog, "p", 2.0, -1.5), 2.0 ** -1.5, places=4)
         # Base ≤ 0 avec exposant non-entier : NaN (pas de valeur réelle).
         result_neg_base = self._call_export(prog, "p", -2.0, 0.5)
-        self.assertTrue(result_neg_base != result_neg_base, "expected NaN")  # NaN != NaN
+        self.assertTrue(_m.isnan(result_neg_base), "expected NaN")
 
 
 @unittest.skipUnless(

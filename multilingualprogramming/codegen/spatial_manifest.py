@@ -35,7 +35,10 @@ def build_spatial_manifest(
     namespace = make_exec_globals(language)
 
     with contextlib.redirect_stdout(io.StringIO()):
-        exec(compile(python_source, source_path or "<spatial>", "exec"), namespace)
+        # Spatial seeds are trusted Multilingual programs compiled by this package.
+        exec(  # pylint: disable=exec-used
+            compile(python_source, source_path or "<spatial>", "exec"), namespace
+        )
 
     if "seed" not in namespace:
         raise ValueError("Spatial program must define `seed`")

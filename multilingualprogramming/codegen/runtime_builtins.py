@@ -342,7 +342,7 @@ def spatial_entity(
     vy=0.0,
     phase=0.0,
     channel=0,
-):
+):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     """Return an unlabeled spatial entity row for Multilingual source."""
     return [
         int(behavior),

@@ -510,7 +510,8 @@ class WATCodeGenerator(
                     == len(stmt.name.elements)
             ):
                 arity = len(stmt.name.elements)
-                self._emit(f"{indent};; let ({', '.join(_name(el) for el in stmt.name.elements)}) = ...")
+                names = ", ".join(_name(el) for el in stmt.name.elements)
+                self._emit(f"{indent};; let ({names}) = ...")
                 self._gen_expr(stmt.value, indent)
                 # Stack top = last element ; local.set in reverse order.
                 for element in reversed(stmt.name.elements):
@@ -1457,9 +1458,8 @@ class WATCodeGenerator(
                 # contrainte est imposée par WAT — `f64x2.extract_lane` prend
                 # un immediate de lane index). Permet de récupérer un résultat
                 # SIMD en valeur f64 ordinaire à la fin du calcul.
-                from multilingualprogramming.parser.ast_nodes import NumeralLiteral as _NL
                 lane_node = node.args[1]
-                if not isinstance(lane_node, _NL):
+                if not isinstance(lane_node, NumeralLiteral):
                     raise ValueError("v128_lane(v, i) : i doit être un littéral 0 ou 1")
                 try:
                     lane = int(str(lane_node.value))
