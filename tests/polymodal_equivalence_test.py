@@ -49,6 +49,9 @@ SONIC_DIR = ROOT / "docs" / "browser" / "sonic-dynamics"
 SONIC_MANIFEST = SONIC_DIR / "program.sonic.json"
 SONIC_ONTOLOGY = SONIC_DIR / "ontology.json"
 SONIC_CAPTURE_JS = SONIC_DIR / "sonic_capture.js"
+MIC_CAPTURE_JS = SONIC_DIR / "microphone_capture.js"
+SONIC_RUNTIME_JS = SONIC_DIR / "sonic_runtime.js"
+SONIC_HTML = SONIC_DIR / "index.html"
 
 
 def _source():
@@ -375,25 +378,89 @@ class SonicRuntimeAssetsTestSuite(unittest.TestCase):
     """The sonic browser runtime must consume the manifest and stay text-free."""
 
     def test_runtime_loads_manifest_kind(self):
-        runtime = (
-            ROOT / "docs" / "browser" / "sonic-dynamics" / "sonic_runtime.js"
-        ).read_text(encoding="utf-8")
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
         self.assertIn('fetch("./program.sonic.json"', runtime)
         self.assertIn(SONIC_KIND, runtime)
 
     def test_runtime_canvas_draws_no_text(self):
-        runtime = (
-            ROOT / "docs" / "browser" / "sonic-dynamics" / "sonic_runtime.js"
-        ).read_text(encoding="utf-8")
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
         self.assertNotIn("fillText", runtime)
         self.assertNotIn("strokeText", runtime)
 
     def test_html_has_meter_canvas_and_no_spatial_kind(self):
-        html = (
-            ROOT / "docs" / "browser" / "sonic-dynamics" / "index.html"
-        ).read_text(encoding="utf-8")
+        html = SONIC_HTML.read_text(encoding="utf-8")
         self.assertIn('<canvas id="meter"', html)
         self.assertNotIn(SPATIAL_KIND, html)
+
+
+class MicrophoneCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the browser-side microphone pipeline.
+
+    The microphone pipeline is the bridge that lets the inverse
+    projection consume real audio rather than synthetic manifests.
+    These checks ensure it exposes the contract the runtime depends on
+    and does not redefine anything the ontology already owns.
+    """
+
+    def _source(self):
+        return MIC_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_pipeline_exports(self):
+        source = self._source()
+        for symbol in (
+            "export class MicrophoneCapture",
+            "export async function requestMicrophoneStream",
+            "export function buildObservedVoice",
+            "export function snapToPentatonic",
+            "export function findFundamental",
+            "export function classifyWaveform",
+            "export function classifyEnvelope",
+        ):
+            self.assertIn(symbol, source, f"microphone_capture.js missing {symbol!r}")
+
+    def test_capture_pipeline_uses_pentatonic_shared_with_forward(self):
+        # The forward sonic projection only emits frequencies from
+        # PENTATONIC_HZ; the capture path must snap to the same set so
+        # the inverse can resolve a single ontology row deterministically.
+        source = self._source()
+        self.assertIn("220.000", source)
+        self.assertIn("440.000", source)
+        self.assertIn("783.991", source)
+
+    def test_capture_pipeline_produces_observed_voice_fields(self):
+        # The observation shape is the contract with sonic_capture.js.
+        source = self._source()
+        for field in (
+            "frequency_hz", "amplitude", "start_offset", "channel",
+            "role", "waveform", "envelope",
+        ):
+            self.assertIn(field, source, f"observed voice missing {field!r}")
+
+
+class SonicCaptureWiringTestSuite(unittest.TestCase):
+    """The sonic runtime + HTML must expose the capture entry point.
+
+    Lint-style guards that the capture button is wired to the inverse
+    projection and the recovered manifest panel exists in the DOM. A
+    real interaction test would need a headless browser.
+    """
+
+    def test_runtime_imports_capture_modules(self):
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./sonic_capture.js"', runtime)
+        self.assertIn('from "./microphone_capture.js"', runtime)
+        self.assertIn("captureSemanticCore", runtime)
+        self.assertIn("MicrophoneCapture", runtime)
+
+    def test_runtime_handles_capture_button_action(self):
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('dataset.action === "capture"', runtime)
+
+    def test_html_has_capture_button_and_recovered_panel(self):
+        html = SONIC_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="capture"', html)
+        self.assertIn('data-action="capture"', html)
+        self.assertIn('id="recovered"', html)
 
 
 if __name__ == "__main__":

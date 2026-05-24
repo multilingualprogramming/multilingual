@@ -1,7 +1,19 @@
+import {
+  loadOntology,
+  captureSemanticCore,
+} from "./sonic_capture.js";
+import {
+  MicrophoneCapture,
+  requestMicrophoneStream,
+  DEFAULT_BAR_SECONDS,
+} from "./microphone_capture.js";
+
 const MANIFEST_KIND = "sonic-seed-v0";
 
 const startButton = document.getElementById("start");
 const stopButton = document.getElementById("stop");
+const captureButton = document.getElementById("capture");
+const recoveredPanel = document.getElementById("recovered");
 const meter = document.getElementById("meter");
 const meterCtx = meter.getContext("2d");
 const palette = document.querySelector(".palette");
@@ -12,6 +24,7 @@ let masterGain = null;
 let voices = [];
 let manifest = null;
 let running = false;
+let capturing = false;
 let last = performance.now();
 
 async function loadSonicManifest() {
@@ -172,6 +185,58 @@ function draw() {
   requestAnimationFrame(draw);
 }
 
+async function capture() {
+  if (capturing) return;
+  capturing = true;
+  captureButton.setAttribute("aria-pressed", "true");
+  let ownCtx = false;
+  let micSource = null;
+  let micCapture = null;
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      ownCtx = true;
+    }
+    const [ontology, source] = await Promise.all([
+      loadOntology(),
+      requestMicrophoneStream(audioCtx),
+    ]);
+    micSource = source;
+    micCapture = new MicrophoneCapture(audioCtx, {
+      barSeconds: DEFAULT_BAR_SECONDS,
+    });
+    micCapture.attach(micSource);
+    const observed = await micCapture.run();
+    const core = captureSemanticCore(observed, ontology, {
+      sourceLanguage: "en",
+      sourcePath: "<microphone>",
+    });
+    renderRecovered(core);
+  } catch (err) {
+    renderRecovered({ error: String(err && err.message ? err.message : err) });
+  } finally {
+    if (micCapture) micCapture.stop();
+    if (micSource) {
+      const stream = micSource.mediaStream;
+      if (stream) {
+        for (const track of stream.getTracks()) track.stop();
+      }
+    }
+    if (ownCtx && audioCtx && !running) {
+      audioCtx.close();
+      audioCtx = null;
+    }
+    capturing = false;
+    captureButton.setAttribute("aria-pressed", "false");
+  }
+}
+
+function renderRecovered(payload) {
+  if (!recoveredPanel) return;
+  recoveredPanel.hidden = false;
+  recoveredPanel.textContent = JSON.stringify(payload, null, 2);
+}
+
 palette.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) {
@@ -181,6 +246,8 @@ palette.addEventListener("click", (event) => {
     start();
   } else if (button.dataset.action === "stop") {
     stop();
+  } else if (button.dataset.action === "capture") {
+    capture();
   }
 });
 

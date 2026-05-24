@@ -86,6 +86,39 @@
       content: "";
     }
 
+    .icon-capture::before {
+      width: 14px;
+      height: 18px;
+      border: 2px solid currentColor;
+      border-radius: 7px 7px 7px 7px / 9px 9px 9px 9px;
+      background: transparent;
+      content: "";
+    }
+
+    .recovered {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      max-width: min(420px, 40vw);
+      max-height: 50vh;
+      overflow: auto;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      color: var(--ink);
+    }
+
+    .recovered[hidden] {
+      display: none;
+    }
+
     noscript {
       position: fixed;
       inset: 0;
@@ -103,7 +136,10 @@
   <nav class="palette" aria-label="sonic playback">
     <button id="start" class="icon-play" type="button" data-action="start" aria-label="start" aria-pressed="false"></button>
     <button id="stop" class="icon-stop" type="button" data-action="stop" aria-label="stop" aria-pressed="true"></button>
+    <button id="capture" class="icon-capture" type="button" data-action="capture" aria-label="capture from microphone" aria-pressed="false"></button>
   </nav>
+
+  <pre id="recovered" class="recovered" aria-live="polite" hidden></pre>
 
   <noscript>This polymodal sonic prototype requires JavaScript and Web Audio.</noscript>
   <script type="module" src="./sonic_runtime.js"></script>
