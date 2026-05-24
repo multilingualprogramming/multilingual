@@ -161,7 +161,7 @@ and kinetic capture paths should make the same kind of declaration.
 ## The opcode ontology
 
 A single ontology
-([opcode_ontology.py](../../multilingualprogramming/codegen/opcode_ontology.py))
+([opcode_ontology.py](../_generated/multilingualprogramming/codegen/opcode_ontology.py))
 is the source of truth for every primitive. Each opcode entry carries a
 stable integer code, a canonical name, and per-modality realization
 hints:
@@ -183,7 +183,7 @@ include 2D shape names ("ring", "diamond", "membrane"), volumetric
 primitives do not reuse 1D or 2D names, and MIDI roles
 (`note`, `drum`, `cc`, `program`, `bus`) form their own taxonomy.
 Tests in
-[polymodal_equivalence_test.py](../../tests/polymodal_equivalence_test.py)
+[polymodal_equivalence_test.py](../_generated/tests/polymodal_equivalence_test.py)
 enforce these separations so dimensionality and modality cannot be
 silently conflated.
 
@@ -267,7 +267,7 @@ architectural claim.
 ## The cross-modal equivalence test
 
 The load-bearing test of this architecture lives in
-[polymodal_equivalence_test.py](../../tests/polymodal_equivalence_test.py).
+[polymodal_equivalence_test.py](../_generated/tests/polymodal_equivalence_test.py).
 It loads one semantic core, projects to all five peer manifests, and
 asserts that:
 
@@ -324,18 +324,18 @@ volumetric structure, haptic resistance, or textual declarations.
 Sonic was the first modality to land a bidirectional path:
 
 - **Python inverse** in
-  [sonic_capture.py](../../multilingualprogramming/codegen/sonic_capture.py)
+  [sonic_capture.py](../_generated/multilingualprogramming/codegen/sonic_capture.py)
   takes label-stripped `ObservedVoice` records (the fields a real audio
   analyzer could recover: role, waveform, envelope, frequency,
   amplitude, start offset, channel) and reconstructs a
   `semantic-core-v0` manifest.
 - **JS inverse** in
-  [sonic_capture.js](../../docs/browser/sonic-dynamics/sonic_capture.js)
+  [sonic_capture.js](../browser/sonic-dynamics/sonic_capture.js)
   mirrors the Python module and fetches the shared
-  [ontology.json](../../docs/browser/sonic-dynamics/ontology.json)
+  [ontology.json](../browser/sonic-dynamics/ontology.json)
   sidecar so it cannot drift.
 - **Microphone pipeline** in
-  [microphone_capture.js](../../docs/browser/sonic-dynamics/microphone_capture.js)
+  [microphone_capture.js](../browser/sonic-dynamics/microphone_capture.js)
   produces `ObservedVoice` records from real audio using vanilla DSP:
   spectral-flux onset detection, FFT peak picking for pitch,
   harmonic-ratio waveform classification, RMS-history envelope
@@ -343,7 +343,7 @@ Sonic was the first modality to land a bidirectional path:
   forward projection.
 
 The round-trip test in
-[`SonicRoundTripTestSuite`](../../tests/polymodal_equivalence_test.py)
+[`SonicRoundTripTestSuite`](../_generated/tests/polymodal_equivalence_test.py)
 asserts that the *invertible subset* of opcodes (those whose
 `(role, waveform, envelope)` tuple is unique in the ontology) recovers
 its semantic identity under
@@ -357,9 +357,9 @@ rather than silently lossy.
 MIDI is the second modality with an inverse path. Its observation
 surface is deliberately discrete: role, pitch, velocity, channel, start
 offset, and index. The Python inverse in
-[midi_capture.py](../../multilingualprogramming/codegen/midi_capture.py)
+[midi_capture.py](../_generated/multilingualprogramming/codegen/midi_capture.py)
 and the JS inverse in
-[midi_capture.js](../../docs/browser/midi-dynamics/midi_capture.js)
+[midi_capture.js](../browser/midi-dynamics/midi_capture.js)
 recover semantic identity from `(role, pitch)` using the shared
 ontology.
 

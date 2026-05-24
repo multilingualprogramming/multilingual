@@ -47,7 +47,7 @@ from multilingualprogramming.codegen.semantic_core import CORE_KIND
 
 
 @dataclass(frozen=True)
-class ObservedVoice:
+class ObservedVoice:  # pylint: disable=too-many-instance-attributes
     """A sonic voice as it would arrive from a real audio analyzer.
 
     Deliberately carries no ``opcode`` or ``name`` label: those are the

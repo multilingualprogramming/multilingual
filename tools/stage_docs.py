@@ -25,6 +25,22 @@ def main() -> None:
     _copy_text(root / "CONTRIBUTING.md", generated_dir / "CONTRIBUTING.md")
     _copy_text(root / "USAGE.md", generated_dir / "USAGE.md")
     _copy_text(root / "examples" / "README.md", generated_dir / "examples" / "README.md")
+    _copy_text(
+        root / "multilingualprogramming" / "codegen" / "opcode_ontology.py",
+        generated_dir / "multilingualprogramming" / "codegen" / "opcode_ontology.py",
+    )
+    _copy_text(
+        root / "multilingualprogramming" / "codegen" / "sonic_capture.py",
+        generated_dir / "multilingualprogramming" / "codegen" / "sonic_capture.py",
+    )
+    _copy_text(
+        root / "multilingualprogramming" / "codegen" / "midi_capture.py",
+        generated_dir / "multilingualprogramming" / "codegen" / "midi_capture.py",
+    )
+    _copy_text(
+        root / "tests" / "polymodal_equivalence_test.py",
+        generated_dir / "tests" / "polymodal_equivalence_test.py",
+    )
 
     index_path = docs_dir / "index.md"
     index_text = index_path.read_text(encoding="utf-8")

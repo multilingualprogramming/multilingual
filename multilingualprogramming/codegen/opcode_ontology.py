@@ -68,7 +68,8 @@ class VolumetricHint:
     exercise the dimensionality axis without falling back on 2D names.
     """
 
-    primitive: str  # point | cloud | cone | burst | cube | helix | twist | shell | branch | funnel | cell | flow
+    # point | cloud | cone | burst | cube | helix | twist | shell | branch | funnel | cell | flow
+    primitive: str
     color: str
 
 
@@ -90,7 +91,7 @@ class MidiHint:
 
 
 @dataclass(frozen=True)
-class Opcode:
+class Opcode:  # pylint: disable=too-many-instance-attributes
     """A stable polymodal behavior primitive."""
 
     code: int
