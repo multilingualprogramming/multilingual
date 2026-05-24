@@ -9,8 +9,8 @@
 // MIDI output -- when on, the runtime sends note-on/note-off, control
 // change, and program change messages to the first available MIDI
 // output port so users with a connected synth can hear the program.
-// When off (the default), the runtime stays visual-only and works in
-// any browser without MIDI hardware.
+// Without a MIDI output, the runtime falls back to a tiny WebAudio
+// synth so the page is audible on localhost with no external hardware.
 
 const MANIFEST_KIND = "midi-seed-v0";
 
@@ -28,6 +28,8 @@ let lastTick = performance.now();
 let midiAccess = null;
 let midiOutput = null;
 let activeNotes = new Set(); // pitch|channel keys for note-offs
+let audioContext = null;
+let masterGain = null;
 
 async function loadMidiManifest() {
   const response = await fetch("./program.midi.json", { cache: "no-store" });
@@ -50,8 +52,9 @@ function resizeRoll() {
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
 }
 
-function start() {
+async function start() {
   if (running || !manifest) return;
+  await ensureAudio();
   running = true;
   cursor = 0;
   lastTick = performance.now();
@@ -93,18 +96,21 @@ async function toggleMidiOut() {
 }
 
 function sendEvent(event) {
-  if (!midiOutput) return;
   const ch = Math.max(0, Math.min(15, event.channel)) & 0x0f;
-  if (event.role === "note") {
-    midiOutput.send([0x90 | ch, event.pitch & 0x7f, event.velocity & 0x7f]);
-    activeNotes.add(`${event.pitch}|${ch}`);
-  } else if (event.role === "drum") {
-    midiOutput.send([0x99, event.pitch & 0x7f, event.velocity & 0x7f]); // channel 10
-    activeNotes.add(`${event.pitch}|9`);
-  } else if (event.role === "cc") {
-    midiOutput.send([0xb0 | ch, event.pitch & 0x7f, event.velocity & 0x7f]);
-  } else if (event.role === "program") {
-    midiOutput.send([0xc0 | ch, event.pitch & 0x7f]);
+  if (midiOutput) {
+    if (event.role === "note") {
+      midiOutput.send([0x90 | ch, event.pitch & 0x7f, event.velocity & 0x7f]);
+      activeNotes.add(`${event.pitch}|${ch}`);
+    } else if (event.role === "drum") {
+      midiOutput.send([0x99, event.pitch & 0x7f, event.velocity & 0x7f]); // channel 10
+      activeNotes.add(`${event.pitch}|9`);
+    } else if (event.role === "cc") {
+      midiOutput.send([0xb0 | ch, event.pitch & 0x7f, event.velocity & 0x7f]);
+    } else if (event.role === "program") {
+      midiOutput.send([0xc0 | ch, event.pitch & 0x7f]);
+    }
+  } else {
+    playWebAudioEvent(event);
   }
 }
 
@@ -126,6 +132,71 @@ function eventFill(event) {
   if (event.role === "cc") return "#8338ec";
   if (event.role === "program") return "#ffbe0b";
   return "rgba(241, 239, 228, 0.18)"; // bus
+}
+
+async function ensureAudio() {
+  if (!audioContext) {
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) return;
+    audioContext = new AudioCtor();
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = 0.22;
+    masterGain.connect(audioContext.destination);
+  }
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+}
+
+function midiToFrequency(pitch) {
+  return 440 * Math.pow(2, (pitch - 69) / 12);
+}
+
+function playWebAudioEvent(event) {
+  if (!audioContext || !masterGain || event.role === "bus") return;
+  if (event.role === "drum") {
+    playNoiseHit(event);
+    return;
+  }
+
+  const now = audioContext.currentTime;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  const velocity = Math.max(0.05, Math.min(1, event.velocity / 127));
+  const duration = event.role === "cc" ? 0.16 : 0.32;
+
+  osc.type = event.role === "program" ? "triangle" : "sine";
+  osc.frequency.value = event.role === "cc"
+    ? midiToFrequency(48 + (event.pitch % 24))
+    : midiToFrequency(event.pitch);
+
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.28 * velocity, now + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  osc.connect(gain);
+  gain.connect(masterGain);
+  osc.start(now);
+  osc.stop(now + duration + 0.02);
+}
+
+function playNoiseHit(event) {
+  const now = audioContext.currentTime;
+  const length = Math.max(1, Math.floor(audioContext.sampleRate * 0.12));
+  const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i += 1) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / length);
+  }
+  const source = audioContext.createBufferSource();
+  const gain = audioContext.createGain();
+  const velocity = Math.max(0.05, Math.min(1, event.velocity / 127));
+  source.buffer = buffer;
+  gain.gain.setValueAtTime(0.3 * velocity, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+  source.connect(gain);
+  gain.connect(masterGain);
+  source.start(now);
+  source.stop(now + 0.14);
 }
 
 function draw() {
@@ -184,15 +255,14 @@ function draw() {
     const bar = manifest.bar_seconds || 4;
     const previousCursor = cursor;
     cursor = (cursor + dt / bar) % 1;
-    if (midiOutput) {
-      // Fire events whose start_offset falls within [previousCursor, cursor).
-      // Treat cursor wrap as an interval ending at 1 then 0..cursor.
-      for (const event of manifest.events) {
-        const sent = previousCursor <= cursor
-          ? event.start_offset >= previousCursor && event.start_offset < cursor
-          : event.start_offset >= previousCursor || event.start_offset < cursor;
-        if (sent) sendEvent(event);
-      }
+    // Fire events whose start_offset falls within [previousCursor, cursor).
+    // Treat cursor wrap as an interval ending at 1 then 0..cursor.
+    // sendEvent chooses Web MIDI when available, otherwise WebAudio fallback.
+    for (const event of manifest.events) {
+      const sent = previousCursor <= cursor
+        ? event.start_offset >= previousCursor && event.start_offset < cursor
+        : event.start_offset >= previousCursor || event.start_offset < cursor;
+      if (sent) sendEvent(event);
     }
     const cx = 40 + cursor * usableWidth;
     ctx.strokeStyle = "rgba(247, 201, 72, 0.7)";

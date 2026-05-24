@@ -1107,6 +1107,18 @@ class MidiRuntimeAssetsTestSuite(unittest.TestCase):
         self.assertNotIn("fillText", runtime)
         self.assertNotIn("strokeText", runtime)
 
+    def test_runtime_has_webaudio_fallback(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("window.AudioContext || window.webkitAudioContext", runtime)
+        self.assertIn("function playWebAudioEvent", runtime)
+        self.assertIn("function playNoiseHit", runtime)
+
+    def test_runtime_uses_fallback_when_no_midi_output(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("if (midiOutput)", runtime)
+        self.assertIn("playWebAudioEvent(event)", runtime)
+        self.assertIn("sendEvent chooses Web MIDI when available", runtime)
+
     def test_html_has_roll_canvas_and_no_other_kinds(self):
         html = MIDI_HTML.read_text(encoding="utf-8")
         self.assertIn('<canvas id="roll"', html)
