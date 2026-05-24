@@ -23,7 +23,7 @@ from multilingualprogramming.__main__ import (
     cmd_polymodal_build,
     cmd_sonic_build,
 )
-from multilingualprogramming.codegen import opcode_ontology
+from multilingualprogramming.codegen import opcode_ontology, sonic_capture
 from multilingualprogramming.codegen.semantic_core import (
     CORE_KIND,
     build_semantic_core,
@@ -146,6 +146,113 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
         for voice in sonic["voices"]:
             if voice["role"] == "bus":
                 self.assertEqual(voice["amplitude"], 0.0)
+
+
+class SonicRoundTripTestSuite(unittest.TestCase):
+    """Inverse projection: observed sonic voices must recover semantic identity.
+
+    These tests make the cross-modal equivalence claim falsifiable in
+    the sonic direction. If they fail, the forward and inverse
+    projections have drifted apart -- which is a regression of the
+    architectural claim, not just a unit-test failure.
+    """
+
+    def test_invertible_set_is_derived_from_ontology(self):
+        invertible = sonic_capture.invertible_opcodes()
+        # Opcodes whose (role, waveform, envelope) tuple is unique and
+        # non-bus are recoverable from observation alone.
+        for name in ("emit", "oscillate", "transform", "propagate"):
+            self.assertIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} should be invertible from observation",
+            )
+        # Bus voices are silent under forward projection -> intensity
+        # cannot be recovered.
+        self.assertNotIn(
+            opcode_ontology.get_by_name("contain").code, invertible
+        )
+        # Opcodes that share a sonic signature are indistinguishable by
+        # ear and must not be claimed invertible.
+        for name in ("split", "merge", "attract", "repel",
+                     "diffuse", "stabilize", "resonate"):
+            self.assertNotIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} shares a sonic signature and must not be invertible",
+            )
+
+    def test_observe_voice_strips_identity_labels(self):
+        sonic = build_sonic_manifest(_source(), language="en")
+        observed = sonic_capture.observe_voice(sonic["voices"][0])
+        # ObservedVoice is a frozen dataclass with no opcode/name field.
+        self.assertFalse(hasattr(observed, "opcode"))
+        self.assertFalse(hasattr(observed, "name"))
+
+    def test_invertible_program_subset_round_trips_to_semantic_core(self):
+        core = build_semantic_core(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        invertible = sonic_capture.invertible_opcodes()
+
+        pairs = [
+            (entity, voice)
+            for entity, voice in zip(core["entities"], sonic["voices"])
+            if entity["opcode"] in invertible
+        ]
+        self.assertGreaterEqual(
+            len(pairs), 3,
+            "Round-trip needs at least 3 invertible entities to be meaningful",
+        )
+
+        observed = [sonic_capture.observe_voice(voice) for _, voice in pairs]
+        captured = sonic_capture.capture_semantic_core(
+            observed, source_language="en", source_path="<round-trip>"
+        )
+
+        self.assertEqual(captured["kind"], CORE_KIND)
+        self.assertEqual(len(captured["entities"]), len(pairs))
+
+        for (original, _voice), recovered in zip(pairs, captured["entities"]):
+            self.assertEqual(original["opcode"], recovered["opcode"])
+            self.assertEqual(original["name"], recovered["name"])
+            self.assertEqual(original["channel"], recovered["channel"])
+            self.assertAlmostEqual(
+                original["intensity"], recovered["intensity"], places=3
+            )
+            self.assertAlmostEqual(
+                original["phase"], recovered["phase"], places=4
+            )
+            # signal is unrecoverable from amplitude alone; the capture
+            # module assumes the seed-program convention of signal == 0.
+            self.assertEqual(recovered["signal"], 0.0)
+
+    def test_capture_rejects_ambiguous_observation(self):
+        # split/merge share (trigger, square, percussive) -> cannot be
+        # disambiguated by ear.
+        ambiguous = sonic_capture.ObservedVoice(
+            index=0, role="trigger", waveform="square",
+            envelope="percussive", frequency_hz=440.0,
+            amplitude=0.4, start_offset=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            sonic_capture.capture_semantic_core([ambiguous])
+
+    def test_capture_rejects_bus_voice(self):
+        # contain is bus -> silent under forward projection.
+        bus = sonic_capture.ObservedVoice(
+            index=0, role="bus", waveform="sine",
+            envelope="sustained", frequency_hz=220.0,
+            amplitude=0.0, start_offset=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            sonic_capture.capture_semantic_core([bus])
+
+    def test_capture_rejects_unknown_signature(self):
+        unknown = sonic_capture.ObservedVoice(
+            index=0, role="source", waveform="noise",
+            envelope="tremolo", frequency_hz=440.0,
+            amplitude=0.3, start_offset=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            sonic_capture.capture_semantic_core([unknown])
 
 
 class PolymodalCLITestSuite(unittest.TestCase):
