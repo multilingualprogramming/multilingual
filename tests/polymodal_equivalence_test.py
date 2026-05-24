@@ -60,6 +60,8 @@ from multilingualprogramming.codegen.volumetric_manifest import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM = ROOT / "docs" / "browser" / "spatial-dynamics" / "program.multi"
+GOLDEN_DIR = ROOT / "tests" / "fixtures" / "polymodal"
+GOLDEN_SEMANTIC_CORE = GOLDEN_DIR / "semantic_core_v0_sample.json"
 SONIC_DIR = ROOT / "docs" / "browser" / "sonic-dynamics"
 SONIC_MANIFEST = SONIC_DIR / "program.sonic.json"
 SONIC_ONTOLOGY = SONIC_DIR / "ontology.json"
@@ -1238,6 +1240,71 @@ class MidiCaptureWiringTestSuite(unittest.TestCase):
         self.assertIn('id="midiin"', html)
         self.assertIn('data-action="midiin"', html)
         self.assertIn('id="recovered"', html)
+
+
+class GoldenManifestTestSuite(unittest.TestCase):
+    """Frozen v0 manifests must remain readable as the build evolves.
+
+    The existing ``test_checked_in_*_matches_source`` tests catch silent
+    drift between source and the checked-in demo JSON: they regenerate
+    on both sides. This suite is the schema-locked counterpart -- it
+    asserts that the frozen v0 fixture under tests/fixtures/polymodal/
+    still satisfies the v0 schema contract (kind, version, required
+    entity fields, valid opcode codes). Bumping a field's name or
+    removing a required field breaks this test before it breaks any
+    consumer that has v0 manifests stored on disk.
+
+    See [[polymodal-semantic-versioning]] for the versioning rule:
+    semantic-core-v0 must always mean what it meant when emitted.
+    """
+
+    _SEMANTIC_CORE_REQUIRED = {
+        "id", "index", "opcode", "name",
+        "intensity", "signal", "phase", "channel",
+    }
+    _RELATION_KINDS = {"containment"}
+
+    def _golden_semantic_core(self):
+        return json.loads(GOLDEN_SEMANTIC_CORE.read_text(encoding="utf-8"))
+
+    def test_golden_semantic_core_kind_and_version(self):
+        manifest = self._golden_semantic_core()
+        self.assertEqual(manifest["kind"], CORE_KIND)
+        self.assertEqual(manifest["version"], 0)
+
+    def test_golden_semantic_core_entity_shape(self):
+        manifest = self._golden_semantic_core()
+        self.assertGreater(len(manifest["entities"]), 0)
+        for entity in manifest["entities"]:
+            missing = self._SEMANTIC_CORE_REQUIRED - set(entity.keys())
+            self.assertFalse(
+                missing,
+                f"frozen v0 entity {entity.get('index')} missing required fields: {missing}",
+            )
+            self.assertTrue(
+                entity["id"].startswith("ent_"),
+                f"frozen v0 id {entity['id']!r} missing ent_ prefix",
+            )
+
+    def test_golden_semantic_core_opcodes_still_known(self):
+        manifest = self._golden_semantic_core()
+        known = opcode_ontology.known_codes()
+        for entity in manifest["entities"]:
+            self.assertIn(
+                entity["opcode"], known,
+                f"frozen v0 entity references opcode {entity['opcode']} "
+                f"that no longer exists in the ontology -- the v0 contract "
+                f"requires an explicit migration before removing opcodes",
+            )
+
+    def test_golden_semantic_core_relations_have_known_kinds(self):
+        manifest = self._golden_semantic_core()
+        for relation in manifest["relations"]:
+            self.assertIn(
+                relation["kind"], self._RELATION_KINDS,
+                f"frozen v0 manifest contains unknown relation kind "
+                f"{relation['kind']!r}",
+            )
 
 
 class ProjectionCapabilitiesTestSuite(unittest.TestCase):
