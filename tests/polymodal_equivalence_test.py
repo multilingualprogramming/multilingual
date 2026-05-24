@@ -119,6 +119,102 @@ class SemanticCoreTestSuite(unittest.TestCase):
         self.assertEqual(len(core["entities"]), 1)
 
 
+class SemanticCoreRelationsTestSuite(unittest.TestCase):
+    """Containment relations must be derived from the semantic core.
+
+    Recording structural relations at the semantic-core layer (rather
+    than re-deriving them per modality) is what keeps the four peer
+    projections from silently disagreeing on which entity contains
+    which. If this suite fails, modalities can drift on structure
+    even when entity counts and opcode orderings still match.
+    """
+
+    _CONTAIN_OPCODE = 11
+
+    def test_seed_program_has_at_least_one_containment(self):
+        # The seed program uses `contain` on channel 0, so at least
+        # one containment relation must be derived.
+        core = build_semantic_core(_source(), language="en")
+        containments = [
+            r for r in core["relations"] if r["kind"] == "containment"
+        ]
+        self.assertGreaterEqual(
+            len(containments), 1,
+            "seed program uses contain; at least one relation expected",
+        )
+
+    def test_container_index_uses_contain_opcode(self):
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            container = core["entities"][relation["container"]]
+            self.assertEqual(
+                container["opcode"], self._CONTAIN_OPCODE,
+                "container entity must have the contain opcode",
+            )
+
+    def test_containment_members_share_container_channel(self):
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            container = core["entities"][relation["container"]]
+            for member_index in relation["members"]:
+                member = core["entities"][member_index]
+                self.assertEqual(
+                    member["channel"], container["channel"],
+                    "containment members must share container's channel",
+                )
+
+    def test_containment_members_are_not_contain_entities(self):
+        # contain entities are containers; they should not appear as
+        # members of another containment, even when sharing a channel.
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            for member_index in relation["members"]:
+                member = core["entities"][member_index]
+                self.assertNotEqual(
+                    member["opcode"], self._CONTAIN_OPCODE,
+                    "containment must not nest contain entities as members",
+                )
+
+    def test_containment_excludes_self(self):
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            self.assertNotIn(
+                relation["container"], relation["members"],
+                "container must not be its own member",
+            )
+
+    def test_no_relations_when_no_contain_entity(self):
+        # A program with only an emit entity has no contain opcode and
+        # therefore no containment relations.
+        source = (
+            "let seed = spatial_seed("
+            "spatial_entity(emit(), 0.5, 0.5, 10, 1, 0, 0, 0, 0, 0)"
+            ")"
+        )
+        core = build_semantic_core(source, language="en")
+        self.assertEqual(core["relations"], [])
+
+    def test_lonely_contain_produces_no_relation(self):
+        # A `contain` entity alone on its channel has no members to
+        # contain; no relation should be emitted (empty membranes are
+        # not load-bearing structure).
+        source = (
+            "let seed = spatial_seed("
+            "spatial_entity(contain(), 0.5, 0.5, 10, 1, 0, 0, 0, 0, 0)"
+            ")"
+        )
+        core = build_semantic_core(source, language="en")
+        self.assertEqual(core["relations"], [])
+
+
 class PolymodalEquivalenceTestSuite(unittest.TestCase):
     """Two projections of the same program must agree on semantic identity."""
 

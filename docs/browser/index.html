@@ -168,10 +168,12 @@
     <main class="shell">
       <section class="hero">
         <p class="eyebrow">Multilingual Programming</p>
-        <h1>Two browser runtimes. One language model.</h1>
+        <h1>Many browser runtimes. One language model.</h1>
         <p class="lead">
-          This GitHub Pages site demonstrates both interactive execution through Pyodide
-          and ahead-of-time deployment through precompiled WebAssembly bundles.
+          This GitHub Pages site demonstrates interactive execution through Pyodide,
+          ahead-of-time deployment through precompiled WebAssembly bundles, and the
+          polymodal computation track: one modality-free program projected into
+          linear, spatial, volumetric, and sonic browser runtimes.
         </p>
         <div class="links">
           <a class="button button--solid" href="../playground.html">Open Pyodide Playground</a>
@@ -251,8 +253,9 @@
           <h2>Sonic Dynamics</h2>
           <p>
             The same program.multi as Spatial Dynamics, projected into a
-            WebAudio composition instead of a 2D scene. Demonstrates one
-            modality-free semantic core with two peer realizations.
+            WebAudio composition instead of a 2D scene. Includes a
+            microphone capture path that runs the inverse projection
+            (audio -> semantic core) in the browser.
           </p>
           <ul>
             <li>No textual source inside the workspace</li>
@@ -261,6 +264,40 @@
           </ul>
           <p class="route">browser/sonic-dynamics/</p>
           <a class="button button--solid" href="./sonic-dynamics/">Open Sonic Dynamics</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Polymodal projection</span>
+          <h2>Linear Dynamics</h2>
+          <p>
+            The same program.multi as Spatial Dynamics, projected into a
+            one-dimensional timeline. Each entity becomes a positioned
+            mark along a single axis; channel drives the vertical lane.
+          </p>
+          <ul>
+            <li>1D peer of the 2D spatial track</li>
+            <li>Glyph vocabulary deliberately distinct from 2D shape names</li>
+            <li>Press play to sweep a cursor across the timeline</li>
+          </ul>
+          <p class="route">browser/linear-dynamics/</p>
+          <a class="button button--solid" href="./linear-dynamics/">Open Linear Dynamics</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Polymodal projection</span>
+          <h2>Volumetric Dynamics</h2>
+          <p>
+            The same program.multi as Spatial Dynamics, projected into a
+            three-dimensional scene rendered on canvas with a hand-rolled
+            rotation and perspective -- no WebGL or 3D library required.
+          </p>
+          <ul>
+            <li>3D peer closing the 1D / 2D / 3D dimensionality loop</li>
+            <li>Primitive vocabulary deliberately disjoint from 1D and 2D names</li>
+            <li>Press play to rotate the scene around the Y axis</li>
+          </ul>
+          <p class="route">browser/volumetric-dynamics/</p>
+          <a class="button button--solid" href="./volumetric-dynamics/">Open Volumetric Dynamics</a>
         </article>
       </section>
     </main>

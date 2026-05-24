@@ -19,11 +19,20 @@ A semantic core entity captures only:
 - phase:     phase offset in [0, 1) for cyclic behavior
 - channel:   integer routing/grouping tag
 
-Containment, coupling, and other relations are deliberately left for
-future authoring surfaces. The current seed encodes container *roles*
-via the `contain` opcode; *which* entities a membrane contains is a
-per-modality runtime question (it depends on geometry in the spatial
-projection, on bus routing in the sonic projection, and so on).
+Relations are how the semantic core records structure between
+entities (containment, coupling, temporal ordering). Until a
+source-level authoring surface exists, the core derives them from
+existing entity fields so that *every* peer projection sees the same
+structural facts -- otherwise spatial-2D and volumetric-3D could
+silently disagree on which entity contains which, breaking the
+cross-modal coherence claim.
+
+Currently inferred:
+
+- Containment: each ``contain``-opcode entity on channel C contains
+  every non-``contain`` entity on channel C. Coupling and temporal
+  ordering will be added once the source language gains explicit
+  syntax for them.
 """
 
 from __future__ import annotations
@@ -40,6 +49,8 @@ from multilingualprogramming.codegen.runtime_builtins import make_exec_globals
 
 CORE_KIND = "semantic-core-v0"
 SEED_ROW_ARITY = 10
+CONTAIN_OPCODE = 11
+RELATION_CONTAINMENT = "containment"
 
 
 def execute_seed(
@@ -87,8 +98,39 @@ def build_semantic_core(
             for op in opcode_ontology.OPCODES
         ],
         "entities": entities,
-        "relations": [],
+        "relations": _derive_relations(entities),
     }
+
+
+def _derive_relations(entities: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Derive structural relations between entities.
+
+    Each ``contain`` entity on channel C is treated as a container of
+    the non-``contain`` entities on channel C. Multiple containers on
+    the same channel produce overlapping containment relations -- that
+    is deliberate, since a program may genuinely nest membranes.
+    Containers whose channel holds no other members produce no
+    relation (an empty membrane is not load-bearing structure).
+    """
+    members_by_channel: dict[int, list[int]] = {}
+    for entity in entities:
+        if entity["opcode"] == CONTAIN_OPCODE:
+            continue
+        members_by_channel.setdefault(entity["channel"], []).append(entity["index"])
+
+    relations: list[dict[str, Any]] = []
+    for entity in entities:
+        if entity["opcode"] != CONTAIN_OPCODE:
+            continue
+        members = members_by_channel.get(entity["channel"], [])
+        if not members:
+            continue
+        relations.append({
+            "kind": RELATION_CONTAINMENT,
+            "container": entity["index"],
+            "members": list(members),
+        })
+    return relations
 
 
 def build_semantic_core_file(
