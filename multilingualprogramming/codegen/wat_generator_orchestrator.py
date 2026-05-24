@@ -180,6 +180,8 @@ def _reset_generator_state(generator) -> None:
         "_tuple_locals": set(),
         # B3 : locals i32-shaped (cf. _emit_numeric_binop wraparound).
         "_int_like_locals": set(),
+        # B2 : locals SIMD v128 (cf. _emit_numeric_binop dispatch f64x2.*).
+        "_v128_locals": set(),
         "_static_sequence_elements": {},
         "_zip_pair_locals": set(),
         "_dict_key_maps": {},

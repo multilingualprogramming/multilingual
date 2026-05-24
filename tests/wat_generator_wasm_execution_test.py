@@ -707,6 +707,97 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         # Régression : pas de faux positif sur arithmétique f64 pure.
         self.assertEqual(self._call_export(prog, "pure_literal_mul_stays_f64"), 5e9)
 
+    def test_v128_pair_arith_dispatches_to_f64x2(self):
+        # B2 : `v128_pair(a, b)` construit un v128 (f64x2) ; `+ - * /` entre
+        # deux opérandes v128-shaped dispatchent vers `f64x2.{add,sub,mul,div}`
+        # au lieu de `f64.*`. `v128_lane(v, i)` (i littéral 0|1) extrait une
+        # lane en f64 scalaire. Les v128 ne traversent pas les frontières de
+        # fonction — ils vivent en local v128, déclaré comme tel dans le WAT
+        # via `_v128_locals` (mirrors le patron `_int_like_locals` de B3).
+        prog = _parse_source(
+            # Smoke test : pair + extract — preuve qu'un v128 peut être stocké
+            # dans un local et qu'on récupère les deux lanes individuellement.
+            "déf lane0(a, b):\n"
+            "    soit v = v128_pair(a, b)\n"
+            "    retour v128_lane(v, 0)\n"
+            "déf lane1(a, b):\n"
+            "    soit v = v128_pair(a, b)\n"
+            "    retour v128_lane(v, 1)\n"
+            # add : deux v128 → f64x2.add — somme par lane.
+            "déf add_lane0(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    soit w = u + v\n"
+            "    retour v128_lane(w, 0)\n"
+            "déf add_lane1(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    soit w = u + v\n"
+            "    retour v128_lane(w, 1)\n"
+            # mul + sub + div : couvre les quatre opérateurs binaires.
+            "déf mul_lane0(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u * v, 0)\n"
+            "déf sub_lane1(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u - v, 1)\n"
+            "déf div_lane0(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u / v, 0)\n"
+            # Chaîne : (u*u + v) lane 1 — exerce le dispatch v128 imbriqué.
+            "déf chained_lane1(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u * u + v, 1)\n"
+            # Mandelbrot pair en SIMD source-level : un pas de l'itération
+            # z = z*z + c sur les deux lanes en parallèle, sans le builtin
+            # `simd_mandelbrot_pair` — la preuve que B2 permet d'écrire des
+            # noyaux SIMD en `.multi` au lieu de WAT à la main (workaround W1).
+            "déf mandelbrot_step_re_lane0(zx0, zx1, zy0, zy1, cx0, cx1):\n"
+            "    soit zx = v128_pair(zx0, zx1)\n"
+            "    soit zy = v128_pair(zy0, zy1)\n"
+            "    soit cx = v128_pair(cx0, cx1)\n"
+            "    soit nzx = zx * zx - zy * zy + cx\n"
+            "    retour v128_lane(nzx, 0)\n"
+            "déf mandelbrot_step_re_lane1(zx0, zx1, zy0, zy1, cx0, cx1):\n"
+            "    soit zx = v128_pair(zx0, zx1)\n"
+            "    soit zy = v128_pair(zy0, zy1)\n"
+            "    soit cx = v128_pair(cx0, cx1)\n"
+            "    soit nzx = zx * zx - zy * zy + cx\n"
+            "    retour v128_lane(nzx, 1)\n",
+            language="fr",
+        )
+        # Smoke : pair + extract identité.
+        self.assertEqual(self._call_export(prog, "lane0", 3.0, 7.0), 3.0)
+        self.assertEqual(self._call_export(prog, "lane1", 3.0, 7.0), 7.0)
+        # add : (1+10, 2+20) → 11, 22.
+        self.assertEqual(self._call_export(prog, "add_lane0", 1.0, 2.0, 10.0, 20.0), 11.0)
+        self.assertEqual(self._call_export(prog, "add_lane1", 1.0, 2.0, 10.0, 20.0), 22.0)
+        # mul : (3*4, _) → 12.
+        self.assertEqual(self._call_export(prog, "mul_lane0", 3.0, 5.0, 4.0, 6.0), 12.0)
+        # sub : (_, 5-6) → -1.
+        self.assertEqual(self._call_export(prog, "sub_lane1", 3.0, 5.0, 4.0, 6.0), -1.0)
+        # div : (10/4, _) → 2.5.
+        self.assertEqual(self._call_export(prog, "div_lane0", 10.0, 20.0, 4.0, 5.0), 2.5)
+        # chained : (_, 5*5 + 7) → 32.
+        self.assertEqual(self._call_export(prog, "chained_lane1", 3.0, 5.0, 4.0, 7.0), 32.0)
+        # Mandelbrot step (z = z*z + c, partie réelle uniquement) :
+        #   lane 0 : (0.3)² - (0.1)² + (-0.5) = 0.09 - 0.01 - 0.5 = -0.42
+        #   lane 1 : (0.4)² - (0.2)² + (-0.7) = 0.16 - 0.04 - 0.7 = -0.58
+        self.assertAlmostEqual(
+            self._call_export(prog, "mandelbrot_step_re_lane0",
+                              0.3, 0.4, 0.1, 0.2, -0.5, -0.7),
+            -0.42, places=12,
+        )
+        self.assertAlmostEqual(
+            self._call_export(prog, "mandelbrot_step_re_lane1",
+                              0.3, 0.4, 0.1, 0.2, -0.5, -0.7),
+            -0.58, places=12,
+        )
+
     def test_pow_f64_negative_integer_exponent(self):
         # Regression : $pow_f64 avait le drapeau de signe inversé pour les
         # exposants entiers (neg = 0 < exp au lieu de exp < 0). Conséquence :

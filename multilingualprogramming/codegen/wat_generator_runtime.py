@@ -487,6 +487,18 @@ class WATGeneratorRuntimeMixin:
         elif name in self._int_like_locals:
             self._int_like_locals.discard(name)
 
+    def _update_v128_tracking(self, name: str, value) -> None:
+        """Track *name* as a v128 local iff *value* is a v128 expression (B2).
+
+        Once a name is in `_v128_locals`, `_append_wat_function` declares it
+        as `(local $name v128)` and `_emit_numeric_binop` dispatches `+ - * /`
+        to `f64x2.*` when both operands resolve to v128. A re-assignment to
+        a non-v128 value would create a WAT type mismatch — so once a local
+        is v128 it MUST stay v128 within the function ; we don't downgrade.
+        """
+        if self._is_v128_expr(value):
+            self._v128_locals.add(name)
+
     def _update_dict_tracking(self, name: str, value) -> None:
         """Refresh tracked static-dict metadata after storing into *name*."""
         if (isinstance(value, CallExpr)
@@ -509,6 +521,7 @@ class WATGeneratorRuntimeMixin:
         self._update_collection_tracking(name, value)
         self._update_dict_tracking(name, value)
         self._update_int_like_tracking(name, value)
+        self._update_v128_tracking(name, value)
         if isinstance(value, LambdaExpr):
             if self._lambda_table:
                 self._lambda_locals[name] = self._lambda_table[-1]
@@ -532,6 +545,8 @@ class WATGeneratorRuntimeMixin:
             self._list_locals.remove(name)
         if name in self._tuple_locals:
             self._tuple_locals.remove(name)
+        if name in self._v128_locals:
+            self._v128_locals.remove(name)
         if name in getattr(self, "_module_global_list_names", set()):
             self._module_global_list_names.remove(name)
         if name in getattr(self, "_module_global_tuple_names", set()):

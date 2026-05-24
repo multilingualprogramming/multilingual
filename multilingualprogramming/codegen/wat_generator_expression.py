@@ -24,6 +24,11 @@ from multilingualprogramming.codegen.wat_generator_support import _STR_NAMES, _n
 # avec wraparound au lieu de f64.
 _INT_LIKE_BUILTINS = frozenset({"imul32", "iadd32", "shr_u32"})
 
+# B2 : builtins qui produisent un v128 (f64x2) sur la pile WAT. Permet à
+# `_is_v128_expr` de reconnaître un appel comme « shape v128 » et donc à
+# `+ - * /` enchaînés de dispatcher vers `f64x2.*` sur deux opérandes v128.
+_V128_BUILTINS = frozenset({"v128_pair"})
+
 class WATGeneratorExpressionMixin:
     """Helpers for lowering complex expressions."""
 
@@ -179,6 +184,9 @@ class WATGeneratorExpressionMixin:
         raise ValueError(f"Unsupported string expression for WAT concat: {type(expr).__name__}")
 
     def _emit_numeric_binop(self, node: BinaryOp, indent: str):
+        if node.op in ("+", "-", "*", "/") and self._should_use_v128_arith(node):
+            self._emit_v128_arith_binop(node, indent)
+            return
         if node.op in ("+", "*") and self._should_use_i32_arith(node):
             self._emit_i32_arith_binop(node, indent)
             return
@@ -186,6 +194,36 @@ class WATGeneratorExpressionMixin:
         self._gen_expr(node.left, indent)
         self._gen_expr(node.right, indent)
         self._emit(f"{indent}{arith.get(node.op, 'f64.add')}  ;; op={node.op!r}")
+
+    # B2 ─────────────────────────────────────────────────────────────────────
+    def _should_use_v128_arith(self, node: BinaryOp) -> bool:
+        # Les deux côtés doivent être v128 : pas de coercition scalaire ↔ v128
+        # implicite (un mélange tombe sur `f64.*` et échouera à la validation
+        # WAT, ce qui pointera l'erreur à l'auteur — meilleur qu'un splat
+        # silencieux qui masquerait un bug de typage).
+        return self._is_v128_expr(node.left) and self._is_v128_expr(node.right)
+
+    def _is_v128_expr(self, expr) -> bool:
+        if isinstance(expr, Identifier):
+            return expr.name in self._v128_locals
+        if isinstance(expr, BinaryOp):
+            if expr.op in ("+", "-", "*", "/"):
+                return self._should_use_v128_arith(expr)
+            return False
+        if isinstance(expr, CallExpr):
+            return _name(expr.func) in _V128_BUILTINS
+        return False
+
+    def _emit_v128_arith_binop(self, node: BinaryOp, indent: str):
+        # Les deux opérandes sont v128 (vérifié par `_should_use_v128_arith`).
+        # `_gen_expr` les empile en valeur v128 (via `local.get` typé v128,
+        # ou via `v128_pair` qui produit un v128 sur la pile, ou via un
+        # binop v128 imbriqué qui résoud ici récursivement).
+        instr = {"+": "f64x2.add", "-": "f64x2.sub", "*": "f64x2.mul", "/": "f64x2.div"}[node.op]
+        self._gen_expr(node.left, indent)
+        self._gen_expr(node.right, indent)
+        self._emit(f"{indent}{instr}  ;; SIMD f64x2 (op={node.op!r})")
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _should_use_i32_arith(self, node: BinaryOp) -> bool:
         # Require at least one side to be "earned" i32-shape (bitwise/shift,

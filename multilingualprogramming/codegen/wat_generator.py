@@ -155,6 +155,13 @@ class WATCodeGenerator(
         # or chained `+`/`*` on int-like operands. Consumed by
         # `_emit_numeric_binop` to dispatch to i32 wraparound on `+` and `*`.
         self._int_like_locals: set[str] = set()
+        # B2 : locals déclarés (local $x v128) au lieu de (local $x f64) car
+        # ils tiennent une valeur SIMD f64x2 issue de `v128_pair(a, b)` ou
+        # d'une opération `+ - * /` entre deux opérandes v128-shaped.
+        # `_emit_numeric_binop` consulte `_is_v128_expr` pour dispatcher vers
+        # `f64x2.*` quand les deux côtés sont v128, et `_append_wat_function`
+        # consulte ce set pour typer les locals correctement dans le WAT.
+        self._v128_locals: set[str] = set()
         # Compiler-known dict locals: var_name -> string-key to element index.
         self._dict_key_maps: dict[str, dict[str, int]] = {}
         # Import alias resolution for recognized builtin/math lowerings.
@@ -1429,6 +1436,39 @@ class WATCodeGenerator(
                 # _emit_string_value_with_len, _update_string_tracking).
                 self._emit(f"{indent}i32.trunc_f64_u")
                 self._emit(f"{indent}global.set $__last_str_len")
+            elif resolved_fname in {"v128_pair"} and len(node.args) == 2:
+                # B2 : `v128_pair(a, b)` construit un v128 (f64x2) sur la pile
+                # WAT. Cohérent avec le patron utilisé par `$mandelbrot_pair_simd` :
+                #   v128.const f64x2 0 0
+                #   <a>  f64x2.replace_lane 0
+                #   <b>  f64x2.replace_lane 1
+                # Le résultat est consommé soit par un opérateur v128 (cf.
+                # `_emit_v128_arith_binop`), soit affecté à un local typé v128
+                # (cf. `_v128_locals` + `_append_wat_function`), soit extrait
+                # via `v128_lane(v, i)`.
+                self._emit(f"{indent}v128.const f64x2 0 0")
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}f64x2.replace_lane 0")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}f64x2.replace_lane 1")
+            elif resolved_fname in {"v128_lane"} and len(node.args) == 2:
+                # B2 : `v128_lane(v, i)` extrait la lane i (0 ou 1) d'un v128
+                # vers un f64 scalaire. `i` doit être un littéral 0|1 (la
+                # contrainte est imposée par WAT — `f64x2.extract_lane` prend
+                # un immediate de lane index). Permet de récupérer un résultat
+                # SIMD en valeur f64 ordinaire à la fin du calcul.
+                from multilingualprogramming.parser.ast_nodes import NumeralLiteral as _NL
+                lane_node = node.args[1]
+                if not isinstance(lane_node, _NL):
+                    raise ValueError("v128_lane(v, i) : i doit être un littéral 0 ou 1")
+                try:
+                    lane = int(str(lane_node.value))
+                except ValueError as exc:
+                    raise ValueError("v128_lane(v, i) : i doit être un entier") from exc
+                if lane not in (0, 1):
+                    raise ValueError(f"v128_lane(v, i) : i={lane} hors [0, 1]")
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}f64x2.extract_lane {lane}")
             elif resolved_fname in {"simd_mandelbrot_pair"} and len(node.args) == 5:
                 # SIMD f64x2 kernel : itère deux pixels Mandelbrot en parallèle
                 # via WebAssembly v128 (cf. $mandelbrot_pair_simd dans

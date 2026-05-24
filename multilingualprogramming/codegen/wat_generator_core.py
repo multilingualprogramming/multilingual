@@ -110,6 +110,7 @@ class WATGeneratorCoreMixin:
             "_string_len_locals",
             "_list_locals",
             "_tuple_locals",
+            "_v128_locals",
             "_static_sequence_elements",
             "_zip_pair_locals",
             "_dict_key_maps",
@@ -131,6 +132,7 @@ class WATGeneratorCoreMixin:
             ("_string_len_locals", dict),
             ("_list_locals", set),
             ("_tuple_locals", set),
+            ("_v128_locals", set),
             ("_static_sequence_elements", dict),
             ("_zip_pair_locals", set),
             ("_dict_key_maps", dict),
@@ -178,7 +180,12 @@ class WATGeneratorCoreMixin:
         else:
             lines.append("    (result f64)")
         for local_name in local_names:
-            lines.append(f"    (local ${self._wat_symbol(local_name)} f64)")
+            # B2 : un local en `_v128_locals` est typé v128 dans le WAT
+            # (`local.set/get` valident le type du local ; un v128 ne peut
+            # pas être stocké dans un local f64). Les v128 ne traversent
+            # pas la frontière de fonction (params/result restent f64).
+            local_type = "v128" if local_name in self._v128_locals else "f64"
+            lines.append(f"    (local ${self._wat_symbol(local_name)} {local_type})")
         lines.extend(body_instrs)
         if implicit_return:
             if arity > 1:
