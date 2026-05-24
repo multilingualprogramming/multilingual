@@ -120,6 +120,39 @@
       content: "";
     }
 
+    .icon-capture::before {
+      width: 14px;
+      height: 18px;
+      border: 2px solid currentColor;
+      border-radius: 7px 7px 7px 7px / 9px 9px 9px 9px;
+      background: transparent;
+      content: "";
+    }
+
+    .recovered {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      max-width: min(420px, 40vw);
+      max-height: 50vh;
+      overflow: auto;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      color: var(--ink);
+    }
+
+    .recovered[hidden] {
+      display: none;
+    }
+
     .glyph::before,
     .glyph::after {
       content: "";
@@ -260,7 +293,10 @@
   <nav class="toolbar" aria-label="runtime">
     <button id="toggle" class="icon-pause" type="button" aria-label="pause" aria-pressed="true"></button>
     <button id="reset" class="icon-reset" type="button" aria-label="reset"></button>
+    <button id="capture" class="icon-capture" type="button" aria-label="capture semantic core" aria-pressed="false"></button>
   </nav>
+
+  <pre id="recovered" class="recovered" aria-live="polite" hidden></pre>
 
   <nav class="palette" aria-label="fixed behavior palette">
     <button class="glyph b1 selected" type="button" data-behavior="1" aria-label="emit"></button>

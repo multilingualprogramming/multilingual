@@ -27,7 +27,12 @@ from multilingualprogramming.__main__ import (
     cmd_sonic_build,
     cmd_volumetric_build,
 )
-from multilingualprogramming.codegen import midi_capture, opcode_ontology, sonic_capture
+from multilingualprogramming.codegen import (
+    midi_capture,
+    opcode_ontology,
+    sonic_capture,
+    spatial_capture,
+)
 from multilingualprogramming.codegen.linear_manifest import (
     MANIFEST_KIND as LINEAR_KIND,
     build_linear_manifest,
@@ -88,6 +93,9 @@ MIDI_HTML = MIDI_DIR / "index.html"
 SPATIAL_DIR = ROOT / "docs" / "browser" / "spatial-dynamics"
 SPATIAL_MANIFEST = SPATIAL_DIR / "program.spatial.json"
 SPATIAL_ONTOLOGY = SPATIAL_DIR / "ontology.json"
+SPATIAL_RUNTIME_JS = SPATIAL_DIR / "spatial_runtime.js"
+SPATIAL_CAPTURE_JS = SPATIAL_DIR / "spatial_capture.js"
+SPATIAL_HTML = SPATIAL_DIR / "index.html"
 
 
 def _source():
@@ -795,6 +803,228 @@ class SonicRoundTripTestSuite(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             sonic_capture.capture_semantic_core([unknown])
+
+
+class SpatialRoundTripTestSuite(unittest.TestCase):
+    """Inverse projection: observed 2D marks must recover semantic identity.
+
+    Spatial is the strongest invertible modality. Every ontology opcode
+    has a unique ``(shape, color)`` tuple and the spatial authoring
+    surface exposes semantic fields directly through widgets rather
+    than through a perceptual measurement, so the round-trip is exact
+    for all 12 opcodes. If this suite fails, either the ontology has
+    grown a duplicate spatial hint or the inverse has drifted from the
+    forward projection -- which is a regression of the architectural
+    claim that 2D editing can author a polymodal program without
+    routing through generated text.
+    """
+
+    def test_invertible_set_is_every_opcode(self):
+        # Every ontology opcode has unique (shape, color) -> all invertible.
+        invertible = spatial_capture.invertible_opcodes()
+        self.assertEqual(
+            invertible, opcode_ontology.known_codes(),
+            "spatial inverse must cover every opcode; a duplicate "
+            "(shape, color) tuple would silently shrink this set",
+        )
+
+    def test_observe_mark_strips_identity_labels(self):
+        spatial = build_spatial_manifest(_source(), language="en")
+        observed = spatial_capture.observe_mark(spatial["entities"][0])
+        self.assertFalse(hasattr(observed, "opcode"))
+        self.assertFalse(hasattr(observed, "name"))
+
+    def test_observe_mark_preserves_id_for_loaded_entities(self):
+        # Entities loaded from a forward manifest carry an id; capture
+        # must preserve it so a non-destructive edit -> capture cycle
+        # produces an identity-equivalent semantic core.
+        spatial = build_spatial_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        observed = spatial_capture.observe_mark(spatial["entities"][0])
+        self.assertEqual(observed.id, spatial["entities"][0]["id"])
+
+    def test_full_program_round_trips_to_semantic_core(self):
+        core = build_semantic_core(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        spatial = build_spatial_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+
+        observed = [spatial_capture.observe_mark(e) for e in spatial["entities"]]
+        captured = spatial_capture.capture_semantic_core(
+            observed,
+            source_language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+
+        self.assertEqual(captured["kind"], CORE_KIND)
+        self.assertEqual(len(captured["entities"]), len(core["entities"]))
+
+        # Spatial is exact-invertible: every semantic field must survive
+        # the core -> spatial -> observed -> captured-core trip without
+        # any opcode being dropped or any field being lossy.
+        for original, recovered in zip(core["entities"], captured["entities"]):
+            self.assertEqual(original["id"], recovered["id"])
+            self.assertEqual(original["opcode"], recovered["opcode"])
+            self.assertEqual(original["name"], recovered["name"])
+            self.assertEqual(original["channel"], recovered["channel"])
+            self.assertAlmostEqual(original["intensity"], recovered["intensity"])
+            self.assertAlmostEqual(original["signal"], recovered["signal"])
+            self.assertAlmostEqual(original["phase"], recovered["phase"])
+
+    def test_capture_assigns_stable_id_when_observation_lacks_one(self):
+        # Freshly authored entities (palette adds in the editor) reach
+        # capture without an id; the inverse must derive one from
+        # source_path + index so the recovered manifest is well-formed.
+        anonymous = spatial_capture.ObservedSpatialMark(
+            index=0, shape="source", color="#de3c4b",
+            intensity=0.5, signal=0.0, phase=0.0, channel=0,
+        )
+        captured = spatial_capture.capture_semantic_core(
+            [anonymous], source_language="en", source_path="<fresh-edit>",
+        )
+        recovered = captured["entities"][0]
+        self.assertTrue(recovered["id"].startswith("ent_"))
+        self.assertEqual(len(recovered["id"]), len("ent_") + 8)
+
+    def test_capture_rejects_unknown_signature(self):
+        # A color/shape pair that does not appear in the ontology is a
+        # signal that the editor produced a mark this projection does
+        # not own.
+        unknown = spatial_capture.ObservedSpatialMark(
+            index=0, shape="hexagon", color="#000000",
+            intensity=1.0, signal=0.0, phase=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            spatial_capture.capture_semantic_core([unknown])
+
+    def test_spatial_capability_contract_claims_exact_inverse(self):
+        # The architectural claim that spatial is exact-invertible must
+        # surface in the manifest's capability contract; downstream
+        # consumers should be able to trust the declaration.
+        spatial = build_spatial_manifest(_source(), language="en")
+        self.assertEqual(spatial["capabilities"]["inverse"], "exact")
+        self.assertEqual(spatial["capabilities"]["lossy"], [])
+        self.assertEqual(spatial["capabilities"]["ambiguous"], [])
+
+
+class SpatialCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the JS spatial inverse projection.
+
+    Mirrors SonicCaptureJSTestSuite and MidiCaptureJSTestSuite: the JS
+    inverse must expose the same surface as the Python inverse and read
+    its identity table from the shared ontology sidecar rather than
+    redefining it inline. If the JS drifts from the Python ontology, a
+    captured manifest produced in the browser stops being interchangeable
+    with one captured by the Python tooling.
+    """
+
+    def _source(self):
+        return SPATIAL_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_js_exports_inverse_surface(self):
+        source = self._source()
+        for symbol in (
+            "export function loadOntology",
+            "export function invertibleOpcodes",
+            "export function observeMark",
+            "export async function captureSemanticCore",
+        ):
+            self.assertIn(symbol, source, f"spatial_capture.js missing {symbol!r}")
+
+    def test_capture_js_fetches_ontology_sidecar(self):
+        source = self._source()
+        self.assertIn('"./ontology.json"', source)
+        self.assertIn(ONTOLOGY_KIND, source)
+
+    def test_capture_js_produces_semantic_core_kind(self):
+        self.assertIn(CORE_KIND, self._source())
+
+    def test_capture_js_does_not_hardcode_opcode_table(self):
+        source = self._source()
+        for name in ("emit", "oscillate", "transform", "propagate", "contain"):
+            self.assertNotIn(
+                f'"{name}"', source,
+                f"spatial_capture.js hardcodes opcode name {name!r}; "
+                f"it must read from the ontology sidecar instead.",
+            )
+
+
+class SpatialRuntimeAssetsTestSuite(unittest.TestCase):
+    """The 2D spatial browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.spatial.json"', runtime)
+        self.assertIn(SPATIAL_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_world_canvas_and_no_other_kinds(self):
+        html = SPATIAL_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="world"', html)
+        # Spatial is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(LINEAR_KIND, html)
+        self.assertNotIn(VOLUMETRIC_KIND, html)
+        self.assertNotIn(MIDI_KIND, html)
+
+
+class SpatialCaptureWiringTestSuite(unittest.TestCase):
+    """The spatial runtime + HTML must expose the Capture entry point.
+
+    Lint-style guards that the capture button is wired to the inverse
+    projection and the recovered manifest panel exists in the DOM. The
+    runtime must also preserve manifest entity IDs through edits and
+    assign fresh stable IDs to authored entities so the captured
+    semantic core can satisfy the polymodal compatibility principle
+    without routing through generated text.
+    """
+
+    def test_runtime_imports_capture_module(self):
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./spatial_capture.js"', runtime)
+        self.assertIn("captureSemanticCore", runtime)
+        self.assertIn("observeMark", runtime)
+        self.assertIn("loadOntology", runtime)
+
+    def test_runtime_propagates_manifest_ids(self):
+        # seedFromRows must pass row.id into the Entity so loaded
+        # entities keep their stable identity through edits.
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("id: row.id", runtime)
+
+    def test_runtime_assigns_authored_ids(self):
+        # Palette-added entities have no source row; the runtime must
+        # derive an ent_<8hex> identifier so capture does not need to
+        # invent one for them.
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("ent_", runtime)
+        self.assertIn("crypto.subtle.digest", runtime)
+
+    def test_runtime_supports_drag_to_move(self):
+        # Editing entities by direct manipulation is the simplest
+        # authoring affordance that proves the surface can produce
+        # capturable changes.
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("pointermove", runtime)
+        self.assertIn("moveEntity", runtime)
+
+    def test_html_has_capture_button_and_recovered_panel(self):
+        html = SPATIAL_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="capture"', html)
+        self.assertIn('id="recovered"', html)
 
 
 class PolymodalCLITestSuite(unittest.TestCase):

@@ -1,3 +1,9 @@
+import {
+  loadOntology,
+  observeMark,
+  captureSemanticCore,
+} from "./spatial_capture.js";
+
 const BEHAVIOR = Object.freeze({
   EMIT: 1,
   DIFFUSE: 2,
@@ -28,6 +34,26 @@ const VISUAL = Object.freeze({
   12: { color: "#0077b6", shape: "arrow" },
 });
 
+const EDIT_SOURCE_PATH = "<spatial-edit>";
+let entitySequence = 0;
+
+// Mirrors semantic_core.stable_entity_id: SHA-256 of `source_path|seq`,
+// first 8 hex chars, "ent_" prefix. Used for entities created by the
+// editor (palette add, simulation-spawned children) that need a stable
+// identifier before capture serializes them.
+async function makeAuthoredId() {
+  const seq = entitySequence;
+  entitySequence += 1;
+  const data = new TextEncoder().encode(`${EDIT_SOURCE_PATH}|${seq}`);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const bytes = new Uint8Array(digest);
+  let hex = "";
+  for (let i = 0; i < 4; i += 1) {
+    hex += bytes[i].toString(16).padStart(2, "0");
+  }
+  return `ent_${hex}`;
+}
+
 class Entity {
   constructor(behavior, x, y, options = {}) {
     this.behavior = behavior;
@@ -40,6 +66,7 @@ class Entity {
     this.vy = options.vy ?? 0;
     this.phase = options.phase ?? 0;
     this.channel = options.channel ?? 0;
+    this.id = options.id ?? null;
   }
 
   clone(overrides = {}) {
@@ -104,14 +131,15 @@ class World {
         vy: row.vy,
         phase: row.phase,
         channel: row.channel,
+        id: row.id,
       },
     ));
   }
 
-  add(behavior, x, y) {
+  async add(behavior, x, y) {
     const radius = behavior === BEHAVIOR.CONTAIN ? 120 : 56;
     const intensity = behavior === BEHAVIOR.PROPAGATE ? 2.6 : 1;
-    const options = { radius, intensity };
+    const options = { radius, intensity, id: await makeAuthoredId() };
     if (behavior === BEHAVIOR.PROPAGATE) {
       options.signal = 1;
       options.vx = 1.6;
@@ -224,11 +252,14 @@ class World {
       return { entity, additions: [] };
     }
     const signal = entity.signal / 2;
+    // Simulation-spawned propagate children: leave id null so capture
+    // assigns deterministic IDs at serialization time rather than
+    // burning async work into the simulation step.
     return {
       entity: entity.clone({ signal: 0 }),
       additions: [
-        entity.clone({ behavior: BEHAVIOR.PROPAGATE, signal, vx: -entity.intensity, vy: 0 }),
-        entity.clone({ behavior: BEHAVIOR.PROPAGATE, signal, vx: entity.intensity, vy: 0 }),
+        entity.clone({ behavior: BEHAVIOR.PROPAGATE, signal, vx: -entity.intensity, vy: 0, id: null }),
+        entity.clone({ behavior: BEHAVIOR.PROPAGATE, signal, vx: entity.intensity, vy: 0, id: null }),
       ],
     };
   }
@@ -257,18 +288,66 @@ class World {
     }
     return entity.clone({ x, y });
   }
+
+  entityAt(x, y) {
+    // Hit-test from topmost (last drawn) down so newer entities win.
+    for (let i = this.entities.length - 1; i >= 0; i -= 1) {
+      const entity = this.entities[i];
+      if (entity.behavior === BEHAVIOR.CONTAIN) {
+        // Containers wrap everything; treat them as draggable only via
+        // their border, not their full interior, so they don't hijack
+        // every click in the canvas.
+        const d = Math.hypot(x - entity.x, y - entity.y);
+        if (Math.abs(d - entity.radius) <= 12) {
+          return entity;
+        }
+        continue;
+      }
+      if (Math.hypot(x - entity.x, y - entity.y) <= Math.max(20, entity.radius * 0.35)) {
+        return entity;
+      }
+    }
+    return null;
+  }
+
+  moveEntity(entity, x, y) {
+    entity.x = x;
+    entity.y = y;
+  }
+
+  observeAll() {
+    // Produce ObservedSpatialMark-shaped records straight from the live
+    // world. Index is reassigned to the current array position so the
+    // recovered manifest is well-formed even after additions/deletions.
+    return this.entities.map((entity, index) => {
+      const visual = VISUAL[entity.behavior];
+      return observeMark({
+        index,
+        shape: visual.shape,
+        color: visual.color,
+        intensity: entity.intensity,
+        signal: entity.signal,
+        phase: entity.phase,
+        channel: entity.channel,
+        id: entity.id,
+      });
+    });
+  }
 }
 
 const canvas = document.getElementById("world");
 const ctx = canvas.getContext("2d");
 const toggle = document.getElementById("toggle");
 const reset = document.getElementById("reset");
+const captureButton = document.getElementById("capture");
+const recoveredPanel = document.getElementById("recovered");
 const palette = document.querySelector(".palette");
 let world = new World(1, 1);
 let sourceRows = null;
 let selected = BEHAVIOR.EMIT;
 let running = true;
 let last = performance.now();
+let dragging = null;
 
 function resize() {
   const scale = window.devicePixelRatio || 1;
@@ -435,6 +514,30 @@ function hexAlpha(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+async function captureFromWorld() {
+  if (!captureButton) return;
+  captureButton.setAttribute("aria-pressed", "true");
+  try {
+    const opcodes = await loadOntology();
+    const observed = world.observeAll();
+    const core = await captureSemanticCore(observed, opcodes, {
+      sourceLanguage: "en",
+      sourcePath: "<spatial-edit>",
+    });
+    renderRecovered(core);
+  } catch (err) {
+    renderRecovered({ error: String(err && err.message ? err.message : err) });
+  } finally {
+    captureButton.setAttribute("aria-pressed", "false");
+  }
+}
+
+function renderRecovered(payload) {
+  if (!recoveredPanel) return;
+  recoveredPanel.hidden = false;
+  recoveredPanel.textContent = JSON.stringify(payload, null, 2);
+}
+
 palette.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-behavior]");
   if (!button) {
@@ -447,7 +550,28 @@ palette.addEventListener("click", (event) => {
 });
 
 canvas.addEventListener("pointerdown", (event) => {
+  const hit = world.entityAt(event.clientX, event.clientY);
+  if (hit) {
+    dragging = hit;
+    canvas.setPointerCapture(event.pointerId);
+    return;
+  }
   world.add(selected, event.clientX, event.clientY);
+});
+
+canvas.addEventListener("pointermove", (event) => {
+  if (!dragging) return;
+  world.moveEntity(dragging, event.clientX, event.clientY);
+});
+
+canvas.addEventListener("pointerup", (event) => {
+  if (!dragging) return;
+  try {
+    canvas.releasePointerCapture(event.pointerId);
+  } catch (_err) {
+    // ignore -- some browsers throw if capture was already released
+  }
+  dragging = null;
 });
 
 toggle.addEventListener("click", () => {
@@ -459,6 +583,9 @@ toggle.addEventListener("click", () => {
 });
 
 reset.addEventListener("click", restart);
+if (captureButton) {
+  captureButton.addEventListener("click", captureFromWorld);
+}
 window.addEventListener("resize", restart);
 
 loadSpatialManifest()

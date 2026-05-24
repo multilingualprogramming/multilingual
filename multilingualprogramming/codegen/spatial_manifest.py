@@ -62,7 +62,7 @@ def build_spatial_manifest(
             derived=[],
             lossy=[],
             ambiguous=[],
-            inverse="view-only",
+            inverse="exact",
         ),
         "entities": entities,
         "relations": core["relations"],

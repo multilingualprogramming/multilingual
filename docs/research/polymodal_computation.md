@@ -201,12 +201,14 @@ multilingualprogramming/codegen/
   midi_manifest.py        # MIDI projection         -> midi-seed-v0
   sonic_capture.py        # inverse sonic projection (Python)
   midi_capture.py         # inverse MIDI projection (Python)
+  spatial_capture.py      # inverse spatial projection (Python)
 
 docs/browser/spatial-dynamics/
   program.multi           # authored polymodal seed (canonical source)
   program.spatial.json    # generated 2D projection
   ontology.json           # generated ontology sidecar
-  spatial_runtime.js      # Canvas 2D runtime
+  spatial_runtime.js      # Canvas 2D runtime + capture wiring
+  spatial_capture.js      # inverse projection (JS)
   index.html
 
 docs/browser/linear-dynamics/    # 1D peer
