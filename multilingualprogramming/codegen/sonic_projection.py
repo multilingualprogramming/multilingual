@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from multilingualprogramming.codegen import opcode_ontology
+from multilingualprogramming.codegen.projection_capabilities import capability_contract
 from multilingualprogramming.codegen.semantic_core import build_semantic_core
 
 MANIFEST_KIND = "sonic-seed-v0"
@@ -62,6 +63,18 @@ def build_sonic_manifest(
         "version": 0,
         "source_language": language,
         "source": source_path,
+        "capabilities": capability_contract(
+            projection=MANIFEST_KIND,
+            preserves=["opcode", "phase", "channel"],
+            derived=["intensity"],
+            lossy=["signal"],
+            ambiguous=[
+                "diffuse/stabilize/resonate",
+                "attract/repel",
+                "split/merge",
+            ],
+            inverse="partial",
+        ),
         "tempo_bpm": 96,
         "bar_seconds": 4.0,
         "voices": voices,

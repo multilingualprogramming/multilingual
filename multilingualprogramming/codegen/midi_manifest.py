@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from multilingualprogramming.codegen import opcode_ontology
+from multilingualprogramming.codegen.projection_capabilities import capability_contract
 from multilingualprogramming.codegen.semantic_core import build_semantic_core
 
 MANIFEST_KIND = "midi-seed-v0"
@@ -47,6 +48,14 @@ def build_midi_manifest(
         "version": 0,
         "source_language": language,
         "source": source_path,
+        "capabilities": capability_contract(
+            projection=MANIFEST_KIND,
+            preserves=["opcode", "phase", "channel"],
+            derived=["intensity"],
+            lossy=["signal", "intensity when velocity clips or base velocity is zero"],
+            ambiguous=[],
+            inverse="partial",
+        ),
         "tempo_bpm": 96,
         "bar_seconds": 4.0,
         "events": events,

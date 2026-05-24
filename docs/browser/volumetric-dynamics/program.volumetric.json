@@ -3,6 +3,21 @@
   "version": 0,
   "source_language": "en",
   "source": "docs/browser/spatial-dynamics/program.multi",
+  "capabilities": {
+    "projection": "volumetric-seed-v0",
+    "preserves": [
+      "opcode",
+      "intensity",
+      "phase",
+      "channel"
+    ],
+    "derived": [],
+    "lossy": [
+      "signal"
+    ],
+    "ambiguous": [],
+    "inverse": "view-only"
+  },
   "tempo_bpm": 96,
   "bar_seconds": 4.0,
   "marks": [

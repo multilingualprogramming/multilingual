@@ -3,6 +3,23 @@
   "version": 0,
   "source_language": "en",
   "source": "docs/browser/spatial-dynamics/program.multi",
+  "capabilities": {
+    "projection": "midi-seed-v0",
+    "preserves": [
+      "opcode",
+      "phase",
+      "channel"
+    ],
+    "derived": [
+      "intensity"
+    ],
+    "lossy": [
+      "signal",
+      "intensity when velocity clips or base velocity is zero"
+    ],
+    "ambiguous": [],
+    "inverse": "partial"
+  },
   "tempo_bpm": 96,
   "bar_seconds": 4.0,
   "events": [

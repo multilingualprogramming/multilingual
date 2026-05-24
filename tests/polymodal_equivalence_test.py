@@ -27,7 +27,7 @@ from multilingualprogramming.__main__ import (
     cmd_sonic_build,
     cmd_volumetric_build,
 )
-from multilingualprogramming.codegen import opcode_ontology, sonic_capture
+from multilingualprogramming.codegen import midi_capture, opcode_ontology, sonic_capture
 from multilingualprogramming.codegen.linear_manifest import (
     MANIFEST_KIND as LINEAR_KIND,
     build_linear_manifest,
@@ -81,6 +81,7 @@ MIDI_DIR = ROOT / "docs" / "browser" / "midi-dynamics"
 MIDI_MANIFEST = MIDI_DIR / "program.midi.json"
 MIDI_ONTOLOGY = MIDI_DIR / "ontology.json"
 MIDI_RUNTIME_JS = MIDI_DIR / "midi_runtime.js"
+MIDI_CAPTURE_JS = MIDI_DIR / "midi_capture.js"
 MIDI_HTML = MIDI_DIR / "index.html"
 SPATIAL_DIR = ROOT / "docs" / "browser" / "spatial-dynamics"
 SPATIAL_MANIFEST = SPATIAL_DIR / "program.spatial.json"
@@ -362,6 +363,22 @@ class PolymodalEquivalenceTestSuite(unittest.TestCase):
             if voice["role"] == "bus":
                 self.assertEqual(voice["amplitude"], 0.0)
 
+    def test_projection_manifests_declare_capabilities(self):
+        manifests = [
+            build_spatial_manifest(_source(), language="en"),
+            build_sonic_manifest(_source(), language="en"),
+            build_linear_manifest(_source(), language="en"),
+            build_volumetric_manifest(_source(), language="en"),
+            build_midi_manifest(_source(), language="en"),
+        ]
+        for manifest in manifests:
+            capabilities = manifest["capabilities"]
+            self.assertEqual(capabilities["projection"], manifest["kind"])
+            self.assertIn("opcode", capabilities["preserves"])
+            self.assertIn("inverse", capabilities)
+            for field in ("preserves", "derived", "lossy", "ambiguous"):
+                self.assertIsInstance(capabilities[field], list)
+
 
 class LinearProjectionTestSuite(unittest.TestCase):
     """Direct tests of the 1D linear (timeline) projection.
@@ -453,6 +470,89 @@ class MidiProjectionTestSuite(unittest.TestCase):
         for event in midi["events"]:
             if event["role"] == "bus":
                 self.assertEqual(event["velocity"], 0)
+
+
+class MidiRoundTripTestSuite(unittest.TestCase):
+    """Inverse projection: observed MIDI events must recover semantic identity."""
+
+    def test_invertible_set_is_derived_from_ontology(self):
+        invertible = midi_capture.invertible_opcodes()
+        for name in ("emit", "diffuse", "attract", "repel",
+                     "oscillate", "resonate", "split", "merge"):
+            self.assertIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} should be identity-invertible from MIDI role/pitch",
+            )
+        for name in ("contain", "transform"):
+            self.assertNotIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} cannot recover intensity from current MIDI hints",
+            )
+
+    def test_observe_event_strips_identity_labels(self):
+        midi = build_midi_manifest(_source(), language="en")
+        observed = midi_capture.observe_event(midi["events"][1])
+        self.assertFalse(hasattr(observed, "opcode"))
+        self.assertFalse(hasattr(observed, "name"))
+
+    def test_unclipped_program_subset_round_trips_to_semantic_core(self):
+        core = build_semantic_core(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+        invertible = midi_capture.invertible_opcodes()
+
+        pairs = [
+            (entity, event)
+            for entity, event in zip(core["entities"], midi["events"])
+            if entity["opcode"] in invertible and event["velocity"] < 127
+        ]
+        self.assertGreaterEqual(
+            len(pairs), 5,
+            "Round-trip needs enough unclipped MIDI events to be meaningful",
+        )
+
+        observed = [midi_capture.observe_event(event) for _, event in pairs]
+        captured = midi_capture.capture_semantic_core(
+            observed, source_language="en", source_path="<midi-round-trip>"
+        )
+
+        self.assertEqual(captured["kind"], CORE_KIND)
+        self.assertEqual(len(captured["entities"]), len(pairs))
+
+        for (original, _event), recovered in zip(pairs, captured["entities"]):
+            self.assertEqual(original["opcode"], recovered["opcode"])
+            self.assertEqual(original["name"], recovered["name"])
+            self.assertEqual(original["channel"], recovered["channel"])
+            self.assertAlmostEqual(
+                original["intensity"], recovered["intensity"], places=2
+            )
+            self.assertAlmostEqual(
+                original["phase"], recovered["phase"], places=4
+            )
+            self.assertEqual(recovered["signal"], 0.0)
+
+    def test_capture_rejects_bus_event(self):
+        bus = midi_capture.ObservedMidiEvent(
+            index=0, role="bus", pitch=0, velocity=0,
+            channel=0, start_offset=0.0,
+        )
+        with self.assertRaises(ValueError):
+            midi_capture.capture_semantic_core([bus])
+
+    def test_capture_rejects_zero_base_velocity_event(self):
+        program = midi_capture.ObservedMidiEvent(
+            index=0, role="program", pitch=8, velocity=0,
+            channel=0, start_offset=0.0,
+        )
+        with self.assertRaises(ValueError):
+            midi_capture.capture_semantic_core([program])
+
+    def test_capture_rejects_clipped_velocity(self):
+        clipped = midi_capture.ObservedMidiEvent(
+            index=0, role="drum", pitch=36, velocity=127,
+            channel=0, start_offset=0.0,
+        )
+        with self.assertRaises(ValueError):
+            midi_capture.capture_semantic_core([clipped])
 
 
 class VolumetricProjectionTestSuite(unittest.TestCase):
@@ -822,6 +922,40 @@ class SonicCaptureJSTestSuite(unittest.TestCase):
             self.assertNotIn(
                 f'"{name}"', source,
                 f"sonic_capture.js hardcodes opcode name {name!r}; "
+                f"it must read from the ontology sidecar instead.",
+            )
+
+
+class MidiCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the JS MIDI inverse projection."""
+
+    def _source(self):
+        return MIDI_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_js_exports_inverse_surface(self):
+        source = self._source()
+        for symbol in (
+            "export function loadOntology",
+            "export function invertibleOpcodes",
+            "export function observeEvent",
+            "export function captureSemanticCore",
+        ):
+            self.assertIn(symbol, source, f"midi_capture.js missing {symbol!r}")
+
+    def test_capture_js_fetches_ontology_sidecar(self):
+        source = self._source()
+        self.assertIn('"./ontology.json"', source)
+        self.assertIn(ONTOLOGY_KIND, source)
+
+    def test_capture_js_produces_semantic_core_kind(self):
+        self.assertIn(CORE_KIND, self._source())
+
+    def test_capture_js_does_not_hardcode_opcode_table(self):
+        source = self._source()
+        for name in ("emit", "oscillate", "transform", "propagate", "contain"):
+            self.assertNotIn(
+                f'"{name}"', source,
+                f"midi_capture.js hardcodes opcode name {name!r}; "
                 f"it must read from the ontology sidecar instead.",
             )
 

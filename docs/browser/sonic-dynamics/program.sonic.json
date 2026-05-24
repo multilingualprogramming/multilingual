@@ -3,6 +3,26 @@
   "version": 0,
   "source_language": "en",
   "source": "docs/browser/spatial-dynamics/program.multi",
+  "capabilities": {
+    "projection": "sonic-seed-v0",
+    "preserves": [
+      "opcode",
+      "phase",
+      "channel"
+    ],
+    "derived": [
+      "intensity"
+    ],
+    "lossy": [
+      "signal"
+    ],
+    "ambiguous": [
+      "diffuse/stabilize/resonate",
+      "attract/repel",
+      "split/merge"
+    ],
+    "inverse": "partial"
+  },
   "tempo_bpm": 96,
   "bar_seconds": 4.0,
   "voices": [

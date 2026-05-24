@@ -200,6 +200,7 @@ multilingualprogramming/codegen/
   sonic_projection.py     # sonic projection        -> sonic-seed-v0
   midi_manifest.py        # MIDI projection         -> midi-seed-v0
   sonic_capture.py        # inverse sonic projection (Python)
+  midi_capture.py         # inverse MIDI projection (Python)
 
 docs/browser/spatial-dynamics/
   program.multi           # authored polymodal seed (canonical source)
@@ -232,6 +233,7 @@ docs/browser/midi-dynamics/        # discrete-event peer
   program.midi.json
   ontology.json
   midi_runtime.js                  # piano-roll viz + Web MIDI Out
+  midi_capture.js                  # inverse projection (JS)
   index.html
 ```
 
@@ -350,6 +352,30 @@ sonic signature (split/merge, attract/repel, diffuse/stabilize/resonate)
 are explicitly excluded from the invertible set — ambiguous-by-design
 rather than silently lossy.
 
+## MIDI round-trip (current bidirectional path)
+
+MIDI is the second modality with an inverse path. Its observation
+surface is deliberately discrete: role, pitch, velocity, channel, start
+offset, and index. The Python inverse in
+[midi_capture.py](../../multilingualprogramming/codegen/midi_capture.py)
+and the JS inverse in
+[midi_capture.js](../../docs/browser/midi-dynamics/midi_capture.js)
+recover semantic identity from `(role, pitch)` using the shared
+ontology.
+
+MIDI capture is intentionally partial:
+
+- `bus` events are silent routing markers and are not recoverable as
+  authoring input.
+- `program` events currently have zero base velocity, so intensity
+  cannot be recovered.
+- events clipped to MIDI velocity 127 are rejected because the original
+  intensity may have exceeded the representable range.
+
+The MIDI round-trip tests assert that the unclipped, invertible subset
+recovers opcode, name, phase, channel, and approximate intensity under
+`core -> MIDI -> observed -> captured-core`.
+
 ## Long-term authoring model
 
 The long-term environment should be a live polymodal workspace rather
@@ -385,9 +411,9 @@ representation that every other modality must imitate.
 The next milestones should preserve compatibility while making the
 polymodal claim stronger:
 
-1. **MIDI round-trip.** Add Web MIDI In and a Python/JS inverse that
-   reconstructs the same `semantic-core-v0` fields from
-   `MidiEvent`-shaped observations.
+1. **Browser MIDI input wiring.** The Python/JS MIDI inverse exists;
+   the runtime still needs Web MIDI In capture that feeds observed
+   events into it.
 2. **Stable identity.** Add optional entity IDs to the semantic core and
    preserve them through every projection.
 3. **Projection capability metadata.** Require each projection to
@@ -439,9 +465,9 @@ multiple native perceptual forms while keeping one semantic identity.
 
 ## Open work
 
-- **Bidirectional MIDI capture.** Web MIDI In can produce the same
-  `MidiEvent`-shaped records that the forward projection emits; the
-  inverse mirroring the sonic pattern is the natural next step.
+- **Browser MIDI input wiring.** The Python and JS inverse projections
+  now exist; the browser runtime still needs a live Web MIDI In capture
+  button and recovered-core panel.
 - **Authoring surfaces inside the runtimes.** Every runtime is still
   fundamentally view-only (sonic has microphone capture but the spatial
   / linear / volumetric / MIDI runtimes do not yet edit the manifest).

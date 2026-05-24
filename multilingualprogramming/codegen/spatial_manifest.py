@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from multilingualprogramming.codegen import opcode_ontology
+from multilingualprogramming.codegen.projection_capabilities import capability_contract
 from multilingualprogramming.codegen.semantic_core import (
     SEED_ROW_ARITY,
     build_semantic_core,
@@ -55,6 +56,14 @@ def build_spatial_manifest(
         "version": 0,
         "source_language": language,
         "source": source_path,
+        "capabilities": capability_contract(
+            projection=MANIFEST_KIND,
+            preserves=["opcode", "intensity", "signal", "phase", "channel"],
+            derived=[],
+            lossy=[],
+            ambiguous=[],
+            inverse="view-only",
+        ),
         "entities": entities,
         "relations": core["relations"],
     }

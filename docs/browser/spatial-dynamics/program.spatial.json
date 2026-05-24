@@ -3,6 +3,20 @@
   "version": 0,
   "source_language": "en",
   "source": "docs/browser/spatial-dynamics/program.multi",
+  "capabilities": {
+    "projection": "spatial-seed-v0",
+    "preserves": [
+      "opcode",
+      "intensity",
+      "signal",
+      "phase",
+      "channel"
+    ],
+    "derived": [],
+    "lossy": [],
+    "ambiguous": [],
+    "inverse": "view-only"
+  },
   "entities": [
     {
       "index": 0,
