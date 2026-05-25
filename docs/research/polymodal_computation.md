@@ -378,6 +378,40 @@ The MIDI round-trip tests assert that the unclipped, invertible subset
 recovers opcode, name, phase, channel, and approximate intensity under
 `core -> MIDI -> observed -> captured-core`.
 
+## Spatial round-trip (current bidirectional path)
+
+Spatial is the third modality with an inverse path -- and the first
+that claims **exact** equivalence across every opcode. Identity is
+recovered from the ontology's `(shape, color)` tuple, which is unique
+for all twelve opcodes (including `contain`). The 2D editor surface
+exposes intensity, signal, phase, and channel as direct widgets rather
+than as perceptual features, so the inverse does not have to infer them
+from a measurement:
+
+- **Python inverse** in
+  [spatial_capture.py](../_generated/multilingualprogramming/codegen/spatial_capture.py)
+  takes `ObservedSpatialMark` records and reconstructs a
+  `semantic-core-v0` manifest. Loaded entities pass their stable
+  `ent_<8hex>` IDs through unchanged; freshly authored entities receive
+  a fresh derived ID at capture time so the recovered manifest is still
+  well-formed.
+- **JS inverse** in
+  [spatial_capture.js](../browser/spatial-dynamics/spatial_capture.js)
+  mirrors the Python module and fetches the shared
+  [ontology.json](../browser/spatial-dynamics/ontology.json) sidecar.
+- **Editor pipeline** in the
+  [spatial runtime](../browser/spatial-dynamics/spatial_runtime.js)
+  preserves manifest entity IDs through drag edits, assigns
+  `ent_<8hex>` IDs to palette-added entities, and exposes a Capture
+  button that serializes the live world directly into a semantic core
+  -- never routing through generated text.
+
+This directly satisfies the compatibility principle's clause that
+*"text regeneration is optional"* and the design-test rule that
+*"a capture path must not route through generated text as the only way
+to recover semantic identity."* The spatial manifest's capability
+contract reports `inverse: "exact"` accordingly.
+
 ## Long-term authoring model
 
 The long-term environment should be a live polymodal workspace rather
@@ -424,9 +458,12 @@ polymodal claim stronger:
 4. **Golden manifests.** Store versioned fixture manifests for the
    semantic core and every projection, then require old fixtures to load
    identically or migrate explicitly.
-5. **Spatial authoring.** Let the 2D runtime edit a manifest and recover
-   semantic-core identity without routing changes through generated
-   text.
+5. **Spatial authoring.** *Landed:* the 2D runtime now preserves
+   manifest entity IDs through drag edits, assigns stable IDs to
+   palette-added entities, and ships a Capture button that serializes
+   the live world directly into a `semantic-core-v0` manifest.
+   `spatial-seed-v0` now claims `inverse: "exact"` -- all twelve
+   opcodes are recoverable from the ontology's `(shape, color)` tuple.
 6. **Live synchronized runtime.** Keep spatial, sonic, MIDI, and
    semantic-core views synchronized as one program state changes.
 7. **Explicit relation syntax.** Add coupling and temporal-ordering
@@ -470,9 +507,11 @@ multiple native perceptual forms while keeping one semantic identity.
 - **Browser MIDI input wiring.** The Python and JS inverse projections
   now exist; the browser runtime still needs a live Web MIDI In capture
   button and recovered-core panel.
-- **Authoring surfaces inside the runtimes.** Every runtime is still
-  fundamentally view-only (sonic has microphone capture but the spatial
-  / linear / volumetric / MIDI runtimes do not yet edit the manifest).
+- **Authoring surfaces inside the runtimes.** Sonic captures from the
+  microphone, MIDI captures from a Web MIDI input port, and the 2D
+  spatial runtime now edits the manifest in place and emits a captured
+  semantic core. The linear and volumetric runtimes are still
+  view-only.
 - **Coupling and temporal-ordering relations.** Waiting for explicit
   source syntax.
 - **Glyph-only authoring.** `.multi` still uses English-spelled
