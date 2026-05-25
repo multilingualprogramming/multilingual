@@ -857,10 +857,92 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertEqual(read(ex["fmt"](store, -0.43633, 5.0)), "-0.43633")
         # n=0 → entier arrondi (nearest-even)
         self.assertEqual(read(ex["fmt"](store, 2.5, 0.0)), "2")  # round-half-to-even
-        # Clamp n>9 → n=9
-        self.assertEqual(read(ex["fmt"](store, 1.0, 12.0)), "1.000000000")
+        # Borne haute = 15 (couvre la précision utile de f64). Au-delà → n=15.
+        self.assertEqual(read(ex["fmt"](store, 1.0, 12.0)), "1.000000000000")
+        self.assertEqual(read(ex["fmt"](store, 1.0, 99.0)), "1.000000000000000")
         # Clamp n<0 → n=0
         self.assertEqual(read(ex["fmt"](store, 7.7, -3.0)), "8")
+
+    def test_format_prec_dynamic_n(self):
+        # W16 : `format_prec(v, n)` — formatte v à n chiffres significatifs,
+        # strip des zéros de queue + '.' orphelin. Matche
+        # `v.toPrecision(n).replace(/\.?0+$/, '')` sur la plage non-exponentielle
+        # (le caller fractales gate `abs in [1e-4, 1e5)`).
+        prog = _parse_source(
+            "déf fmt(v, n):\n    retour format_prec(v, n)\n",
+            language="fr",
+        )
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        # n=12, valeurs simples — trailing zeros stripped.
+        self.assertEqual(read(ex["fmt"](store, 3.14, 12.0)), "3.14")
+        self.assertEqual(read(ex["fmt"](store, 12345.6789, 12.0)), "12345.6789")
+        # Petite valeur : preserve les chiffres significatifs au-delà de N=9.
+        self.assertEqual(read(ex["fmt"](store, 0.0001, 12.0)), "0.0001")
+        self.assertEqual(read(ex["fmt"](store, 0.000123456789012, 12.0)), "0.000123456789012")
+        # Negative.
+        self.assertEqual(read(ex["fmt"](store, -1.5, 12.0)), "-1.5")
+        # v=0 → "0" (after=0, pas de strip qui mangerait le chiffre).
+        self.assertEqual(read(ex["fmt"](store, 0.0, 12.0)), "0")
+        # Entier "rond" dans la plage : "100" reste "100" (pas de '.' donc strip skipped).
+        self.assertEqual(read(ex["fmt"](store, 100.0, 12.0)), "100")
+        # Cas où après strip il ne reste que l'entier + '.' à enlever.
+        self.assertEqual(read(ex["fmt"](store, 99999.0, 12.0)), "99999")
+
+    def test_format_exp_dynamic_n(self):
+        # B4 (suite) : `format_exp(v, n)` builtin avec n variable au runtime
+        # (clampé à [0, 9]). Remplace les ~60 lignes de
+        # `formatter_exponentiel_signe` côté fractales_partage.
+        # Cible : matche `v.toExponential(n).replace("e+", "e")` côté JS.
+        prog = _parse_source(
+            "déf fmt(v, n):\n    retour format_exp(v, n)\n",
+            language="fr",
+        )
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        # Zero → "0.NNe0" (n>0) or "0e0" (n=0).
+        self.assertEqual(read(ex["fmt"](store, 0.0, 5.0)), "0.00000e0")
+        self.assertEqual(read(ex["fmt"](store, 0.0, 0.0)), "0e0")
+        # Positive small / large mantissas.
+        self.assertEqual(read(ex["fmt"](store, 1.0, 2.0)), "1.00e0")
+        self.assertEqual(read(ex["fmt"](store, 123.456, 2.0)), "1.23e2")
+        self.assertEqual(read(ex["fmt"](store, 0.000123, 5.0)), "1.23000e-4")
+        # Negative — round-half-to-even (banker's) via f64.nearest, same as fixedN.
+        self.assertEqual(read(ex["fmt"](store, -1234.5, 3.0)), "-1.234e3")
+        # Rounding bump into the next exponent (9.9999 with 3 frac → 1.000e1).
+        self.assertEqual(read(ex["fmt"](store, 9.9999, 3.0)), "1.000e1")
+        # Larger magnitude — exponent has 2 digits.
+        self.assertEqual(read(ex["fmt"](store, 1.5e10, 4.0)), "1.5000e10")
+        # Clamp n > 9 → n = 9.
+        self.assertEqual(read(ex["fmt"](store, 1.0, 12.0)), "1.000000000e0")
+        # Clamp n < 0 → n = 0.
+        self.assertEqual(read(ex["fmt"](store, 7.7e3, -3.0)), "8e3")
 
     def test_string_concat_rhs_fstring_and_call(self):
         # Avant 2026-05-23 : `s + f"..."` et `s + func_call()` levaient

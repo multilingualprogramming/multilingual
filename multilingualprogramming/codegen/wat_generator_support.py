@@ -141,7 +141,7 @@ BUILTIN_LIST_RETURNERS: frozenset = frozenset()
 # Builtins that return a string pointer with length staged in `$__last_str_len`.
 # Same union pattern as BUILTIN_LIST_RETURNERS — orchestrator unions with
 # user-defined string-returning functions discovered by `_returns_string_like`.
-BUILTIN_STRING_RETURNERS: frozenset = frozenset({"format_fixed"})
+BUILTIN_STRING_RETURNERS: frozenset = frozenset({"format_fixed", "format_exp", "format_prec"})
 
 _RENDER_MODE_DECORATOR_NAMES = frozenset({"render_mode", "mode_rendu"})
 _SUPPORTED_RENDER_MODES = frozenset({"scalar_field", "point_stream", "polyline"})

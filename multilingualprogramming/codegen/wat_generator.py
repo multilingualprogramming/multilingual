@@ -1437,6 +1437,33 @@ class WATCodeGenerator(
                 # _emit_string_value_with_len, _update_string_tracking).
                 self._emit(f"{indent}i32.trunc_f64_u")
                 self._emit(f"{indent}global.set $__last_str_len")
+            elif resolved_fname in {"format_exp"} and len(node.args) == 2:
+                # format_exp(v, n) — formate v en notation exponentielle avec
+                # n décimales de mantisse (n runtime, clampé à [0, 9]).
+                # Sortie : `[-]d.dddddde[-]E` (pas de `e+`, exposant 1-3 chiffres).
+                # Remplace le hand-roll `formatter_exponentiel_*` (~60 lignes)
+                # côté fractales_partage.
+                helper = self._ensure_exp_dyn_helper()
+                self._gen_expr(node.args[0], indent)  # v (f64)
+                self._gen_expr(node.args[1], indent)  # n (f64)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}call {helper}")
+                self._emit(f"{indent}i32.trunc_f64_u")
+                self._emit(f"{indent}global.set $__last_str_len")
+            elif resolved_fname in {"format_prec"} and len(node.args) == 2:
+                # format_prec(v, n) — formate v à n chiffres significatifs,
+                # strip des zéros de queue (et du '.' final s'il devient
+                # orphelin). Matche `v.toPrecision(n).replace(/\\.?0+$/, '')`
+                # sur la plage non-exponentielle. Remplace la branche JS
+                # `n.toPrecision(12).replace(/\\.?0+$/, '')` côté fractales
+                # (cf. renderer-navigation.js W16).
+                helper = self._ensure_prec_dyn_helper()
+                self._gen_expr(node.args[0], indent)  # v (f64)
+                self._gen_expr(node.args[1], indent)  # n (f64)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}call {helper}")
+                self._emit(f"{indent}i32.trunc_f64_u")
+                self._emit(f"{indent}global.set $__last_str_len")
             elif resolved_fname in {"v128_pair"} and len(node.args) == 2:
                 # B2 : `v128_pair(a, b)` construit un v128 (f64x2) sur la pile
                 # WAT. Cohérent avec le patron utilisé par `$mandelbrot_pair_simd` :
