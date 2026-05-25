@@ -575,60 +575,6 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertAlmostEqual(self._call_export(prog, "a_3pi4"), 3 * _m.pi / 4, places=10)
         self.assertAlmostEqual(self._call_export(prog, "a_neg_pi2"), -_m.pi / 2, places=12)
 
-    def test_simd_mandelbrot_pair_matches_scalar(self):
-        # Le noyau SIMD f64x2 doit donner la MÊME séquence d'itérations que la
-        # boucle scalaire à 1 ULP près. Sortie : liste [count, iter0, iter1]
-        # où count est le header de longueur (2) et iter0/iter1 sont les
-        # itérations pour les deux lanes. La liste étant émise via
-        # ml_alloc(24) + writes manuels, l'offset des items est ptr+8 et ptr+16
-        # (cohérent avec [0.0]*n).
-        prog = _parse_source(
-            "déf pair(cx0, cy0, cx1, cy1, mi):\n"
-            "    soit r = simd_mandelbrot_pair(cx0, cy0, cx1, cy1, mi)\n"
-            "    retour r[0]\n"
-            "déf pair_b(cx0, cy0, cx1, cy1, mi):\n"
-            "    soit r = simd_mandelbrot_pair(cx0, cy0, cx1, cy1, mi)\n"
-            "    retour r[1]\n"
-            "déf scalar(cx, cy, mi):\n"
-            "    soit x = 0.0\n"
-            "    soit y = 0.0\n"
-            "    soit i = 0.0\n"
-            "    tantque i < mi:\n"
-            "        si x*x + y*y > 4.0:\n"
-            "            retour i\n"
-            "        soit tx = x*x - y*y + cx\n"
-            "        y = 2.0 * x * y + cy\n"
-            "        x = tx\n"
-            "        i = i + 1.0\n"
-            "    retour i\n",
-            language="fr",
-        )
-        # Quelques points où le scalaire et le SIMD doivent concorder.
-        cases = [
-            (-0.5, 0.0, 0.3, 0.0),     # intérieur cardioïde / point qui s'échappe
-            (-1.0, 0.0, -1.5, 0.0),     # bulbe période 2 / extérieur
-            (-0.122561, 0.744861, 0.25, 0.25),  # « lapin » Julia parameter / cardioïde edge
-            (2.0, 0.0, -2.0, 0.0),      # deux échappements rapides
-        ]
-        for cx0, cy0, cx1, cy1 in cases:
-            simd0 = self._call_export(prog, "pair", cx0, cy0, cx1, cy1, 256.0)
-            simd1 = self._call_export(prog, "pair_b", cx0, cy0, cx1, cy1, 256.0)
-            sc0 = self._call_export(prog, "scalar", cx0, cy0, 256.0)
-            sc1 = self._call_export(prog, "scalar", cx1, cy1, 256.0)
-            # Le scalaire renvoie l'itération où r²>4 (n'incrémente pas
-            # l'itération qui détecte l'évasion) ; le SIMD compte l'itération
-            # où l'échappement s'est produit (n'incrémente pas la lane une fois
-            # échappée). Les deux sémantiques diffèrent d'au plus 1 unité — on
-            # vérifie la borne sup et l'inf.
-            self.assertTrue(
-                abs(simd0 - sc0) <= 1,
-                f"lane0 SIMD={simd0} vs scalar={sc0} for c=({cx0},{cy0})",
-            )
-            self.assertTrue(
-                abs(simd1 - sc1) <= 1,
-                f"lane1 SIMD={simd1} vs scalar={sc1} for c=({cx1},{cy1})",
-            )
-
     def test_imul32_iadd32_shr_u32_match_js_semantics(self):
         # imul32, iadd32, shr_u32, u32_to_f64 sont les briques d'un PRNG
         # mulberry32 / d'un hash FNV portés à `.multi`. Vérifie la sémantique

@@ -1469,18 +1469,6 @@ class WATCodeGenerator(
                     raise ValueError(f"v128_lane(v, i) : i={lane} hors [0, 1]")
                 self._gen_expr(node.args[0], indent)
                 self._emit(f"{indent}f64x2.extract_lane {lane}")
-            elif resolved_fname in {"simd_mandelbrot_pair"} and len(node.args) == 5:
-                # SIMD f64x2 kernel : itère deux pixels Mandelbrot en parallèle
-                # via WebAssembly v128 (cf. $mandelbrot_pair_simd dans
-                # wat_generator_core). Retourne un pointeur vers la liste
-                # [iter0, iter1]. Le caller .multi peut donc faire
-                # `soit r = simd_mandelbrot_pair(...)` puis `r[0]`, `r[1]`.
-                # Inscription auto comme « returns list » via le marquage
-                # ci-dessous dans _track_callee_list_return n'est pas nécessaire :
-                # le caller appelle un builtin et le résultat est ptr+f64.
-                for arg in node.args:
-                    self._gen_expr(arg, indent)
-                self._emit(f"{indent}call $mandelbrot_pair_simd")
             elif resolved_fname in {"u32_to_f64"} and len(node.args) == 1:
                 # Reinterpret a signed-i32-as-f64 value as unsigned-i32-as-f64.
                 # Negatives become value + 2^32. Identity for non-negatives.

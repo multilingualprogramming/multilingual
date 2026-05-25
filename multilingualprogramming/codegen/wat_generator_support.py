@@ -136,7 +136,7 @@ _PARAM_SEPARATORS = frozenset(("/", "*"))
 # `r[i]` lowers as list subscript). User-defined list-returning functions are
 # discovered separately by `_returns_list_like` analysis ; this set is the
 # floor — orchestrator must UNION with discovered names, never reset.
-BUILTIN_LIST_RETURNERS: frozenset = frozenset({"simd_mandelbrot_pair"})
+BUILTIN_LIST_RETURNERS: frozenset = frozenset()
 
 # Builtins that return a string pointer with length staged in `$__last_str_len`.
 # Same union pattern as BUILTIN_LIST_RETURNERS — orchestrator unions with
