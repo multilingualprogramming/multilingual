@@ -34,6 +34,10 @@ def main() -> None:
         generated_dir / "multilingualprogramming" / "codegen" / "sonic_capture.py",
     )
     _copy_text(
+        root / "multilingualprogramming" / "codegen" / "spatial_capture.py",
+        generated_dir / "multilingualprogramming" / "codegen" / "spatial_capture.py",
+    )
+    _copy_text(
         root / "multilingualprogramming" / "codegen" / "midi_capture.py",
         generated_dir / "multilingualprogramming" / "codegen" / "midi_capture.py",
     )
