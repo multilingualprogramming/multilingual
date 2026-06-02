@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Scopes the semantic-core-v1 browser stepper as an ES module for Node-based tests; browsers load process_core.js as a module regardless."
+}
