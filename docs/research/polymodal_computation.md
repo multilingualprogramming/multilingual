@@ -158,6 +158,145 @@ shared signatures are excluded from the invertible subset instead of
 pretending to be lossless. Future MIDI, spatial, volumetric, haptic,
 and kinetic capture paths should make the same kind of declaration.
 
+## From structure to process: `semantic-core-v1` (proposed)
+
+`semantic-core-v0` describes a **static structure**: a flat set of
+entities with fixed scalar fields, plus derived containment. It is
+faithfully projectable into every modality, and that is a real result.
+But it cannot express the systems that make computation feel *alive* —
+cellular automata, Game of Life, fractals, reaction-diffusion,
+predator-prey ecosystems, flocking, growth. Those are not structures.
+They are **rules unfolding over time**, and v0 has nowhere to put a
+rule: the actual dynamics live, hand-written, inside each modality's
+runtime (e.g. `spatial_runtime.js::step(dt)`), which also means
+cross-modal equivalence is only proven for frame 0, not for the
+computation itself.
+
+The answer is not more opcodes. A bag of behaviors is never universal;
+you chase the next phenomenon forever. Universality comes from finding
+the single abstraction that every one of these systems already *is*, and
+making it the core. That abstraction is the **dynamical / rewriting
+system**, and it decomposes into four orthogonal axes.
+
+### The four axes of any computational universe
+
+| Axis | Question | v0 today | Universal form |
+|---|---|---|---|
+| **State** | what does each locus carry? | five fixed scalars | a typed, possibly heterogeneous record (`{alive}`, `{z: ℂ}`, `{species, energy, age}`) |
+| **Topology** | what interacts with what? | re-derived from coordinates per runtime | a declared object answering one query: `neighbors(locus) -> set` |
+| **Rule** | how does a locus change? | hard-coded in `step()` per modality | a **rewrite rule**: `match local pattern -> produce replacement` |
+| **Schedule** | when do rules fire? | implicit animation frame | declared: synchronous / asynchronous / continuous-`dt` / generative-depth |
+
+A `semantic-core-v1` polymodal program graduates from a *bag of
+entities* into the tuple **⟨State, Topology, Rule, Schedule⟩**. Every
+component is still declarative, modality-free data, so it projects and
+round-trips through modalities exactly as entities do today.
+
+### Rewriting is the one meta-primitive
+
+The load-bearing move is making the **rewrite rule** the single
+universal primitive. `match a local pattern -> produce a replacement` is
+Turing-complete (it is what term rewriting, graph grammars, Rule 110,
+and Wolfram-style physics all run on). Three capabilities v0 lacks fall
+out of this one primitive for free:
+
+- **Generativity / recursion** — when the replacement is *larger* than
+  the match, you get production rules: L-systems, fractals, growth.
+- **Open population** — when a match *creates or destroys* loci, you get
+  birth, death, and reproduction: ecosystems. (This is exactly why v0's
+  "preserves entity count" invariant must relax to "preserves the rule's
+  trajectory.")
+- **Iteration in value-space** — when topology is "neighbors = self" and
+  the space *is* the value, you get Mandelbrot/Julia and strange
+  attractors.
+
+The twelve v0 opcodes do not disappear: they become a **standard library
+of rules expressed in this calculus**, not built-in magic. That is the
+difference between a language and a feature list.
+
+### The same shape, four times
+
+The proof of universality is that systems we call completely different
+are one form with four fillings:
+
+```text
+Game of Life    State {alive}    Topology lattice/Moore-8    Rule n==3 ∨ (alive∧n==2)        Schedule synchronous
+Mandelbrot      State {z:ℂ}      Topology self (plane ℂ)     Rule z' = z² + c               Schedule iterate-N
+L-system plant  State {symbol}   Topology sequence -> tree   Rule F -> F[+F]F[-F]F (grows)   Schedule depth-N
+Predator-prey   State {sp,e,age} Topology continuous/radius  Rules eat -> e += k, kill prey; Schedule async dt
+                                                                   e>θ -> spawn; e<0 -> die
+```
+
+None of these needs a new opcode. The broader landscape lands the same
+way: iterated maps and IFS fractals, elementary CA (Rule 30/110),
+Langton's ant, reaction-diffusion / Turing patterns (Gray-Scott),
+Ising/Monte-Carlo, DLA, percolation, boids, Lotka-Volterra, Schelling
+segregation, ant stigmergy, n-body and SPH physics, neural and Boolean
+networks, SIR epidemics, von Neumann self-replication, and hypergraph
+rewriting — each a filling of ⟨State, Topology, Rule, Schedule⟩.
+
+### Dynamics become polymodal too
+
+Because rules are data, **rules project to every modality just like
+entities do** — and that is where the time-based modalities finally get
+first-class content:
+
+- **Video** is the modality v0 had no home for, because v0 had no time.
+  Here, video = spatial × the **Schedule** axis: the rule's firing *is*
+  the frame clock. Video is to the rule axis what `linear` was to the
+  dimensionality axis — the modality that forces the new dimension to be
+  real.
+- **Sonic**: a rule is an effect/transformation node; reaction-diffusion
+  becomes evolving timbre; a CA becomes generative rhythm. **MIDI**:
+  rules as generative sequencers.
+- **Topology projects too**: lattice -> grid, graph -> node-link,
+  continuous -> canvas positions. The neighborhood query renders.
+
+A non-negotiable consequence: the stepper that advances ⟨State,
+Topology, Rule, Schedule⟩ must be **specified once in the modality-free
+core** and compiled into each runtime — never hand-written per modality.
+Otherwise two runtimes evolve the same program differently and
+cross-modal equivalence dies the instant the program animates.
+
+### The honesty frontier: expressiveness tiers
+
+Universality has a cost worth naming: a Turing-complete rule can express
+things with no natural sound or shape, so not every program can be
+*authored* (inverted) in every modality. The capability-contract
+discipline above generalizes from "this opcode is lossy in sonic" to
+"this *rule-class* is view-only in modality M." Expressiveness should be
+stratified into tiers, each adding power and possibly shrinking the set
+of modalities that can invert it:
+
+| Tier | Expressiveness | Examples | Invertibility |
+|---|---|---|---|
+| 0 | static structure | the current entity set | invertible everywhere (this is v0) |
+| 1 | fixed-population continuous dynamics | particles, boids, oscillator nets, iterated maps | fully projectable; per-modality inverse |
+| 2 | synchronous lattice / field rules | Game of Life, reaction-diffusion, Turing patterns | projectable; inverse per contract |
+| 3 | generative / open-population rewriting | fractals, L-systems, ecosystems | projects as output; authoring-invertible only in some modalities |
+| 4 | full graph / hypergraph rewriting | universal computation | mostly view-only / non-invertible |
+
+This ladder is the precise answer to "is polymodal computation
+universal?": **yes at the representation and output level (Tier 4), with
+a clearly marked frontier beyond which perceptual *authoring* degrades.**
+That is not a retreat — it is the honest statement of what polymodal
+universality can claim.
+
+### Cheapest falsifiable first step
+
+Mirror how `linear` cheaply proved the dimensionality axis. Implement
+only **⟨State, Topology=lattice, Rule, Schedule=synchronous⟩**, run
+**Game of Life** through it, and project that *same rule-bearing
+manifest* to two modalities — spatial canvas and sonic (live cells ->
+rhythmic voices) — driven by one shared, modality-free stepper. If one
+rewrite-rule manifest animates Life identically in two surfaces, the
+dynamics layer is proven, and the stepper-in-the-core requirement is
+satisfied by construction.
+
+`semantic-core-v1` lands beside v0 under the same aggressive versioning
+rule: v0 manifests keep meaning exactly what they meant, and a v0 program
+is simply a v1 program with an empty rule set and a single-step schedule.
+
 ## The opcode ontology
 
 A single ontology
@@ -473,6 +612,14 @@ polymodal claim stronger:
    gates, memory loops, oscillator networks, membranes, routers,
    attractor basins, and feedback circuits as higher-level semantic
    patterns.
+9. **`semantic-core-v1` process calculus.** Promote dynamics from
+   hand-written per-runtime `step()` code into a modality-free
+   ⟨State, Topology, Rule, Schedule⟩ tuple with rewriting as the single
+   meta-primitive (see *From structure to process* above). First
+   falsifiable target: Game of Life expressed once and projected to the
+   spatial and sonic modalities through one shared core stepper. This is
+   the path to universality — fractals, cellular automata, and
+   ecosystems as fillings of the same form rather than new opcodes.
 
 The strongest near-term proof is:
 
