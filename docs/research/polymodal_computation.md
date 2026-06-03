@@ -620,6 +620,26 @@ polymodal claim stronger:
    spatial and sonic modalities through one shared core stepper. This is
    the path to universality — fractals, cellular automata, and
    ecosystems as fillings of the same form rather than new opcodes.
+   *Authoring landed:* a v1 process program is now written in `.multi`,
+   not Python — the process-core constructors (`lattice_topology`,
+   `rewrite_rule`, `synchronous_schedule`, `build_process_core`, ...) are
+   exposed as multilingual runtime builtins, a program assigns its
+   ⟨State, Topology, Rule, Schedule⟩ core to a `process` variable (the v1
+   analogue of v0's `seed`), and `process-build` emits the manifest.
+   `examples/game_of_life.multi` (and its French twin
+   `game_of_life.fr.multi`) build a core byte-identical to, and stepping
+   identically to, the Python reference; the two languages lower to the
+   same core. Polymodal dynamics are no longer Python-only.
+   *Generative rewriting landed:* the rewrite primitive now also expresses
+   **productions** whose replacement is longer than their match, via a
+   `sequence` topology and a `generative` schedule. `examples/lindenmayer.multi`
+   is the canonical algae L-system (axiom `A`, `A->AB`, `B->A`) authored in
+   `.multi`; it yields `A, AB, ABA, ABAAB, ...` (Fibonacci lengths) through
+   the same shared stepper and classifies as Tier 3 (generative). This is
+   the second `.multi` process program and the first that is *not* a
+   cellular automaton — evidence the calculus generalises past lattices.
+   Still pending for L-systems: the JS/browser port and a sequence
+   projection (string -> spatial turtle / sonic melody).
 
 The strongest near-term proof is:
 

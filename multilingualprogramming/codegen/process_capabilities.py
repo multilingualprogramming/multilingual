@@ -56,6 +56,9 @@ def expressiveness_tier(core: dict[str, Any]) -> int:
     - An empty rule set rewrites nothing, so the program is a static
       structure (Tier 0) -- this is exactly "a v0 program is a v1 program
       with an empty rule set and a single-step schedule."
+    - A generative schedule (parallel string rewriting, productions longer
+      than their match) is generative rewriting (Tier 3) -- an L-system,
+      whatever its topology.
     - A non-lattice (graph/hypergraph) topology is general rewriting (Tier 4).
     - Open population means rules create and destroy loci: generative /
       open-population rewriting (Tier 3).
@@ -73,6 +76,13 @@ def expressiveness_tier(core: dict[str, Any]) -> int:
     rule = core["rule"]
     if not rule.get("clauses"):
         return 0
+
+    # A generative schedule is the generativity signal (productions may be
+    # longer than their match), so an L-system is Tier 3 regardless of its
+    # (sequence) topology -- checked before the non-lattice -> Tier 4 rule so
+    # it is not misread as arbitrary graph rewriting.
+    if core["schedule"].get("kind") == process_core.SCHEDULE_GENERATIVE:
+        return 3
 
     topology = core["topology"]
     if topology.get("kind") != process_core.TOPOLOGY_LATTICE:

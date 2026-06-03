@@ -1,0 +1,47 @@
+# Game of Life as a semantic-core-v1 polymodal program, authored entirely in
+# the Multilingual language -- no Python. Build the manifest with:
+#
+#     python -m multilingualprogramming process-build examples/game_of_life.multi
+#
+# The engine in `process_core` knows no automaton by name; everything specific
+# to Conway's Life lives here, as data, exactly as the research doc requires
+# ("opcodes become a standard library of rules, not built-in magic").
+
+# Conway's B3/S23 rule expressed as generic rewrite clauses. A dead cell with
+# exactly 3 live neighbours is born; a live cell with 2 or 3 survives;
+# everything else takes the empty (dead) default.
+def life_rule():
+    let birth = [3]
+    let survival = [2, 3]
+    let clauses = [
+        {
+            "match": {
+                "self": {"alive": 0},
+                "neighbor_count": [{"field": "alive", "value": 1, "in": birth}]
+            },
+            "produce": {"alive": 1}
+        },
+        {
+            "match": {
+                "self": {"alive": 1},
+                "neighbor_count": [{"field": "alive", "value": 1, "in": survival}]
+            },
+            "produce": {"alive": 1}
+        }
+    ]
+    return rewrite_rule(clauses, {"alive": 0})
+
+# A glider, as live-cell coordinates. Open population on an unbounded lattice:
+# only live cells exist as loci, and the same rewrite rule grows and prunes the
+# set as the glider travels -- so the pattern is never confined to a grid.
+let glider = [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]]
+let loci = [{"locus": cell, "alive": 1} for cell in glider]
+let state = {"loci": loci, "population": "open", "empty": {"alive": 0}}
+
+# Assemble the four modality-free axes into one process core.
+let process = build_process_core(
+    state,
+    infinite_lattice_topology(),
+    life_rule(),
+    synchronous_schedule()
+)

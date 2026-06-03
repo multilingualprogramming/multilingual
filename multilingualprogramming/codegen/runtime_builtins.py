@@ -52,6 +52,24 @@ from multilingualprogramming.runtime.semantic_match import semantic_match
 from multilingualprogramming.runtime.tool_runtime import AgentLoop, get_registry, tool
 from multilingualprogramming.runtime.memory_store import ml_memory
 
+# Polymodal process-calculus primitives (semantic-core-v1). Imported from the
+# submodule directly (not via the codegen package) so this stays free of an
+# import cycle: process_core depends only on the standard library. Exposing
+# these as builtins is what lets a polymodal *process* program be authored in
+# the Multilingual language itself rather than a Python script -- the dynamics
+# (State, Topology, Rule, Schedule) are assembled from .multi source the same
+# way a v0 `seed` is.
+from multilingualprogramming.codegen.process_core import (
+    build_process_core,
+    generative_schedule,
+    infinite_lattice_topology,
+    lattice_topology,
+    rewrite_rule,
+    sequence_topology,
+    static_schedule,
+    synchronous_schedule,
+)
+
 def _coerce_model(model):
     """Normalize model inputs to ModelRef values."""
     if isinstance(model, ModelRef):
@@ -643,6 +661,21 @@ class RuntimeBuiltins:
         "propagate": propagate,
         "spatial_entity": spatial_entity,
         "spatial_seed": spatial_seed,
+        # Polymodal process calculus (semantic-core-v1) -- the four
+        # modality-free axes plus the assembler. These are the *language*
+        # primitives; specific systems (Game of Life, Seeds, ...) are programs
+        # that fill the tuple, never built-ins. A .multi process program builds
+        # its rule data and assigns the result to `process`. Localized names
+        # (construire_noyau_processus, ...) live in the shared
+        # resources/usm/builtins_aliases.json catalog, not here.
+        "lattice_topology": lattice_topology,
+        "infinite_lattice_topology": infinite_lattice_topology,
+        "sequence_topology": sequence_topology,
+        "rewrite_rule": rewrite_rule,
+        "synchronous_schedule": synchronous_schedule,
+        "static_schedule": static_schedule,
+        "generative_schedule": generative_schedule,
+        "build_process_core": build_process_core,
     }
 
     # Non-callable special values available in exec() namespace

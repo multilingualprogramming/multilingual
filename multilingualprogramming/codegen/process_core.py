@@ -64,6 +64,11 @@ CORE_VERSION = 1
 
 # Topology kinds
 TOPOLOGY_LATTICE = "lattice"
+# A sequence is a linear order of loci (a string / list of symbols). Its one
+# neighbour query returns the immediate predecessor and successor positions.
+# Context-free productions ignore neighbours; the query exists so that
+# context-sensitive rewriting can land later without a new topology kind.
+TOPOLOGY_SEQUENCE = "sequence"
 
 # A lattice may be finite (declared width/height, optionally wrapping) or
 # infinite (no extent: every coordinate is a potential locus). Infinite
@@ -97,6 +102,12 @@ SCHEDULE_SYNCHRONOUS = "synchronous"
 # This is the schedule a migrated v0 snapshot carries -- "a v0 program is a
 # v1 program with an empty rule set and a single-step schedule."
 SCHEDULE_STATIC = "static"
+# A generative schedule rewrites every locus in parallel and concatenates the
+# productions in order. Because a production may be *longer* than the symbol it
+# matches, the structure grows -- this is the schedule that makes L-systems,
+# fractal strings, and other recursive/generative programs fall out of the one
+# rewrite primitive (see the research doc, "generativity/recursion for free").
+SCHEDULE_GENERATIVE = "generative"
 
 
 # --------------------------------------------------------------------------
@@ -149,9 +160,20 @@ def infinite_lattice_topology(
     }
 
 
+def sequence_topology() -> dict[str, Any]:
+    """Declare a linear sequence topology (a string / list of symbols).
+
+    Loci are ordered positions; :func:`neighbors` returns the immediate
+    predecessor and successor index. Used with a generative schedule and a
+    rewrite rule whose productions replace one symbol with a sequence of
+    symbols -- the L-system / string-rewriting shape.
+    """
+    return {"kind": TOPOLOGY_SEQUENCE}
+
+
 def rewrite_rule(
     clauses: list[dict[str, Any]],
-    default: dict[str, Any],
+    default: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Declare a rewrite rule as ordered ``match -> produce`` clauses.
 
@@ -179,6 +201,12 @@ def rewrite_rule(
     are just different ``clauses`` -- see
     ``examples/game_of_life_polymodal.py`` for how a program is assembled.
 
+    Under a **generative** schedule the same clause shape expresses a
+    *production*: ``match`` tests the locus's own ``symbol`` and ``produce``
+    is a *list* of records that replaces it (a replacement longer than the
+    match grows the structure -- an L-system). A locus that matches no clause
+    maps to itself. There ``default`` is unused, so it may be ``None``.
+
     Richer match predicates (positional neighbours, neighbourhood
     multisets, replacement that creates or destroys loci) are future clause
     shapes that extend this same primitive.
@@ -188,7 +216,7 @@ def rewrite_rule(
     return {
         "kind": RULE_REWRITE,
         "clauses": clauses,
-        "default": dict(default),
+        "default": dict(default) if default is not None else None,
     }
 
 
@@ -210,6 +238,17 @@ def static_schedule() -> dict[str, Any]:
     error or a reinterpretation.
     """
     return {"kind": SCHEDULE_STATIC}
+
+
+def generative_schedule() -> dict[str, Any]:
+    """Declare a generative schedule (parallel string rewriting).
+
+    Every locus in the sequence is rewritten at once and the productions are
+    concatenated in order, so the sequence may grow without bound. This is
+    the schedule an L-system runs under: it pairs with
+    :func:`sequence_topology` and a rewrite rule of symbol productions.
+    """
+    return {"kind": SCHEDULE_GENERATIVE}
 
 
 def build_process_core(
@@ -239,6 +278,11 @@ def build_process_core(
 def neighbors(topology: dict[str, Any], locus: tuple[int, int]) -> list[tuple[int, int]]:
     """Return the loci adjacent to ``locus`` under ``topology``."""
     kind = topology.get("kind")
+    if kind == TOPOLOGY_SEQUENCE:
+        # A sequence locus is an integer position; its neighbours are the
+        # adjacent positions. Context-free productions never ask, but
+        # context-sensitive ones will.
+        return [locus - 1, locus + 1]
     if kind != TOPOLOGY_LATTICE:
         raise NotImplementedError(f"topology kind {kind!r} not yet supported")
     offsets = (
@@ -372,6 +416,35 @@ def _step_open(
     return next_loci
 
 
+def _step_generative(core: dict[str, Any]) -> list[dict[str, Any]]:
+    """Generative rewriting: rewrite every symbol in parallel, concatenated.
+
+    Each locus is matched against the rule's clauses (``self`` constraints
+    only -- context-free); the first matching clause's ``produce`` is a list
+    of records that replaces the locus, so a production longer than one
+    symbol grows the sequence. A locus matching no clause maps to itself.
+    This is the same rewrite primitive as the lattice path; only the
+    schedule's reading of ``produce`` (a sequence, not a single state) and of
+    population (the sequence length is free) differ.
+    """
+    rule = core["rule"]
+    if rule.get("kind") != RULE_REWRITE:
+        raise NotImplementedError(f"rule kind {rule.get('kind')!r} not yet supported")
+    clauses = rule["clauses"]
+    next_sequence: list[dict[str, Any]] = []
+    for rec in core["state"]["sequence"]:
+        production: list[dict[str, Any]] | None = None
+        for clause in clauses:
+            if _clause_matches(rec, [], {}, clause.get("match", {})):
+                production = clause["produce"]
+                break
+        if production is None:
+            next_sequence.append(dict(rec))
+        else:
+            next_sequence.extend(dict(symbol) for symbol in production)
+    return next_sequence
+
+
 def step(core: dict[str, Any]) -> dict[str, Any]:
     """Advance the process core by one step, returning a new core.
 
@@ -381,6 +454,9 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
     sequence of full, independently projectable manifests.
     """
     schedule_kind = core["schedule"].get("kind")
+    if schedule_kind == SCHEDULE_GENERATIVE:
+        next_sequence = _step_generative(core)
+        return {**core, "state": {**core["state"], "sequence": next_sequence}}
     if schedule_kind == SCHEDULE_STATIC:
         # A static snapshot does not evolve; stepping is identity. Return a
         # fresh top-level shell so callers never alias the input. Crucially
@@ -438,3 +514,13 @@ def active_cells(core: dict[str, Any], field: str = "alive") -> list[tuple[int, 
         for rec in core["state"]["loci"]
         if rec.get(field)
     )
+
+
+def sequence_symbols(core: dict[str, Any], field: str = "symbol") -> list[Any]:
+    """Return the ordered ``field`` values of a sequence-topology core.
+
+    The generic readout for a string-rewriting program: the produced word as
+    a list of symbols. Like :func:`active_cells` it names no specific system
+    -- the caller chooses which record field carries the symbol.
+    """
+    return [rec.get(field) for rec in core["state"]["sequence"]]

@@ -5,6 +5,7 @@
 #
 """Multilingual lexer that tokenizes mixed-script source code."""
 import json
+import re
 import unicodedata
 from pathlib import Path
 from multilingualprogramming.lexer.token_types import TokenType
@@ -158,6 +159,7 @@ class Lexer:
                 are recognized. If None, auto-detect.
         """
         self.reader = SourceReader(source)
+        self._source_text = source
         self.language = language if language is not None else lang
         self.registry = KeywordRegistry()
         self.tokens = []
@@ -184,6 +186,47 @@ class Lexer:
             if self.registry.is_keyword(text, try_lang):
                 return (self.registry.get_concept(text, try_lang), try_lang)
         return None
+
+    def _predetect_language(self):
+        """Commit to the source's dominant language before tokenizing.
+
+        In auto-detect mode the lexer otherwise treats a word as a keyword
+        if it is a keyword in *any* supported language, which over-reserves
+        identifiers across languages: ``i`` is ``in`` in Swedish/Danish and
+        ``y`` is ``and`` in Spanish, so an undeclared English program could
+        not name a variable ``i`` or ``y``. Reservation should be
+        context-sensitive -- a word is a keyword only when the program is
+        written in a language that reserves it.
+
+        We pick the language from *unambiguous* keywords (those owned by a
+        single language, e.g. ``let``/``return``/``print``) as strong
+        evidence, falling back to a plain keyword tally only if no
+        unambiguous keyword appears. If the winner is not unique we leave
+        the language unset and keep the permissive all-language behaviour,
+        so detection never gets worse than before -- it only sharpens when
+        the source clearly commits to one language.
+        """
+        words = re.findall(r"[^\W\d]\w*", self._source_text, flags=re.UNICODE)
+        if not words:
+            return
+        languages = self.registry.get_supported_languages()
+        strong: dict[str, int] = {}
+        weak: dict[str, int] = {}
+        for word in set(words):
+            owners = [l for l in languages if self.registry.is_keyword(word, l)]
+            if not owners:
+                continue
+            for owner in owners:
+                weak[owner] = weak.get(owner, 0) + 1
+            if len(owners) == 1:
+                strong[owners[0]] = strong.get(owners[0], 0) + 1
+        scores = strong or weak
+        if not scores:
+            return
+        best = max(scores.values())
+        winners = [lang for lang, score in scores.items() if score == best]
+        if len(winners) == 1:
+            self.language = winners[0]
     # pylint: disable=too-many-branches,too-many-statements
     def tokenize(self):
         """
@@ -191,6 +234,8 @@ class Lexer:
         Returns:
             list[Token]: List of tokens
         """
+        if self.language is None:
+            self._predetect_language()
         while not self.reader.is_at_end():
             self._skip_spaces()
             if self.reader.is_at_end():

@@ -53,6 +53,7 @@ from multilingualprogramming.codegen.linear_manifest import build_linear_manifes
 from multilingualprogramming.codegen.midi_manifest import build_midi_manifest_file
 from multilingualprogramming.codegen.opcode_ontology import write_ontology_manifest
 from multilingualprogramming.codegen.semantic_core import build_semantic_core_file
+from multilingualprogramming.codegen.process_program import build_process_core_file
 from multilingualprogramming.codegen.sonic_projection import build_sonic_manifest_file
 from multilingualprogramming.codegen.spatial_manifest import build_spatial_manifest_file
 from multilingualprogramming.codegen.volumetric_manifest import (
@@ -396,6 +397,28 @@ def cmd_polymodal_build(args):
     )
     print(f"[PASS] {args.out}")
     print(f"[polymodal] {core['kind']} entities={len(core['entities'])}")
+
+
+def cmd_process_build(args):
+    """Build a semantic-core-v1 process manifest from Multilingual source."""
+    core = build_process_core_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    state = core.get("state", {})
+    # A lattice program stores loci; a sequence (string-rewriting) program
+    # stores an ordered sequence. Report whichever this core carries.
+    if "sequence" in state:
+        size = f"symbols={len(state['sequence'])}"
+    else:
+        size = f"loci={len(state.get('loci', []))}"
+    print(f"[PASS] {args.out}")
+    print(
+        f"[process] {core['kind']} "
+        f"topology={core['topology'].get('kind')} "
+        f"schedule={core['schedule'].get('kind')} {size}"
+    )
 
 
 def cmd_sonic_build(args):
@@ -849,6 +872,20 @@ def main():  # pylint: disable=too-many-statements,too-many-locals,too-many-bran
         help="Output JSON manifest path (default: program.semantic.json)",
     )
 
+    process_build_parser = subparsers.add_parser(
+        "process-build",
+        help="Build a semantic-core-v1 process manifest (dynamics as data)",
+    )
+    process_build_parser.add_argument("file", help="Path to the source file")
+    process_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    process_build_parser.add_argument(
+        "--out", default="program.v1.json",
+        help="Output JSON manifest path (default: program.v1.json)",
+    )
+
     sonic_build_parser = subparsers.add_parser(
         "sonic-build",
         help="Build a sonic projection JSON manifest",
@@ -984,6 +1021,8 @@ def main():  # pylint: disable=too-many-statements,too-many-locals,too-many-bran
         cmd_spatial_build(args)
     elif args.command == "polymodal-build":
         cmd_polymodal_build(args)
+    elif args.command == "process-build":
+        cmd_process_build(args)
     elif args.command == "sonic-build":
         cmd_sonic_build(args)
     elif args.command == "ontology-export":
