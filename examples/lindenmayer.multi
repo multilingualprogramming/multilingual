@@ -15,16 +15,18 @@
 # replacement is LONGER than the symbol it matched, so the structure grows.
 # The engine knows nothing of L-systems; the productions live here, as data.
 
-# Productions as rewrite clauses. Under a generative schedule a clause's
-# `produce` is the SEQUENCE of symbols that replaces the matched symbol; a
-# symbol that matches no clause maps to itself. There is no totalistic
-# neighbour matching here -- the match tests only the symbol itself.
+# Productions in the rule surface syntax. Under a generative schedule a
+# clause's replacement is the SEQUENCE of symbols that replaces the matched
+# symbol -- so `becomes` here takes positional `symbol(...)` records rather
+# than keyword fields, and a replacement longer than the match grows the
+# string. A symbol that matches no clause maps to itself, so there is no
+# `fallback`. There is no totalistic neighbour matching -- the match tests
+# only the symbol itself.
 def algae_rule():
-    let clauses = [
-        {"match": {"self": {"symbol": "A"}}, "produce": [{"symbol": "A"}, {"symbol": "B"}]},
-        {"match": {"self": {"symbol": "B"}}, "produce": [{"symbol": "A"}]}
-    ]
-    return rewrite_rule(clauses, None)
+    return rewrite(
+        clause(when(symbol="A"), becomes(symbol("A"), symbol("B"))),
+        clause(when(symbol="B"), becomes(symbol("A")))
+    )
 
 # The axiom is the initial sequence: a single symbol A.
 let axiom = [{"symbol": "A"}]

@@ -220,6 +220,160 @@ def rewrite_rule(
     }
 
 
+# --------------------------------------------------------------------------
+# Rule surface syntax -- a small set of combinators that *assemble* the
+# canonical clause shape above, so a program can author its dynamics
+# declaratively instead of hand-nesting raw dicts. These are pure data
+# builders: ``rewrite`` ultimately delegates to :func:`rewrite_rule`, so a
+# rule written with the combinators is byte-identical to the same rule
+# written as literals. They live here, beside the primitive they lower to,
+# but -- like ``rewrite_rule`` itself -- they name no specific system; a
+# program still supplies its own fields, counts, and symbols.
+#
+# They are deliberately *free functions* rather than fluent methods so that
+# every one is a plain identifier the multilingual builtins catalog can
+# translate (method names would stay English). A clause reads:
+#
+#     clause(when(alive=0), neighbor_count("alive", 1, [3]), becomes(alive=1))
+#
+# The combinator names deliberately avoid control-flow vocabulary: the natural
+# translation of "produce" is "yield" and of an "otherwise"/"default" branch is
+# "else" in most languages, which are reserved keywords -- so the replacement is
+# ``becomes`` and the default is ``fallback`` (the totalistic predicate is
+# ``neighbor_count``, which also sidesteps the internal ``neighbors`` topology
+# query). A tiny private ``_dsl`` tag distinguishes the intermediate parts; the
+# finished ``clause``/``rewrite`` output carries no such tag -- it is the same
+# plain data ``rewrite_rule`` already accepts.
+# --------------------------------------------------------------------------
+
+_DSL_TAG = "_dsl"
+
+
+def when(**fields: Any) -> dict[str, Any]:
+    """A clause's ``match.self`` constraints (the locus's own field values).
+
+    ``when(alive=0)`` matches a locus whose ``alive`` field is ``0``;
+    ``when()`` (no fields) matches any locus. Pass it to :func:`clause`.
+    """
+    return {_DSL_TAG: "self", "fields": dict(fields)}
+
+
+def neighbor_count(field: str, value: Any, counts: list[int]) -> dict[str, Any]:
+    """One totalistic neighbour predicate for a clause's ``match``.
+
+    Requires that the number of neighbours whose ``field == value`` is one
+    of ``counts``. For example ``neighbor_count("alive", 1, [3])`` holds when
+    exactly three neighbours are alive. A clause may carry several.
+    """
+    return {
+        _DSL_TAG: "neighbor_count",
+        "predicate": {"field": field, "value": value, "in": list(counts)},
+    }
+
+
+def becomes(*records: dict[str, Any], **fields: Any) -> dict[str, Any]:
+    """A clause's replacement: what the matched locus becomes.
+
+    Two mutually exclusive forms:
+
+    - keyword fields -- ``becomes(alive=1)`` -- a partial-state update,
+      merged onto the locus (the lattice / totalistic form);
+    - positional records -- ``becomes(symbol("A"), symbol("B"))`` -- a
+      *sequence* of records that replaces the matched locus (the generative
+      / L-system form, where a longer replacement grows the structure).
+
+    Exactly one form must be given.
+    """
+    if records and fields:
+        raise ValueError("becomes takes either record positions or keyword fields, not both")
+    if records:
+        return {_DSL_TAG: "produce", "value": [dict(record) for record in records]}
+    if fields:
+        return {_DSL_TAG: "produce", "value": dict(fields)}
+    raise ValueError("becomes needs a state update (keywords) or records (positions)")
+
+
+def symbol(name: Any) -> dict[str, Any]:
+    """A sequence record carrying a single ``symbol`` -- e.g. ``symbol("A")``.
+
+    The atom of generative rewriting: axioms and productions are built from
+    these. ``becomes(symbol("A"), symbol("B"))`` is the production ``-> A B``.
+    """
+    return {"symbol": name}
+
+
+def fallback(**fields: Any) -> dict[str, Any]:
+    """The rule's default replacement, used when no clause matches a locus.
+
+    ``fallback(alive=0)`` is the dead-by-default of Conway's Life. Pass it
+    among the clauses of :func:`rewrite`; omit it (e.g. for a generative
+    L-system) to leave unmatched loci unchanged. It is a combinator rather
+    than a keyword argument so that, like every other part, it is a plain
+    identifier the multilingual builtins catalog can translate.
+    """
+    return {_DSL_TAG: "default", "value": dict(fields)}
+
+
+def clause(*parts: dict[str, Any]) -> dict[str, Any]:
+    """Assemble one canonical ``match -> produce`` clause from its parts.
+
+    Accepts, in any order, at most one :func:`when`, zero or more
+    :func:`neighbor_count`, and exactly one :func:`becomes`. The resulting
+    dict is exactly what :func:`rewrite_rule` expects -- ``self`` and
+    ``neighbor_count`` keys are omitted when empty, so the output matches a
+    hand-written clause byte-for-byte.
+    """
+    self_fields: dict[str, Any] | None = None
+    predicates: list[dict[str, Any]] = []
+    produce_value: Any = None
+    have_produce = False
+    for part in parts:
+        tag = part.get(_DSL_TAG) if isinstance(part, dict) else None
+        if tag == "self":
+            if self_fields is not None:
+                raise ValueError("clause takes at most one when(...)")
+            self_fields = part["fields"]
+        elif tag == "neighbor_count":
+            predicates.append(part["predicate"])
+        elif tag == "produce":
+            if have_produce:
+                raise ValueError("clause takes exactly one becomes(...)")
+            produce_value = part["value"]
+            have_produce = True
+        else:
+            raise ValueError(f"clause parts must be when/neighbor_count/becomes, got {part!r}")
+    if not have_produce:
+        raise ValueError("clause needs a becomes(...)")
+    match: dict[str, Any] = {}
+    if self_fields:
+        match["self"] = self_fields
+    if predicates:
+        match["neighbor_count"] = predicates
+    return {"match": match, "produce": produce_value}
+
+
+def rewrite(*parts: dict[str, Any]) -> dict[str, Any]:
+    """Build a rewrite rule from :func:`clause` and :func:`fallback` parts.
+
+    ``rewrite(clause(...), clause(...), fallback(alive=0))`` is exactly
+    ``rewrite_rule([clause(...), clause(...)], default={"alive": 0})`` -- a
+    thin, readable front door onto the one universal primitive. The single
+    optional :func:`fallback` part, in any position, supplies the default;
+    every other part is a clause. Omit ``fallback`` for rules (such as
+    L-systems) whose unmatched loci are left unchanged.
+    """
+    clauses: list[dict[str, Any]] = []
+    default: dict[str, Any] | None = None
+    for part in parts:
+        if isinstance(part, dict) and part.get(_DSL_TAG) == "default":
+            if default is not None:
+                raise ValueError("rewrite takes at most one fallback(...)")
+            default = part["value"]
+        else:
+            clauses.append(part)
+    return rewrite_rule(clauses, default)
+
+
 def synchronous_schedule() -> dict[str, Any]:
     """Declare a synchronous schedule.
 

@@ -60,14 +60,21 @@ from multilingualprogramming.runtime.memory_store import ml_memory
 # (State, Topology, Rule, Schedule) are assembled from .multi source the same
 # way a v0 `seed` is.
 from multilingualprogramming.codegen.process_core import (
+    becomes,
     build_process_core,
+    clause,
+    fallback,
     generative_schedule,
     infinite_lattice_topology,
     lattice_topology,
+    neighbor_count,
+    rewrite,
     rewrite_rule,
     sequence_topology,
     static_schedule,
+    symbol,
     synchronous_schedule,
+    when,
 )
 
 def _coerce_model(model):
@@ -676,6 +683,16 @@ class RuntimeBuiltins:
         "static_schedule": static_schedule,
         "generative_schedule": generative_schedule,
         "build_process_core": build_process_core,
+        # Rule surface syntax -- declarative combinators that lower to the
+        # canonical rewrite clauses (see process_core). Localized aliases for
+        # these also live in the shared builtins_aliases.json catalog.
+        "when": when,
+        "neighbor_count": neighbor_count,
+        "becomes": becomes,
+        "fallback": fallback,
+        "symbol": symbol,
+        "clause": clause,
+        "rewrite": rewrite,
     }
 
     # Non-callable special values available in exec() namespace
