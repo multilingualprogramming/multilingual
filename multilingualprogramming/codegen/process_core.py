@@ -65,9 +65,21 @@ CORE_VERSION = 1
 # Topology kinds
 TOPOLOGY_LATTICE = "lattice"
 
+# A lattice may be finite (declared width/height, optionally wrapping) or
+# infinite (no extent: every coordinate is a potential locus). Infinite
+# lattices are what make open-population programs unbounded -- a glider can
+# travel past any pre-declared edge because there is no edge.
+LATTICE_EXTENT_INFINITE = "infinite"
+
 # Neighborhood vocabularies for the lattice topology.
 NEIGHBORHOOD_MOORE8 = "moore8"  # the 8 surrounding cells
 NEIGHBORHOOD_VONNEUMANN4 = "von-neumann4"  # the 4 orthogonal cells
+
+# Population modes (a property of State): is the set of loci fixed for all
+# time, or may rules create and destroy loci? Fixed is the default so every
+# existing v1 manifest keeps its meaning.
+POPULATION_FIXED = "fixed"
+POPULATION_OPEN = "open"
 
 _MOORE8_OFFSETS = (
     (-1, -1), (0, -1), (1, -1),
@@ -81,6 +93,10 @@ RULE_REWRITE = "rewrite"
 
 # Schedule kinds
 SCHEDULE_SYNCHRONOUS = "synchronous"
+# A static (single-step) schedule does not advance: stepping is identity.
+# This is the schedule a migrated v0 snapshot carries -- "a v0 program is a
+# v1 program with an empty rule set and a single-step schedule."
+SCHEDULE_STATIC = "static"
 
 
 # --------------------------------------------------------------------------
@@ -110,6 +126,25 @@ def lattice_topology(
         "width": int(width),
         "height": int(height),
         "wrap": bool(wrap),
+        "neighborhood": neighborhood,
+    }
+
+
+def infinite_lattice_topology(
+    neighborhood: str = NEIGHBORHOOD_MOORE8,
+) -> dict[str, Any]:
+    """Declare an unbounded 2D lattice (every coordinate is reachable).
+
+    There is no width, height, or wrap: ``neighbors`` returns all adjacent
+    coordinates unconditionally. Only meaningful with open population --
+    the state stores the loci that actually exist, and rules grow or shrink
+    that set without ever hitting a wall.
+    """
+    if neighborhood not in (NEIGHBORHOOD_MOORE8, NEIGHBORHOOD_VONNEUMANN4):
+        raise ValueError(f"unknown neighborhood {neighborhood!r}")
+    return {
+        "kind": TOPOLOGY_LATTICE,
+        "extent": LATTICE_EXTENT_INFINITE,
         "neighborhood": neighborhood,
     }
 
@@ -166,6 +201,17 @@ def synchronous_schedule() -> dict[str, Any]:
     return {"kind": SCHEDULE_SYNCHRONOUS}
 
 
+def static_schedule() -> dict[str, Any]:
+    """Declare a static (single-step) schedule: the program never advances.
+
+    Stepping a static program is identity -- it is a snapshot, not a
+    process. This is what a migrated ``semantic-core-v0`` manifest carries,
+    so that "step" on a v0-as-v1 program is a faithful no-op rather than an
+    error or a reinterpretation.
+    """
+    return {"kind": SCHEDULE_STATIC}
+
+
 def build_process_core(
     state: dict[str, Any],
     topology: dict[str, Any],
@@ -195,15 +241,18 @@ def neighbors(topology: dict[str, Any], locus: tuple[int, int]) -> list[tuple[in
     kind = topology.get("kind")
     if kind != TOPOLOGY_LATTICE:
         raise NotImplementedError(f"topology kind {kind!r} not yet supported")
-    width = topology["width"]
-    height = topology["height"]
-    wrap = topology.get("wrap", True)
     offsets = (
         _MOORE8_OFFSETS
         if topology.get("neighborhood", NEIGHBORHOOD_MOORE8) == NEIGHBORHOOD_MOORE8
         else _VONNEUMANN4_OFFSETS
     )
     x, y = locus
+    if topology.get("extent") == LATTICE_EXTENT_INFINITE:
+        # No walls: every adjacent coordinate is a neighbour.
+        return [(x + dx, y + dy) for dx, dy in offsets]
+    width = topology["width"]
+    height = topology["height"]
+    wrap = topology.get("wrap", True)
     result: list[tuple[int, int]] = []
     for dx, dy in offsets:
         nx, ny = x + dx, y + dy
@@ -250,15 +299,94 @@ def _clause_matches(
     return True
 
 
+def _produce_for(
+    rec: dict[str, Any],
+    nbs: list[tuple[int, int]],
+    grid: dict[tuple[int, int], dict[str, Any]],
+    clauses: list[dict[str, Any]],
+    default: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the produce dict for a locus: first matching clause, else default."""
+    for clause in clauses:
+        if _clause_matches(rec, nbs, grid, clause.get("match", {})):
+            return clause["produce"]
+    return default
+
+
+def _is_empty(rec: dict[str, Any], empty: dict[str, Any]) -> bool:
+    """Whether a locus carries the empty state (so it does not exist)."""
+    return all(rec.get(field) == value for field, value in empty.items())
+
+
+def _step_fixed(
+    core: dict[str, Any],
+    topology: dict[str, Any],
+    clauses: list[dict[str, Any]],
+    default: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Fixed population: every declared locus persists, only its state moves."""
+    grid = _grid(core)
+    next_loci: list[dict[str, Any]] = []
+    for rec in core["state"]["loci"]:
+        locus = (rec["locus"][0], rec["locus"][1])
+        nbs = neighbors(topology, locus)
+        next_rec = dict(rec)
+        next_rec.update(_produce_for(rec, nbs, grid, clauses, default))
+        next_rec["locus"] = [locus[0], locus[1]]
+        next_loci.append(next_rec)
+    return next_loci
+
+
+def _step_open(
+    core: dict[str, Any],
+    topology: dict[str, Any],
+    clauses: list[dict[str, Any]],
+    default: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Open population: rules may create and destroy loci.
+
+    Only non-empty loci are stored. Each step considers the *frontier* --
+    every existing locus plus every neighbour of one -- because for a local
+    rule those are the only positions whose state can change. A position
+    that produces a non-empty state exists next step (a birth if it was
+    absent); one that produces the empty state is dropped (a death). This is
+    how the same totalistic rule that merely flips ``alive`` under fixed
+    population instead grows and prunes the locus set here.
+    """
+    empty = core["state"]["empty"]
+    grid = _grid(core)
+
+    candidates: set[tuple[int, int]] = set(grid)
+    for locus in grid:
+        candidates.update(neighbors(topology, locus))
+
+    next_loci: list[dict[str, Any]] = []
+    for locus in sorted(candidates):
+        rec = grid.get(locus, {"locus": [locus[0], locus[1]], **empty})
+        nbs = neighbors(topology, locus)
+        produced = dict(rec)
+        produced.update(_produce_for(rec, nbs, grid, clauses, default))
+        produced["locus"] = [locus[0], locus[1]]
+        if not _is_empty(produced, empty):
+            next_loci.append(produced)
+    return next_loci
+
+
 def step(core: dict[str, Any]) -> dict[str, Any]:
     """Advance the process core by one step, returning a new core.
 
-    Dispatches on the schedule and rule ``kind``. The input core is never
-    mutated; the topology, rule, and schedule pass through unchanged and
-    only the state advances -- so a trajectory is a sequence of full,
-    independently projectable manifests.
+    Dispatches on the schedule, rule ``kind``, and population mode. The
+    input core is never mutated; the topology, rule, and schedule pass
+    through unchanged and only the state advances -- so a trajectory is a
+    sequence of full, independently projectable manifests.
     """
     schedule_kind = core["schedule"].get("kind")
+    if schedule_kind == SCHEDULE_STATIC:
+        # A static snapshot does not evolve; stepping is identity. Return a
+        # fresh top-level shell so callers never alias the input. Crucially
+        # this path touches neither topology nor loci shape, so a migrated v0
+        # core (no coordinates, no lattice) steps cleanly as a no-op.
+        return {**core, "state": {**core["state"]}}
     if schedule_kind != SCHEDULE_SYNCHRONOUS:
         raise NotImplementedError(f"schedule kind {schedule_kind!r} not yet supported")
 
@@ -269,23 +397,16 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
     topology = core["topology"]
     clauses = rule["clauses"]
     default = rule["default"]
-    grid = _grid(core)
+    population = core["state"].get("population", POPULATION_FIXED)
 
-    next_loci: list[dict[str, Any]] = []
-    for rec in core["state"]["loci"]:
-        locus = (rec["locus"][0], rec["locus"][1])
-        nbs = neighbors(topology, locus)
-        produce = default
-        for clause in clauses:
-            if _clause_matches(rec, nbs, grid, clause.get("match", {})):
-                produce = clause["produce"]
-                break
-        next_rec = dict(rec)
-        next_rec.update(produce)
-        next_rec["locus"] = [locus[0], locus[1]]
-        next_loci.append(next_rec)
+    if population == POPULATION_FIXED:
+        next_loci = _step_fixed(core, topology, clauses, default)
+    elif population == POPULATION_OPEN:
+        next_loci = _step_open(core, topology, clauses, default)
+    else:
+        raise NotImplementedError(f"population mode {population!r} not yet supported")
 
-    return {**core, "state": {"loci": next_loci}}
+    return {**core, "state": {**core["state"], "loci": next_loci}}
 
 
 def run(core: dict[str, Any], steps: int) -> list[dict[str, Any]]:

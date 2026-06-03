@@ -71,12 +71,25 @@
 
   <div class="toolbar">
     <button id="sound">Sound: off</button>
+    <button id="mode">Mode: bounded</button>
     <span id="status">loading…</span>
   </div>
 
   <script type="module">
     import { boot } from "./process_runtime.js";
-    boot().catch((err) => {
+
+    // The same engine runs a bounded (finite lattice) and an unbounded
+    // (open-population, infinite lattice) program; the only difference is the
+    // manifest. The unbounded glider travels across a fixed viewport forever.
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get("manifest") === "program.open.v1.json";
+    const mode = document.getElementById("mode");
+    mode.textContent = open ? "Mode: unbounded" : "Mode: bounded";
+    mode.addEventListener("click", () => {
+      window.location.search = open ? "" : "?manifest=program.open.v1.json";
+    });
+
+    boot({ steps: open ? 48 : 60 }).catch((err) => {
       document.getElementById("status").textContent = `error: ${err.message}`;
       throw err;
     });

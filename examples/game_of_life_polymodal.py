@@ -115,6 +115,50 @@ def game_of_life(
     )
 
 
+def open_lattice(
+    live_cells: Iterable[tuple[int, int]],
+    rule: dict[str, Any],
+    field: str = ALIVE_FIELD,
+    source_path: str = "",
+) -> dict[str, Any]:
+    """Assemble an open-population program on an unbounded lattice.
+
+    Only the live cells exist as loci; the rule creates and destroys loci as
+    it runs, so the pattern is never confined to a pre-declared grid.
+    """
+    loci = [{"locus": [int(x), int(y)], field: 1} for x, y in live_cells]
+    return process_core.build_process_core(
+        state={
+            "loci": loci,
+            "population": process_core.POPULATION_OPEN,
+            "empty": {field: 0},
+        },
+        topology=process_core.infinite_lattice_topology(),
+        rule=rule,
+        schedule=process_core.synchronous_schedule(),
+        source_path=source_path,
+    )
+
+
+def game_of_life_open(
+    live_cells: Iterable[tuple[int, int]],
+    source_path: str = "",
+) -> dict[str, Any]:
+    """Game of Life on an unbounded lattice via open-population rewriting.
+
+    The rule data is *byte-identical* to the fixed-population
+    ``game_of_life`` above -- only the population mode and topology differ.
+    That is the Tier-3 claim: birth and death are not new rule logic, they
+    are what the same rewrite means when a match may create or destroy a
+    locus instead of merely flipping its field.
+    """
+    return open_lattice(
+        live_cells,
+        rule=life_like_rule(birth=(3,), survival=(2, 3)),
+        source_path=source_path,
+    )
+
+
 # A handful of canonical Life patterns, as live-cell coordinate lists.
 BLINKER = [(1, 1), (2, 1), (3, 1)]
 BLOCK = [(1, 1), (2, 1), (1, 2), (2, 2)]

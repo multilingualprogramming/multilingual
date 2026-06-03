@@ -25,7 +25,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from examples.game_of_life_polymodal import GLIDER, game_of_life
+from examples.game_of_life_polymodal import GLIDER, game_of_life, game_of_life_open
 from multilingualprogramming.codegen import process_core
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,9 +33,11 @@ PROCESS_DIR = ROOT / "docs" / "browser" / "process-dynamics"
 CORE_JS = PROCESS_DIR / "process_core.js"
 RUNTIME_JS = PROCESS_DIR / "process_runtime.js"
 MANIFEST = PROCESS_DIR / "program.v1.json"
-# The relative source path baked into the checked-in manifest, so
+OPEN_MANIFEST = PROCESS_DIR / "program.open.v1.json"
+# The relative source paths baked into the checked-in manifests, so
 # regeneration is reproducible regardless of where the repo is cloned.
 MANIFEST_SOURCE = "docs/browser/process-dynamics/program.v1.json"
+OPEN_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.open.v1.json"
 INDEX_HTML = PROCESS_DIR / "index.html"
 PACKAGE_JSON = PROCESS_DIR / "package.json"
 
@@ -88,6 +90,19 @@ class ManifestStabilityTestSuite(unittest.TestCase):
         self.assertEqual(on_disk["kind"], "semantic-core-v1")
         self.assertEqual(on_disk["rule"]["kind"], "rewrite")
 
+    def test_checked_in_open_manifest_matches_generator(self):
+        regenerated = game_of_life_open(GLIDER, source_path=OPEN_MANIFEST_SOURCE)
+        on_disk = json.loads(OPEN_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_open_manifest_is_open_and_unbounded(self):
+        on_disk = json.loads(OPEN_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["state"]["population"], "open")
+        self.assertEqual(on_disk["topology"]["extent"], "infinite")
+        # Same rule data as the bounded program -- only State/Topology differ.
+        bounded = json.loads(MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["rule"], bounded["rule"])
+
 
 class JsStepperSourceTestSuite(unittest.TestCase):
     """Structural guards mirroring the repo's other JS peers."""
@@ -119,10 +134,20 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         self.assertIn("./program.v1.json", source)
         self.assertNotIn("function step", source)  # no private stepper
 
+    def test_runtime_is_viewport_aware(self):
+        source = RUNTIME_JS.read_text(encoding="utf-8")
+        # The runtime must derive a finite window so it can render an
+        # unbounded (infinite-topology) program, not assume topology extent.
+        self.assertIn("LATTICE_EXTENT_INFINITE", source)
+        self.assertIn("resolveViewport", source)
+        self.assertIn("boundingBox", source)
+
     def test_index_loads_runtime_as_module(self):
         html = INDEX_HTML.read_text(encoding="utf-8")
         self.assertIn('type="module"', html)
         self.assertIn("./process_runtime.js", html)
+        # The page can switch to the unbounded program.
+        self.assertIn("program.open.v1.json", html)
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -146,6 +171,19 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
             js = _js_trajectory(path, 5)
         py = _py_trajectory(core, 5)
         self.assertEqual(js, py)
+
+    def test_open_population_trajectory_agrees(self):
+        # The Tier-3 path: birth/death on an unbounded lattice, including
+        # negative coordinates, must step identically in JS and Python.
+        core = game_of_life_open(GLIDER)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "open.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_trajectory(path, 12)
+        py = _py_trajectory(core, 12)
+        self.assertEqual(js, py)
+        # And it genuinely travelled past the initial bound.
+        self.assertTrue(max(x for x, _ in js[-1]) >= 3)
 
 
 if __name__ == "__main__":

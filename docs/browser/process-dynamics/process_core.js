@@ -18,10 +18,14 @@
 
 export const CORE_KIND = "semantic-core-v1";
 export const TOPOLOGY_LATTICE = "lattice";
+export const LATTICE_EXTENT_INFINITE = "infinite";
 export const NEIGHBORHOOD_MOORE8 = "moore8";
 export const NEIGHBORHOOD_VONNEUMANN4 = "von-neumann4";
 export const RULE_REWRITE = "rewrite";
 export const SCHEDULE_SYNCHRONOUS = "synchronous";
+export const SCHEDULE_STATIC = "static";
+export const POPULATION_FIXED = "fixed";
+export const POPULATION_OPEN = "open";
 
 const MOORE8_OFFSETS = [
   [-1, -1], [0, -1], [1, -1],
@@ -35,13 +39,17 @@ export function neighbors(topology, locus) {
   if (topology.kind !== TOPOLOGY_LATTICE) {
     throw new Error(`topology kind ${topology.kind} not yet supported`);
   }
-  const { width, height } = topology;
-  const wrap = topology.wrap !== false;
   const offsets =
     (topology.neighborhood ?? NEIGHBORHOOD_MOORE8) === NEIGHBORHOOD_MOORE8
       ? MOORE8_OFFSETS
       : VONNEUMANN4_OFFSETS;
   const [x, y] = locus;
+  if (topology.extent === LATTICE_EXTENT_INFINITE) {
+    // No walls: every adjacent coordinate is a neighbour.
+    return offsets.map(([dx, dy]) => [x + dx, y + dy]);
+  }
+  const { width, height } = topology;
+  const wrap = topology.wrap !== false;
   const result = [];
   for (const [dx, dy] of offsets) {
     let nx = x + dx;
@@ -87,9 +95,66 @@ function clauseMatches(rec, nbs, grid, match) {
   return true;
 }
 
+function produceFor(rec, nbs, grid, clauses, fallback) {
+  for (const clause of clauses) {
+    if (clauseMatches(rec, nbs, grid, clause.match ?? {})) {
+      return clause.produce;
+    }
+  }
+  return fallback;
+}
+
+function isEmpty(rec, empty) {
+  return Object.keys(empty).every((field) => rec[field] === empty[field]);
+}
+
+// Fixed population: every declared locus persists, only its state moves.
+function stepFixed(core, topology, clauses, fallback) {
+  const grid = gridOf(core);
+  return core.state.loci.map((rec) => {
+    const locus = [rec.locus[0], rec.locus[1]];
+    const nbs = neighbors(topology, locus);
+    return { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback), locus };
+  });
+}
+
+// Open population: rules may create and destroy loci. Only non-empty loci
+// are stored; each step considers the frontier (existing loci plus their
+// neighbours), since only those positions can change under a local rule.
+function stepOpen(core, topology, clauses, fallback) {
+  const empty = core.state.empty;
+  const grid = gridOf(core);
+
+  const candidates = new Map(); // key -> [x, y]
+  for (const rec of core.state.loci) {
+    const locus = [rec.locus[0], rec.locus[1]];
+    candidates.set(`${locus[0]},${locus[1]}`, locus);
+    for (const [nx, ny] of neighbors(topology, locus)) {
+      candidates.set(`${nx},${ny}`, [nx, ny]);
+    }
+  }
+
+  const next = [];
+  const ordered = [...candidates.values()].sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+  for (const locus of ordered) {
+    const rec = grid.get(`${locus[0]},${locus[1]}`) ?? { locus, ...empty };
+    const nbs = neighbors(topology, locus);
+    const produced = { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback), locus };
+    if (!isEmpty(produced, empty)) {
+      next.push(produced);
+    }
+  }
+  return next;
+}
+
 // Advance the process core by one step, returning a new core. The input is
 // never mutated; topology/rule/schedule pass through unchanged.
 export function step(core) {
+  if (core.schedule.kind === SCHEDULE_STATIC) {
+    // A static snapshot does not evolve; stepping is identity. Touches
+    // neither topology nor loci shape, so a migrated v0 core steps cleanly.
+    return { ...core, state: { ...core.state } };
+  }
   if (core.schedule.kind !== SCHEDULE_SYNCHRONOUS) {
     throw new Error(`schedule kind ${core.schedule.kind} not yet supported`);
   }
@@ -98,22 +163,18 @@ export function step(core) {
   }
   const { topology } = core;
   const { clauses, default: fallback } = core.rule;
-  const grid = gridOf(core);
+  const population = core.state.population ?? POPULATION_FIXED;
 
-  const nextLoci = core.state.loci.map((rec) => {
-    const locus = [rec.locus[0], rec.locus[1]];
-    const nbs = neighbors(topology, locus);
-    let produce = fallback;
-    for (const clause of clauses) {
-      if (clauseMatches(rec, nbs, grid, clause.match ?? {})) {
-        produce = clause.produce;
-        break;
-      }
-    }
-    return { ...rec, ...produce, locus };
-  });
+  let nextLoci;
+  if (population === POPULATION_FIXED) {
+    nextLoci = stepFixed(core, topology, clauses, fallback);
+  } else if (population === POPULATION_OPEN) {
+    nextLoci = stepOpen(core, topology, clauses, fallback);
+  } else {
+    throw new Error(`population mode ${population} not yet supported`);
+  }
 
-  return { ...core, state: { loci: nextLoci } };
+  return { ...core, state: { ...core.state, loci: nextLoci } };
 }
 
 // Run the stepper `steps` times, returning the trajectory (steps + 1 frames).

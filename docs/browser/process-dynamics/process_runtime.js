@@ -11,31 +11,63 @@
 // the sounding voices ever disagreed, a modality would be evolving the
 // program on its own -- exactly what the shared stepper forbids.
 
-import { run, activeCells } from "./process_core.js";
+import { run, activeCells, LATTICE_EXTENT_INFINITE } from "./process_core.js";
 
 const ACTIVE_FIELD = "alive";
 const STEP_MS = 220;
 
-// --- Projections of one frame (mirror process_projection.py) ---------------
+// --- Viewport: a finite window into the lattice (mirror process_projection) -
+// A bounded lattice shows its whole extent; an unbounded (infinite-topology,
+// open-population) program can only be shown through a window, so we compute
+// a box that holds the entire trajectory and keep it fixed -- the pattern
+// travels across a stable frame instead of the camera chasing it.
 
-function spatialMarks(frame) {
-  return activeCells(frame, ACTIVE_FIELD); // [[x, y], ...]
+function boundingBox(trajectory, margin = 1) {
+  const cells = trajectory.flatMap((f) => activeCells(f, ACTIVE_FIELD));
+  if (!cells.length) return { x0: 0, y0: 0, width: 1, height: 1 };
+  const xs = cells.map(([x]) => x);
+  const ys = cells.map(([, y]) => y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  return {
+    x0: minX - margin,
+    y0: minY - margin,
+    width: Math.max(...xs) - minX + 1 + 2 * margin,
+    height: Math.max(...ys) - minY + 1 + 2 * margin,
+  };
 }
 
-function sonicVoices(frame) {
-  const height = frame.topology.height;
-  // Column -> rhythmic step, row -> pitch row (row 0 at the bottom).
-  return activeCells(frame, ACTIVE_FIELD).map(([x, y]) => ({
-    step: x,
-    pitchRow: height - 1 - y,
+function resolveViewport(trajectory) {
+  const topology = trajectory[0].topology;
+  if (topology.extent === LATTICE_EXTENT_INFINITE) {
+    return boundingBox(trajectory);
+  }
+  return { x0: 0, y0: 0, width: topology.width, height: topology.height };
+}
+
+function inViewport(x, y, vp) {
+  return x >= vp.x0 && x < vp.x0 + vp.width && y >= vp.y0 && y < vp.y0 + vp.height;
+}
+
+// --- Projections of one frame within the viewport --------------------------
+
+function spatialMarks(frame, vp) {
+  return activeCells(frame, ACTIVE_FIELD).filter(([x, y]) => inViewport(x, y, vp));
+}
+
+function sonicVoices(frame, vp) {
+  const top = vp.y0 + vp.height - 1; // highest row -> highest pitch
+  return spatialMarks(frame, vp).map(([x, y]) => ({
+    step: x - vp.x0,
+    pitchRow: top - y,
   }));
 }
 
 // --- Spatial surface --------------------------------------------------------
 
-function drawSpatial(canvas, frame) {
+function drawSpatial(canvas, frame, vp) {
   const ctx = canvas.getContext("2d");
-  const { width, height } = frame.topology;
+  const { width, height } = vp;
   const cell = Math.floor(Math.min(canvas.width / width, canvas.height / height));
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#0b1020";
@@ -54,8 +86,9 @@ function drawSpatial(canvas, frame) {
     ctx.stroke();
   }
   ctx.fillStyle = "#5ad1ff";
-  for (const [x, y] of spatialMarks(frame)) {
-    ctx.fillRect(x * cell + 1, y * cell + 1, cell - 2, cell - 2);
+  for (const [x, y] of spatialMarks(frame, vp)) {
+    // Map global lattice coordinates into viewport-local cells.
+    ctx.fillRect((x - vp.x0) * cell + 1, (y - vp.y0) * cell + 1, cell - 2, cell - 2);
   }
 }
 
@@ -106,8 +139,12 @@ function makeSonic() {
 // --- Orchestration ----------------------------------------------------------
 
 export async function boot(opts = {}) {
+  const params = new URLSearchParams(window.location.search);
   const {
-    manifestUrl = "./program.v1.json",
+    // ?manifest=program.open.v1.json switches to the unbounded program.
+    manifestUrl = params.get("manifest")
+      ? `./${params.get("manifest")}`
+      : "./program.v1.json",
     steps = 60,
     canvas = document.getElementById("spatial"),
     status = document.getElementById("status"),
@@ -120,8 +157,11 @@ export async function boot(opts = {}) {
   }
 
   // The single source of motion: one stepper, one trajectory. Both
-  // modalities below read frames out of this -- they never step.
+  // modalities below read frames out of this -- they never step. The
+  // viewport is computed once from that trajectory (the full extent for a
+  // bounded lattice, a stable bounding box for an unbounded one).
   const trajectory = run(core, steps);
+  const viewport = resolveViewport(trajectory);
   const sonic = makeSonic();
   let soundOn = false;
   if (soundToggle) {
@@ -135,13 +175,13 @@ export async function boot(opts = {}) {
   let i = 0;
   function tick() {
     const frame = trajectory[i % trajectory.length];
-    drawSpatial(canvas, frame);
-    const voices = sonicVoices(frame);
+    drawSpatial(canvas, frame, viewport);
+    const voices = sonicVoices(frame, viewport);
     if (soundOn) sonic.playFrame(voices);
     if (status) {
       status.textContent =
         `frame ${i % trajectory.length} / ${trajectory.length - 1} — ` +
-        `${spatialMarks(frame).length} live cells (spatial) / ` +
+        `${spatialMarks(frame, viewport).length} live cells (spatial) / ` +
         `${voices.length} voices (sonic)`;
     }
     i += 1;
