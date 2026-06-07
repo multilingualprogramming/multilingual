@@ -110,6 +110,16 @@ _VONNEUMANN4_OFFSETS = ((0, -1), (-1, 0), (1, 0), (0, 1))
 
 # Rule kinds
 RULE_REWRITE = "rewrite"
+# A rate rule describes a *continuous* dynamics: instead of a discrete
+# match -> produce replacement, it gives each field's rate of change as a linear
+# combination of the locus's own fields and an aggregate (the mean) over its
+# neighbours. The continuous-dt schedule integrates it one explicit-Euler step.
+# This is the second general rule kind (it names no system, just as
+# ``rewrite`` does): diffusion, decay, and linear reaction-diffusion are
+# particular coefficient sets, not engine branches. Nonlinear terms (products of
+# fields) are a future rate-rule shape, the continuous analogue of the
+# positional/multiset predicates still open for ``rewrite``.
+RULE_RATE = "rate"
 
 # Schedule kinds
 SCHEDULE_SYNCHRONOUS = "synchronous"
@@ -132,6 +142,17 @@ SCHEDULE_GENERATIVE = "generative"
 # The order is fixed (sorted loci) so the result is reproducible and identical
 # in every runtime: a different order is a different schedule, not randomness.
 SCHEDULE_ASYNCHRONOUS = "asynchronous"
+# A continuous-dt schedule advances continuous-time dynamics by one explicit
+# (forward) Euler step of size ``dt``: every locus integrates ``next = current +
+# dt * rate`` from the *previous* frame (synchronous reading, like a Jacobi
+# sweep), where the rate comes from a :data:`RULE_RATE` rule. Where the
+# asynchronous schedule is the *discrete* sequential update, this is the genuine
+# continuous-time axis -- the schedule under which fields diffuse and relax
+# (Tier 1, fixed-population continuous dynamics). The step size is part of the
+# schedule (a different ``dt`` is a different schedule, not randomness), and
+# forward Euler is the cheapest falsifiable integrator -- higher-order
+# integrators (RK4, ...) are future schedule kinds, not engine branches here.
+SCHEDULE_CONTINUOUS = "continuous-dt"
 
 
 # --------------------------------------------------------------------------
@@ -267,6 +288,39 @@ def rewrite_rule(
         "kind": RULE_REWRITE,
         "clauses": clauses,
         "default": dict(default) if default is not None else None,
+    }
+
+
+def rate_rule(rates: dict[str, Any]) -> dict[str, Any]:
+    """Declare a continuous rate rule: each field's time-derivative as data.
+
+    The continuous counterpart of :func:`rewrite_rule`. ``rates`` maps a state
+    field to a description of its rate of change::
+
+        {
+          "u": {
+            "self": {"u": -0.2},           # coefficients on the locus's own fields
+            "neighbor_mean": {"u": 0.2}     # coefficients on the mean over neighbours
+          }
+        }
+
+    For each locus the rate of a field is the sum of ``self`` coefficients times
+    the locus's own field values plus ``neighbor_mean`` coefficients times the
+    mean of that field over the locus's existing neighbours. The
+    :data:`SCHEDULE_CONTINUOUS` schedule integrates one explicit-Euler step,
+    ``next[field] = field + dt * rate``.
+
+    This is enough for diffusion (``du/dt = D*(mean_nbr(u) - u)`` is
+    ``self={"u": -D}, neighbor_mean={"u": D}``), linear decay, and linear
+    reaction-diffusion -- all as pure data, no system named in the engine.
+    Like the rewrite rule it is deliberately the cheapest expressive slice:
+    nonlinear terms (products of fields) are a future rate shape.
+    """
+    if not isinstance(rates, dict):
+        raise ValueError("rates must be a dict of field -> contributions")
+    return {
+        "kind": RULE_RATE,
+        "rates": {field: dict(terms) for field, terms in rates.items()},
     }
 
 
@@ -468,6 +522,21 @@ def asynchronous_schedule() -> dict[str, Any]:
     reproducible and identical across runtimes.
     """
     return {"kind": SCHEDULE_ASYNCHRONOUS}
+
+
+def continuous_schedule(dt: float = 1.0) -> dict[str, Any]:
+    """Declare a continuous-dt schedule with explicit-Euler step size ``dt``.
+
+    Advances continuous-time dynamics by one forward-Euler step: every locus
+    integrates ``next = current + dt * rate`` from the previous frame, with the
+    rate supplied by a :func:`rate_rule`. The step size is part of the schedule,
+    so two cores differing only in ``dt`` are different programs. Pairs with a
+    lattice topology and a fixed population (continuous open-population dynamics
+    are not yet specified).
+    """
+    if dt <= 0:
+        raise ValueError("dt must be positive")
+    return {"kind": SCHEDULE_CONTINUOUS, "dt": float(dt)}
 
 
 def build_process_core(
@@ -690,6 +759,70 @@ def _step_async(
     return [dict(grid[_locus_key(rec, topology)]) for rec in core["state"]["loci"]]
 
 
+def _rate_for(
+    rec: dict[str, Any],
+    nbs: list[Any],
+    grid: dict[Any, dict[str, Any]],
+    rates: dict[str, Any],
+) -> dict[str, float]:
+    """Evaluate a rate rule at one locus: each field's time-derivative.
+
+    A field's rate is ``sum(self_coeff * own_field)`` plus
+    ``sum(neighbor_coeff * mean_over_neighbours(field))``. The mean is taken
+    over the locus's *existing* neighbours (so it is well-defined at a bounded
+    lattice's edge); with no neighbours the neighbour term is zero. Neighbours
+    are summed in :func:`neighbors` order, which is identical in every runtime,
+    so the floating-point result is reproducible across ports.
+    """
+    present = [grid[nb] for nb in nbs if nb in grid]
+    count = len(present)
+    out: dict[str, float] = {}
+    for field, terms in rates.items():
+        rate = 0.0
+        for src, coeff in terms.get("self", {}).items():
+            rate += coeff * rec.get(src, 0)
+        neighbor_mean = terms.get("neighbor_mean")
+        if neighbor_mean and count:
+            for src, coeff in neighbor_mean.items():
+                # An explicit left-fold, NOT the builtin ``sum`` -- CPython's
+                # ``sum`` uses compensated (Neumaier) float summation, which
+                # would diverge by ~1 ULP from the JS port's naive loop and
+                # break the byte-identical cross-runtime guarantee.
+                total = 0.0
+                for p in present:
+                    total += p.get(src, 0)
+                rate += coeff * (total / count)
+        out[field] = rate
+    return out
+
+
+def _step_continuous(
+    core: dict[str, Any],
+    topology: dict[str, Any],
+    rates: dict[str, Any],
+    dt: float,
+) -> list[dict[str, Any]]:
+    """Continuous dynamics: one explicit-Euler step ``next = current + dt*rate``.
+
+    Synchronous reading -- every locus integrates from the *previous* frame, so
+    a step is order-independent (a Jacobi sweep). The input is never mutated.
+    """
+    grid = _grid(core)
+    is_lattice = topology.get("kind") == TOPOLOGY_LATTICE
+    next_loci: list[dict[str, Any]] = []
+    for rec in core["state"]["loci"]:
+        key = _locus_key(rec, topology)
+        nbs = neighbors(topology, key)
+        rate = _rate_for(rec, nbs, grid, rates)
+        next_rec = dict(rec)
+        for field, value in rate.items():
+            next_rec[field] = rec.get(field, 0) + dt * value
+        if is_lattice:
+            next_rec["locus"] = [key[0], key[1]]
+        next_loci.append(next_rec)
+    return next_loci
+
+
 def _step_open(
     core: dict[str, Any],
     topology: dict[str, Any],
@@ -774,6 +907,23 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
         # this path touches neither topology nor loci shape, so a migrated v0
         # core (no coordinates, no lattice) steps cleanly as a no-op.
         return {**core, "state": {**core["state"]}}
+    if schedule_kind == SCHEDULE_CONTINUOUS:
+        # Continuous-time dynamics: integrate a rate rule one Euler step. A
+        # different rule kind (rate, not rewrite) and a fixed population only.
+        rule = core["rule"]
+        if rule.get("kind") != RULE_RATE:
+            raise NotImplementedError(
+                f"continuous-dt schedule needs a rate rule, got {rule.get('kind')!r}"
+            )
+        population = core["state"].get("population", POPULATION_FIXED)
+        if population != POPULATION_FIXED:
+            raise NotImplementedError(
+                f"continuous-dt schedule with population {population!r} not yet supported"
+            )
+        next_loci = _step_continuous(
+            core, core["topology"], rule["rates"], core["schedule"]["dt"]
+        )
+        return {**core, "state": {**core["state"], "loci": next_loci}}
     if schedule_kind not in (SCHEDULE_SYNCHRONOUS, SCHEDULE_ASYNCHRONOUS):
         raise NotImplementedError(f"schedule kind {schedule_kind!r} not yet supported")
 

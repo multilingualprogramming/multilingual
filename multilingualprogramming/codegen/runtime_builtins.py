@@ -71,11 +71,13 @@ from multilingualprogramming.codegen.process_core import (
     neighbor_count,
     rewrite,
     rewrite_rule,
+    rate_rule,
     sequence_topology,
     static_schedule,
     symbol,
     synchronous_schedule,
     asynchronous_schedule,
+    continuous_schedule,
     when,
 )
 
@@ -682,10 +684,12 @@ class RuntimeBuiltins:
         "sequence_topology": sequence_topology,
         "graph_topology": graph_topology,
         "rewrite_rule": rewrite_rule,
+        "rate_rule": rate_rule,
         "synchronous_schedule": synchronous_schedule,
         "static_schedule": static_schedule,
         "generative_schedule": generative_schedule,
         "asynchronous_schedule": asynchronous_schedule,
+        "continuous_schedule": continuous_schedule,
         "build_process_core": build_process_core,
         # Rule surface syntax -- declarative combinators that lower to the
         # canonical rewrite clauses (see process_core). Localized aliases for

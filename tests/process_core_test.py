@@ -166,8 +166,10 @@ class ProcessCoreEngineTestSuite(unittest.TestCase):
         self.assertIs(trajectory[0], core)
 
     def test_unknown_schedule_kind_raises(self):
+        # "stochastic" is the unimplemented-schedule sentinel now that
+        # continuous-dt is a real schedule (it was the previous sentinel).
         core = _single_field_lattice(3, 3, [(1, 1)])
-        core = {**core, "schedule": {"kind": "continuous-dt"}}
+        core = {**core, "schedule": {"kind": "stochastic"}}
         with self.assertRaises(NotImplementedError):
             step(core)
 

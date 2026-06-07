@@ -56,6 +56,11 @@ GRAPH_RUNTIME_JS = PROCESS_DIR / "graph_runtime.js"
 GRAPH_MANIFEST = PROCESS_DIR / "program.graph.v1.json"
 GRAPH_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.graph.v1.json"
 GRAPH_SOURCE = ROOT / "examples" / "network_epidemic.multi"
+DIFFUSION_HTML = PROCESS_DIR / "diffusion.html"
+DIFFUSION_RUNTIME_JS = PROCESS_DIR / "diffusion_runtime.js"
+DIFFUSION_MANIFEST = PROCESS_DIR / "program.diffusion.v1.json"
+DIFFUSION_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.diffusion.v1.json"
+DIFFUSION_SOURCE = ROOT / "examples" / "diffusion.multi"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -94,6 +99,20 @@ const { run, fieldCells } = await import(pathToFileURL(corePath).href);
 const core = JSON.parse(readFileSync(manifestPath, 'utf-8'));
 const trajectory = run(core, Number(steps));
 process.stdout.write(JSON.stringify(trajectory.map((f) => fieldCells(f, 'species'))));
+"""
+
+
+# The continuous path reads each cell's continuous value (field `u`) out of
+# every frame via the shared fieldCells -- the same driver shape as the field
+# path, on a float-valued field, so it doubles as a cross-runtime float check.
+_DIFFUSION_DRIVER = """\
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+const [, , corePath, manifestPath, steps] = process.argv;
+const { run, fieldCells } = await import(pathToFileURL(corePath).href);
+const core = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+const trajectory = run(core, Number(steps));
+process.stdout.write(JSON.stringify(trajectory.map((f) => fieldCells(f, 'u'))));
 """
 
 
@@ -137,6 +156,10 @@ def _js_field(manifest_path: Path, steps: int):
 
 def _js_nodes(manifest_path: Path, steps: int):
     return _run_driver(_NODE_DRIVER, manifest_path, steps)
+
+
+def _js_diffusion(manifest_path: Path, steps: int):
+    return _run_driver(_DIFFUSION_DRIVER, manifest_path, steps)
 
 
 def _py_trajectory(core: dict, steps: int) -> list[list[list[int]]]:
@@ -230,6 +253,28 @@ class ManifestStabilityTestSuite(unittest.TestCase):
         self.assertIn("edges", on_disk["topology"])
         self.assertIn("node", on_disk["state"]["loci"][0])
 
+    def test_checked_in_diffusion_manifest_matches_multi_build(self):
+        # The browser diffusion manifest is the .multi program built to JSON; it
+        # must not drift from examples/diffusion.multi.
+        regenerated = process_program.execute_process(
+            DIFFUSION_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=DIFFUSION_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(DIFFUSION_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_diffusion_manifest_is_lattice_continuous(self):
+        on_disk = json.loads(DIFFUSION_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["kind"], "semantic-core-v1")
+        self.assertEqual(on_disk["topology"]["kind"], "lattice")
+        self.assertEqual(on_disk["schedule"]["kind"], "continuous-dt")
+        # A continuous rate rule (not a discrete rewrite), and a real dt.
+        self.assertEqual(on_disk["rule"]["kind"], "rate")
+        self.assertIn("dt", on_disk["schedule"])
+        # Continuous per-cell value: loci carry a float field, not a boolean.
+        self.assertIn("u", on_disk["state"]["loci"][0])
+
 
 class JsStepperSourceTestSuite(unittest.TestCase):
     """Structural guards mirroring the repo's other JS peers."""
@@ -267,6 +312,14 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         source = CORE_JS.read_text(encoding="utf-8")
         for symbol in ("TOPOLOGY_GRAPH", "export function nodeCells",
                        "export function tierOf", "export const TIER_NAMES"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
+    def test_core_js_ports_the_continuous_axis(self):
+        # The continuous-dt schedule and rate rule kind must exist in the
+        # browser engine too, so the diffusion runtime shares the one stepper
+        # rather than rolling its own integrator.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("SCHEDULE_CONTINUOUS", "RULE_RATE"):
             self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
 
     def test_core_js_defines_no_specific_system(self):
@@ -348,6 +401,22 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         html = GRAPH_HTML.read_text(encoding="utf-8")
         self.assertIn('type="module"', html)
         self.assertIn("./graph_runtime.js", html)
+
+    def test_diffusion_runtime_uses_shared_stepper(self):
+        source = DIFFUSION_RUNTIME_JS.read_text(encoding="utf-8")
+        # The continuous runtime must import motion from the one shared core --
+        # the same engine as the discrete runtimes, not its own integrator.
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("fieldCells", source)
+        self.assertIn("SCHEDULE_CONTINUOUS", source)
+        self.assertIn("./program.diffusion.v1.json", source)
+        self.assertIn("tierOf", source)  # the tier shown in the status line
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_diffusion_page_loads_diffusion_runtime_as_module(self):
+        html = DIFFUSION_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./diffusion_runtime.js", html)
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -451,6 +520,31 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
         self.assertEqual(len(js), STEPS + 1)
         self.assertEqual(js, py)
         # And the outbreak genuinely spread (not a no-op).
+        self.assertNotEqual(js[0], js[-1])
+
+    def test_continuous_diffusion_trajectory_agrees(self):
+        # The continuous axis: a heat-diffusion field authored in .multi must
+        # integrate identically in JS and Python, *float for float*, across the
+        # whole trajectory. This is the sharpest cross-runtime check yet --
+        # floating-point Euler steps must agree bit-for-bit, which only holds
+        # because both ports sum neighbours in the same order with a naive
+        # left-fold (CPython's compensated `sum` would diverge by ~1 ULP).
+        core = process_program.execute_process(
+            DIFFUSION_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(DIFFUSION_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "diffusion.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_diffusion(path, STEPS)
+        py = [
+            [list(cell) for cell in process_core.field_cells(frame, "u")]
+            for frame in process_core.run(core, STEPS)
+        ]
+        self.assertEqual(len(js), STEPS + 1)
+        self.assertEqual(js, py)
+        # And the field genuinely diffused (the continuous step is not a no-op).
         self.assertNotEqual(js[0], js[-1])
 
 

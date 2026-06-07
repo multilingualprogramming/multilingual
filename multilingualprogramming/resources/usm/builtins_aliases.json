@@ -1410,6 +1410,24 @@
       "da": ["omskrivning_regel"],
       "fi": ["uudelleenkirjoitus_saanto"]
     },
+    "rate_rule": {
+      "fr": ["regle_taux"],
+      "es": ["regla_tasa"],
+      "de": ["raten_regel"],
+      "it": ["regola_tasso"],
+      "pt": ["regra_taxa"],
+      "hi": ["दर_नियम"],
+      "ar": ["معدل_قاعدة"],
+      "bn": ["হার_নিয়ম"],
+      "ta": ["வீதம்_விதி"],
+      "zh": ["速率_规则"],
+      "ja": ["速度_規則"],
+      "pl": ["tempo_regula"],
+      "nl": ["snelheid_regel"],
+      "sv": ["hastighet_regel"],
+      "da": ["hastighed_regel"],
+      "fi": ["nopeus_saanto"]
+    },
     "synchronous_schedule": {
       "fr": ["ordonnancement_synchrone"],
       "es": ["planificacion_sincrona"],
@@ -1535,6 +1553,24 @@
       "sv": ["asynkron_schema"],
       "da": ["asynkron_tidsplan"],
       "fi": ["asynkroninen_aikataulu"]
+    },
+    "continuous_schedule": {
+      "fr": ["ordonnancement_continu"],
+      "es": ["planificacion_continua"],
+      "de": ["kontinuierlicher_zeitplan"],
+      "it": ["pianificazione_continua"],
+      "pt": ["agendamento_continuo"],
+      "hi": ["निरंतर_अनुसूची"],
+      "ar": ["مستمر_جدولة"],
+      "bn": ["অবিচ্ছিন্ন_সময়সূচি"],
+      "ta": ["தொடர்ச்சியான_அட்டவணை"],
+      "zh": ["连续_调度"],
+      "ja": ["連続_スケジュール"],
+      "pl": ["ciagly_harmonogram"],
+      "nl": ["continu_planning"],
+      "sv": ["kontinuerlig_schema"],
+      "da": ["kontinuerlig_tidsplan"],
+      "fi": ["jatkuva_aikataulu"]
     },
     "when": {
       "fr": ["quand"],

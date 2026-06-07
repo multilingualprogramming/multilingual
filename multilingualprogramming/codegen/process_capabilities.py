@@ -74,8 +74,12 @@ def expressiveness_tier(core: dict[str, Any]) -> int:
     if core["schedule"].get("kind") == process_core.SCHEDULE_STATIC:
         return 0
 
+    # A *rewrite* rule with no clauses rewrites nothing -- a static structure
+    # (Tier 0). A rate rule has no clauses but is genuine continuous dynamics,
+    # so it must not be caught here; it falls through to the lattice/schedule
+    # classification below and lands at Tier 1.
     rule = core["rule"]
-    if not rule.get("clauses"):
+    if rule.get("kind") == process_core.RULE_REWRITE and not rule.get("clauses"):
         return 0
 
     # A generative schedule is the generativity signal (productions may be

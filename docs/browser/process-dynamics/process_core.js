@@ -24,10 +24,12 @@ export const LATTICE_EXTENT_INFINITE = "infinite";
 export const NEIGHBORHOOD_MOORE8 = "moore8";
 export const NEIGHBORHOOD_VONNEUMANN4 = "von-neumann4";
 export const RULE_REWRITE = "rewrite";
+export const RULE_RATE = "rate";
 export const SCHEDULE_SYNCHRONOUS = "synchronous";
 export const SCHEDULE_STATIC = "static";
 export const SCHEDULE_GENERATIVE = "generative";
 export const SCHEDULE_ASYNCHRONOUS = "asynchronous";
+export const SCHEDULE_CONTINUOUS = "continuous-dt";
 export const POPULATION_FIXED = "fixed";
 export const POPULATION_OPEN = "open";
 
@@ -227,6 +229,58 @@ function stepAsync(core, topology, clauses, fallback) {
   return core.state.loci.map((rec) => ({ ...grid.get(locusKey(rec, topology)) }));
 }
 
+// Evaluate a rate rule at one locus: each field's time-derivative is the sum of
+// `self` coefficients times the locus's own fields plus `neighbor_mean`
+// coefficients times the mean of that field over its existing neighbours.
+// Neighbours are summed in neighbors() order -- identical in Python -- so the
+// floating-point result is byte-identical across ports.
+function rateFor(rec, nbs, grid, rates, topology) {
+  const present = [];
+  for (const nb of nbs) {
+    const node = grid.get(neighbourKey(nb, topology));
+    if (node) present.push(node);
+  }
+  const count = present.length;
+  const out = {};
+  for (const field of Object.keys(rates)) {
+    const terms = rates[field];
+    let rate = 0.0;
+    const self = terms.self ?? {};
+    for (const src of Object.keys(self)) {
+      rate += self[src] * (rec[src] ?? 0);
+    }
+    const neighborMean = terms.neighbor_mean;
+    if (neighborMean && count) {
+      for (const src of Object.keys(neighborMean)) {
+        let total = 0;
+        for (const p of present) total += p[src] ?? 0;
+        rate += neighborMean[src] * (total / count);
+      }
+    }
+    out[field] = rate;
+  }
+  return out;
+}
+
+// Continuous dynamics: one explicit-Euler step `next = current + dt*rate`.
+// Synchronous reading -- every locus integrates from the previous frame, so a
+// step is order-independent (a Jacobi sweep). The input is never mutated.
+function stepContinuous(core, topology, rates, dt) {
+  const grid = gridOf(core, topology);
+  const isLattice = topology.kind === TOPOLOGY_LATTICE;
+  return core.state.loci.map((rec) => {
+    const locus = adjacencyLocus(rec, topology);
+    const nbs = neighbors(topology, locus);
+    const rate = rateFor(rec, nbs, grid, rates, topology);
+    const next = { ...rec };
+    for (const field of Object.keys(rate)) {
+      next[field] = (rec[field] ?? 0) + dt * rate[field];
+    }
+    if (isLattice) next.locus = [rec.locus[0], rec.locus[1]];
+    return next;
+  });
+}
+
 // Generative rewriting: rewrite every symbol of a sequence in parallel and
 // concatenate the productions. A clause's `produce` is a *list* of records
 // that replaces the matched symbol, so a production longer than one symbol
@@ -272,6 +326,19 @@ export function step(core) {
     // A static snapshot does not evolve; stepping is identity. Touches
     // neither topology nor loci shape, so a migrated v0 core steps cleanly.
     return { ...core, state: { ...core.state } };
+  }
+  if (core.schedule.kind === SCHEDULE_CONTINUOUS) {
+    // Continuous-time dynamics: integrate a rate rule one Euler step. A
+    // different rule kind (rate, not rewrite) and a fixed population only.
+    if (core.rule.kind !== RULE_RATE) {
+      throw new Error(`continuous-dt schedule needs a rate rule, got ${core.rule.kind}`);
+    }
+    const population = core.state.population ?? POPULATION_FIXED;
+    if (population !== POPULATION_FIXED) {
+      throw new Error(`continuous-dt schedule with population ${population} not yet supported`);
+    }
+    const nextLoci = stepContinuous(core, core.topology, core.rule.rates, core.schedule.dt);
+    return { ...core, state: { ...core.state, loci: nextLoci } };
   }
   if (
     core.schedule.kind !== SCHEDULE_SYNCHRONOUS &&
@@ -372,7 +439,11 @@ export const TIER_NAMES = {
 
 export function tierOf(core) {
   if (core.schedule.kind === SCHEDULE_STATIC) return 0;
-  if (!core.rule.clauses || core.rule.clauses.length === 0) return 0;
+  // Only a *rewrite* rule with no clauses is static; a rate rule has no clauses
+  // yet is genuine continuous dynamics, so it must fall through to Tier 1.
+  if (core.rule.kind === RULE_REWRITE && (!core.rule.clauses || core.rule.clauses.length === 0)) {
+    return 0;
+  }
   if (core.schedule.kind === SCHEDULE_GENERATIVE) return 3;
   if (core.topology.kind !== TOPOLOGY_LATTICE) return 4;
   const population = core.state.population ?? POPULATION_FIXED;
