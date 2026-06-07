@@ -55,6 +55,10 @@
     button:hover { border-color: var(--accent); color: var(--accent); }
     #status { font-variant-numeric: tabular-nums; font-size: 0.85rem; opacity: 0.85; }
     code { color: var(--accent); }
+    nav.demos { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 12px; font-size: 0.82rem; }
+    nav.demos a { color: var(--ink); opacity: 0.65; text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+    nav.demos a:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    nav.demos a.active { color: var(--accent); border-color: var(--accent); opacity: 1; }
   </style>
 </head>
 <body>
@@ -70,6 +74,13 @@
       The status line shows the program's expressiveness tier, read from its axes
       by the shared classifier.
     </p>
+    <nav class="demos">
+      <a href="./index.html">Life</a>
+      <a href="./lsystem.html" class="active">L-system</a>
+      <a href="./ecosystem.html">Ecosystem</a>
+      <a href="./graph.html">Network</a>
+      <a href="./diffusion.html">Diffusion</a>
+    </nav>
   </header>
 
   <canvas id="spatial" width="720" height="360"></canvas>

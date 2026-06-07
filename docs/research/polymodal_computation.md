@@ -676,10 +676,28 @@ polymodal claim stronger:
    the migrated core's loci and the round-trip recovers the original v0 entities
    exactly (Tier 0, "invertible everywhere"). So even a static v0 structure
    travels the one shared stepper and the one projection discipline as every
-   dynamic program does — no special engine path. Still open on the topology
-   axis: positional / multiset match clauses, continuous-`dt` schedules, and
-   *structure-changing* graph rewriting (creating and destroying nodes/edges),
-   which is the genuinely view-only end of Tier 4.
+   dynamic program does — no special engine path.
+   *Continuous-time dynamics landed:* the schedule axis is now complete. Beside
+   the discrete schedules (synchronous, asynchronous, generative, static) sits
+   **continuous-`dt`**, which integrates a new general rule kind — a *rate* rule
+   (`rate_rule`), each field's time-derivative as a linear combination of the
+   locus's own fields and the mean over its neighbours — by one explicit-Euler
+   step `next = current + dt·rate`. It is the second general rule kind beside
+   `rewrite`, and it names no system: diffusion is a particular set of
+   coefficients, not an engine branch. `examples/diffusion.multi` (en + fr)
+   authors the heat equation `du/dt = D·(mean_nbr(u) − u)` on a torus; on the
+   mean-stencil total mass is conserved exactly while the bump relaxes, and the
+   value-aware field projection renders it (heat field + sampled chord) exactly
+   invertibly at **Tier 1** (fixed-population continuous dynamics) — the first
+   program to reach that tier through a non-rewrite rule, classified from the
+   axes, not a label. A browser page shows it with the tier in the status line.
+   (A load-bearing detail the JS/Python byte-identical guard surfaced: CPython's
+   `sum` uses compensated summation, so the rate must use a naive left-fold to
+   match the JS port bit-for-bit.) Still open on the rule/topology axes:
+   positional / multiset match clauses, higher-order integrators (RK4) and
+   continuous-metric (particle/boids) topologies, and *structure-changing* graph
+   rewriting (creating and destroying nodes/edges), which is the genuinely
+   view-only end of Tier 4.
 
 The strongest near-term proof is:
 
