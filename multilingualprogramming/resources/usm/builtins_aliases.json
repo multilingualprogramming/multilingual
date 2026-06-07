@@ -1482,6 +1482,24 @@
       "da": ["sekvens_topologi"],
       "fi": ["sekvenssi_topologia"]
     },
+    "graph_topology": {
+      "fr": ["graphe_topologie"],
+      "es": ["grafo_topologia"],
+      "de": ["graph_topologie"],
+      "it": ["grafo_topologia"],
+      "pt": ["grafo_topologia"],
+      "hi": ["ग्राफ़_टोपोलॉजी"],
+      "ar": ["مخطط_طوبولوجيا"],
+      "bn": ["গ্রাফ_টপোলজি"],
+      "ta": ["வரைபடம்_இடவியல்"],
+      "zh": ["图_拓扑"],
+      "ja": ["グラフ_トポロジー"],
+      "pl": ["graf_topologia"],
+      "nl": ["graaf_topologie"],
+      "sv": ["graf_topologi"],
+      "da": ["graf_topologi"],
+      "fi": ["graafi_topologia"]
+    },
     "generative_schedule": {
       "fr": ["generatif_ordonnancement"],
       "es": ["generativo_planificacion"],

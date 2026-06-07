@@ -282,6 +282,17 @@ a clearly marked frontier beyond which perceptual *authoring* degrades.**
 That is not a retreat — it is the honest statement of what polymodal
 universality can claim.
 
+A subtlety the implementation makes concrete: the tier is the *class* ceiling,
+not a per-program verdict. A program may sit at Tier 4 because its topology is a
+graph (graphs *can* host structure-changing rewriting, which is view-only) and
+yet, if that particular program only rewrites node *states* on a *fixed* graph,
+project and invert exactly. The network-contagion example does exactly this — it
+is Tier 4 but its projection round-trips every node. So the tier (read from the
+axes by `expressiveness_tier` / `tierOf`) and the concrete inverse level (read
+from coverage by each projection's capability contract) are **orthogonal**: the
+tier says how expressive the form is, the contract says what *this* projection
+of *this* run recovers.
+
 ### Cheapest falsifiable first step
 
 Mirror how `linear` cheaply proved the dimensionality axis. Implement
@@ -638,8 +649,28 @@ polymodal claim stronger:
    the same shared stepper and classifies as Tier 3 (generative). This is
    the second `.multi` process program and the first that is *not* a
    cellular automaton — evidence the calculus generalises past lattices.
-   Still pending for L-systems: the JS/browser port and a sequence
-   projection (string -> spatial turtle / sonic melody).
+   L-systems are now end-to-end: the generative stepper is ported to JS, a
+   `sequence` projection lays the word out as a piano-roll over the alphabet
+   (spatial == sonic == word, exactly invertible), and a browser page animates
+   it through the one shared stepper.
+   *Asynchronous / heterogeneous-state axis landed:* an `asynchronous` schedule
+   (sequential in-place update) over a multi-valued field expresses a
+   cyclic-dominance ecology (`examples/ecosystem.multi`, en + fr) — Tier 1, with
+   a value-aware field projection and a browser page, all on the project rhythm
+   (engine Python+JS parity → `.multi` example → projection → browser → tests).
+   *Graph topology landed:* the engine now answers adjacency from an explicit
+   edge set (`graph_topology`), so the *same* rewrite rule that flips a lattice
+   cell drives a node on an arbitrary network — only the topology decides who is
+   a neighbour. `examples/network_epidemic.multi` (en + fr) is a discrete SIR
+   contagion on a two-community contact graph; it classifies as **Tier 4**
+   (graph rewriting) yet its `process_graph_projection` round-trips **exactly**
+   over the node set — a concrete demonstration that the tier (the expressive
+   *class* ceiling) and the per-instance invertibility are orthogonal. A browser
+   page renders it as a node-link diagram + chord and shows the tier in the
+   status line via the shared classifier (`tierOf`). Still open on the topology
+   axis: positional / multiset match clauses, continuous-`dt` schedules, and
+   *structure-changing* graph rewriting (creating and destroying nodes/edges),
+   which is the genuinely view-only end of Tier 4.
 
 The strongest near-term proof is:
 

@@ -1,0 +1,57 @@
+# A network contagion as a semantic-core-v1 polymodal program, authored
+# entirely in the Multilingual language -- no Python. Build with:
+#
+#     python -m multilingualprogramming process-build examples/network_epidemic.multi
+#
+# Game of Life and the ecosystem run on a lattice, where a neighbour is decided
+# by position. Many real processes are not: an epidemic, a rumour, a cascading
+# failure spread along an arbitrary GRAPH of contacts, and two wired nodes may
+# sit anywhere. The graph topology decouples interaction from position --
+# adjacency is the explicit edge set, not the geometry.
+#
+# This is the discrete SIR model on a contact graph: two well-connected
+# communities joined by a single bridge, so an outbreak must sweep one community
+# and then cross the bridge to reach the other. State per node: 0 susceptible,
+# 1 infected, 2 recovered. It exercises the axis Game of Life, the L-system and
+# the ecosystem did not: an arbitrary graph topology. The engine in
+# `process_core` knows no epidemiology -- the rule and the graph live here, as
+# data, exactly as the research doc requires.
+
+# The discrete SIR transition. Tried in order: an infected node (1) recovers
+# (2); a susceptible node (0) with at least one infected neighbour catches it
+# (1). A node matching neither clause -- recovered, or susceptible with no
+# infected contact -- is left unchanged (there is no `fallback`), so the rule
+# speaks only of recovery and infection. "At least one" is the totalistic count
+# 1..11 (a node has at most 11 neighbours in a 12-node graph).
+def sir_rule():
+    let contact = [c for c in range(1, 12)]
+    return rewrite(
+        clause(when(state=1), becomes(state=2)),
+        clause(when(state=0), neighbor_count("state", 1, contact), becomes(state=1))
+    )
+
+# Two six-node communities. Each is a ring (i -- i+1) plus three long diagonals,
+# so every node has degree three or four within its community; ids 0..5 are
+# community A, 6..11 community B. The bridge [0, 9] wires A's right-side node to
+# B's left-side node, the only path between the communities.
+let ring = [[i, (i + 1) % 6] for i in range(6)]
+let chords = [[0, 3], [1, 4], [2, 5]]
+let within = ring + chords
+let edges = [[c * 6 + a, c * 6 + b] for c in range(2) for a, b in within] + [[0, 9]]
+
+# Lay the communities out as two hexagons -- a view hint for drawing only; the
+# engine reads only `node` and the edges. Node 3 (far left of community A, away
+# from the bridge) starts infected, every other node susceptible, so the
+# outbreak has to traverse A before it can cross to B.
+let hex_off = [[2, 0], [1, 2], [-1, 2], [-2, 0], [-1, -2], [1, -2]]
+let loci = [{"node": c * 6 + i, "locus": [3 + c * 8 + hex_off[i][0], 3 + hex_off[i][1]], "state": (1 if c * 6 + i == 3 else 0)} for c in range(2) for i in range(6)]
+let state = {"loci": loci}
+
+# Assemble the four modality-free axes: a graph topology rewritten by the SIR
+# rule under a synchronous schedule.
+let process = build_process_core(
+    state,
+    graph_topology(edges),
+    sir_rule(),
+    synchronous_schedule()
+)

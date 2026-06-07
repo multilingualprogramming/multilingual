@@ -48,11 +48,14 @@ matching, ``Schedule = synchronous`` -- enough to run any outer-totalistic
 program (Game of Life among them) through one engine. Each axis dispatches
 on a ``kind`` tag, so further kinds land as new interpreters without
 disturbing the ones below: generative/open-population rewriting (L-systems,
-unbounded automata), a sequence topology, and an **asynchronous** schedule
-(sequential in-place update -- ecological / excitable-media models) have
-since joined; graph topology and positional/continuous-time kinds remain
-open. The lattice ``Rule`` is unchanged across schedules -- only the
-schedule's reading of it (parallel vs. sequential vs. generative) differs.
+unbounded automata), a sequence topology, an **asynchronous** schedule
+(sequential in-place update -- ecological / excitable-media models), and a
+**graph** topology (arbitrary adjacency -- networks, contagion, circuits)
+have since joined; positional/continuous-time kinds remain open. The lattice
+``Rule`` is unchanged across schedules -- only the schedule's reading of it
+(parallel vs. sequential vs. generative) differs, and the same rewrite
+primitive that flips a lattice cell drives a graph node, the topology alone
+deciding what counts as a neighbour.
 
 A ``semantic-core-v0`` program is, in this framing, just a v1 program with
 an empty rule set and a single-step schedule; that migration is left for a
@@ -73,6 +76,14 @@ TOPOLOGY_LATTICE = "lattice"
 # Context-free productions ignore neighbours; the query exists so that
 # context-sensitive rewriting can land later without a new topology kind.
 TOPOLOGY_SEQUENCE = "sequence"
+# A graph is an arbitrary adjacency: loci are nodes and an explicit edge set
+# answers ``neighbors``. Unlike a lattice, adjacency is not derived from
+# position -- a node's neighbours are whoever it is wired to, however far away
+# they sit in any spatial embedding -- which is exactly what makes networks
+# (social graphs, transport maps, circuits) expressible. A node may still carry
+# coordinates, but only as a view hint for projection; the engine reads only
+# ``node`` and the edges.
+TOPOLOGY_GRAPH = "graph"
 
 # A lattice may be finite (declared width/height, optionally wrapping) or
 # infinite (no extent: every coordinate is a potential locus). Infinite
@@ -182,6 +193,32 @@ def sequence_topology() -> dict[str, Any]:
     symbols -- the L-system / string-rewriting shape.
     """
     return {"kind": TOPOLOGY_SEQUENCE}
+
+
+def graph_topology(
+    edges: list[list[Any]],
+    directed: bool = False,
+) -> dict[str, Any]:
+    """Declare a graph topology from an explicit edge set.
+
+    Loci are nodes; each is identified by a ``node`` value in its state record
+    (any hashable -- an int or a string). ``edges`` is a list of ``[a, b]``
+    pairs; :func:`neighbors` answers adjacency from them. By default the graph
+    is undirected (an edge ``[a, b]`` makes ``a`` and ``b`` mutual neighbours);
+    set ``directed`` to treat ``[a, b]`` as ``a -> b`` only.
+
+    This is the topology that decouples *interaction* from *position*: a node's
+    neighbours are whoever it is wired to, not whoever sits nearby, so a rule
+    spreads along the wiring (a contagion across a social graph, a signal across
+    a circuit) rather than across a grid. Nodes may still carry a ``locus``
+    coordinate, but only as a hint for spatial projection -- the engine reads
+    only ``node`` and these edges.
+    """
+    return {
+        "kind": TOPOLOGY_GRAPH,
+        "edges": [[a, b] for a, b in edges],
+        "directed": bool(directed),
+    }
 
 
 def rewrite_rule(
@@ -457,14 +494,48 @@ def build_process_core(
 # topology: which loci are adjacent to this one?
 # --------------------------------------------------------------------------
 
-def neighbors(topology: dict[str, Any], locus: tuple[int, int]) -> list[tuple[int, int]]:
-    """Return the loci adjacent to ``locus`` under ``topology``."""
+def _graph_adjacency(topology: dict[str, Any]) -> dict[Any, list[Any]]:
+    """Build an adjacency map from a graph topology's edge set.
+
+    Undirected edges contribute both directions; insertion order is preserved
+    and duplicates dropped, so the neighbour list is deterministic. (Counting
+    is totalistic, so neighbour *order* never affects a rule -- determinism here
+    is only so two runtimes agree on the set.)
+    """
+    adjacency: dict[Any, list[Any]] = {}
+    directed = topology.get("directed", False)
+
+    def link(a: Any, b: Any) -> None:
+        bucket = adjacency.setdefault(a, [])
+        if b not in bucket:
+            bucket.append(b)
+
+    for a, b in topology["edges"]:
+        link(a, b)
+        if not directed:
+            link(b, a)
+    return adjacency
+
+
+def neighbors(topology: dict[str, Any], locus: Any) -> list[Any]:
+    """Return the loci adjacent to ``locus`` under ``topology``.
+
+    ``locus`` is whatever identifies a locus for the topology: an ``(x, y)``
+    coordinate for a lattice, an integer position for a sequence, a ``node``
+    value for a graph. The returned neighbours are of the same kind, so the
+    stepper can look each up in its grid.
+    """
     kind = topology.get("kind")
     if kind == TOPOLOGY_SEQUENCE:
         # A sequence locus is an integer position; its neighbours are the
         # adjacent positions. Context-free productions never ask, but
         # context-sensitive ones will.
         return [locus - 1, locus + 1]
+    if kind == TOPOLOGY_GRAPH:
+        # A graph locus is a node id; its neighbours are whoever the edges wire
+        # it to. Adjacency is rebuilt per call to keep the topology pure data
+        # (no cached object on the dict); graphs here are small.
+        return _graph_adjacency(topology).get(locus, [])
     if kind != TOPOLOGY_LATTICE:
         raise NotImplementedError(f"topology kind {kind!r} not yet supported")
     offsets = (
@@ -495,12 +566,22 @@ def neighbors(topology: dict[str, Any], locus: tuple[int, int]) -> list[tuple[in
 # it contains no knowledge of any particular system.
 # --------------------------------------------------------------------------
 
-def _grid(core: dict[str, Any]) -> dict[tuple[int, int], dict[str, Any]]:
-    """Index the state's loci by coordinate for neighbor lookups."""
-    return {
-        (rec["locus"][0], rec["locus"][1]): rec
-        for rec in core["state"]["loci"]
-    }
+def _locus_key(rec: dict[str, Any], topology: dict[str, Any]) -> Any:
+    """The key under which a locus is indexed and looked up as a neighbour.
+
+    A lattice / sequence locus is positional, so its key is its coordinate; a
+    graph locus is its ``node`` id. The key is exactly what :func:`neighbors`
+    returns for that topology, so neighbour lookups in the grid line up.
+    """
+    if topology.get("kind") == TOPOLOGY_GRAPH:
+        return rec["node"]
+    return (rec["locus"][0], rec["locus"][1])
+
+
+def _grid(core: dict[str, Any]) -> dict[Any, dict[str, Any]]:
+    """Index the state's loci by their topology key for neighbor lookups."""
+    topology = core["topology"]
+    return {_locus_key(rec, topology): rec for rec in core["state"]["loci"]}
 
 
 def _clause_matches(
@@ -560,15 +641,19 @@ def _step_fixed(
 ) -> list[dict[str, Any]]:
     """Fixed population: every declared locus persists, only its state moves."""
     grid = _grid(core)
+    is_lattice = topology.get("kind") == TOPOLOGY_LATTICE
     next_loci: list[dict[str, Any]] = []
     for rec in core["state"]["loci"]:
-        locus = (rec["locus"][0], rec["locus"][1])
-        nbs = neighbors(topology, locus)
+        key = _locus_key(rec, topology)
+        nbs = neighbors(topology, key)
         next_rec = dict(rec)
         produce = _produce_for(rec, nbs, grid, clauses, default)
         if produce is not None:
             next_rec.update(produce)
-        next_rec["locus"] = [locus[0], locus[1]]
+        if is_lattice:
+            # Normalize the coordinate to a list (a graph node keeps whatever
+            # ``locus`` view hint it carried, untouched).
+            next_rec["locus"] = [key[0], key[1]]
         next_loci.append(next_rec)
     return next_loci
 
@@ -589,18 +674,20 @@ def _step_async(
     loci order so the manifest's ``loci`` sequence is stable frame to frame.
     """
     grid = _grid(core)
-    for locus in sorted(grid):
-        rec = grid[locus]
-        nbs = neighbors(topology, locus)
+    is_lattice = topology.get("kind") == TOPOLOGY_LATTICE
+    for key in sorted(grid):
+        rec = grid[key]
+        nbs = neighbors(topology, key)
         produce = _produce_for(rec, nbs, grid, clauses, default)
         if produce is None:
             continue
         updated = dict(rec)
         updated.update(produce)
-        updated["locus"] = [locus[0], locus[1]]
-        grid[locus] = updated
+        if is_lattice:
+            updated["locus"] = [key[0], key[1]]
+        grid[key] = updated
     # Fresh copies so an unchanged locus never aliases the input record.
-    return [dict(grid[(rec["locus"][0], rec["locus"][1])]) for rec in core["state"]["loci"]]
+    return [dict(grid[_locus_key(rec, topology)]) for rec in core["state"]["loci"]]
 
 
 def _step_open(
@@ -710,6 +797,13 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
     elif population == POPULATION_FIXED:
         next_loci = _step_fixed(core, topology, clauses, default)
     elif population == POPULATION_OPEN:
+        # Open population grows and prunes loci by coordinate frontier, so it is
+        # defined on a lattice; an open graph would mean creating and destroying
+        # nodes and edges (full graph rewriting), which is not yet specified.
+        if topology.get("kind") != TOPOLOGY_LATTICE:
+            raise NotImplementedError(
+                f"open population with topology {topology.get('kind')!r} not yet supported"
+            )
         next_loci = _step_open(core, topology, clauses, default)
     else:
         raise NotImplementedError(f"population mode {population!r} not yet supported")
@@ -759,6 +853,23 @@ def field_cells(core: dict[str, Any], field: str = "state") -> list[tuple[int, i
     """
     return sorted(
         (rec["locus"][0], rec["locus"][1], rec.get(field))
+        for rec in core["state"]["loci"]
+    )
+
+
+def node_cells(core: dict[str, Any], field: str = "state") -> list[tuple[Any, Any]]:
+    """Return sorted ``(node, value)`` pairs of a graph-topology core.
+
+    The generic readout for a network program: each node's identity and the
+    value its ``field`` carries, sorted by node so the readout is stable frame
+    to frame. The graph analogue of :func:`field_cells` (which keys by lattice
+    coordinate) -- a graph's fundamental index is the node, not a position, so a
+    node's spatial ``locus`` (if any) is a projection hint, not part of this
+    readout. Like the others it names no specific system: the caller chooses
+    which field is the node's value.
+    """
+    return sorted(
+        (rec["node"], rec.get(field))
         for rec in core["state"]["loci"]
     )
 

@@ -178,8 +178,10 @@ class ProcessCoreEngineTestSuite(unittest.TestCase):
             step(core)
 
     def test_unknown_topology_kind_raises(self):
+        # "graph" is a supported topology now; "hypergraph" stands in as the
+        # still-unimplemented kind so the loud-failure guard stays tested.
         with self.assertRaises(NotImplementedError):
-            neighbors({"kind": "graph"}, (0, 0))
+            neighbors({"kind": "hypergraph"}, (0, 0))
 
 
 class GameOfLifeBehaviourTestSuite(unittest.TestCase):

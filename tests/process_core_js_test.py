@@ -51,6 +51,11 @@ LSYSTEM_SOURCE = ROOT / "examples" / "lindenmayer.multi"
 ECOSYSTEM_MANIFEST = PROCESS_DIR / "program.ecosystem.v1.json"
 ECOSYSTEM_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.ecosystem.v1.json"
 ECOSYSTEM_SOURCE = ROOT / "examples" / "ecosystem.multi"
+GRAPH_HTML = PROCESS_DIR / "graph.html"
+GRAPH_RUNTIME_JS = PROCESS_DIR / "graph_runtime.js"
+GRAPH_MANIFEST = PROCESS_DIR / "program.graph.v1.json"
+GRAPH_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.graph.v1.json"
+GRAPH_SOURCE = ROOT / "examples" / "network_epidemic.multi"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -92,6 +97,19 @@ process.stdout.write(JSON.stringify(trajectory.map((f) => fieldCells(f, 'species
 """
 
 
+# The graph path reads each node's value out of every frame (via the shared
+# nodeCells) -- otherwise identical (the one shared `run` drives it too).
+_NODE_DRIVER = """\
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+const [, , corePath, manifestPath, steps] = process.argv;
+const { run, nodeCells } = await import(pathToFileURL(corePath).href);
+const core = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+const trajectory = run(core, Number(steps));
+process.stdout.write(JSON.stringify(trajectory.map((f) => nodeCells(f, 'state'))));
+"""
+
+
 def _run_driver(driver_src: str, manifest_path: Path, steps: int):
     with tempfile.TemporaryDirectory() as tmp:
         driver = Path(tmp) / "driver.mjs"
@@ -115,6 +133,10 @@ def _js_words(manifest_path: Path, steps: int) -> list[str]:
 
 def _js_field(manifest_path: Path, steps: int):
     return _run_driver(_FIELD_DRIVER, manifest_path, steps)
+
+
+def _js_nodes(manifest_path: Path, steps: int):
+    return _run_driver(_NODE_DRIVER, manifest_path, steps)
 
 
 def _py_trajectory(core: dict, steps: int) -> list[list[list[int]]]:
@@ -188,6 +210,26 @@ class ManifestStabilityTestSuite(unittest.TestCase):
         # Heterogeneous state: loci carry a multi-valued species, not a boolean.
         self.assertIn("species", on_disk["state"]["loci"][0])
 
+    def test_checked_in_graph_manifest_matches_multi_build(self):
+        # The browser graph manifest is the .multi program built to JSON; it
+        # must not drift from examples/network_epidemic.multi.
+        regenerated = process_program.execute_process(
+            GRAPH_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=GRAPH_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(GRAPH_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_graph_manifest_is_graph_synchronous(self):
+        on_disk = json.loads(GRAPH_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["kind"], "semantic-core-v1")
+        self.assertEqual(on_disk["topology"]["kind"], "graph")
+        self.assertEqual(on_disk["schedule"]["kind"], "synchronous")
+        # Adjacency is the edge set; nodes carry an id (and a locus view hint).
+        self.assertIn("edges", on_disk["topology"])
+        self.assertIn("node", on_disk["state"]["loci"][0])
+
 
 class JsStepperSourceTestSuite(unittest.TestCase):
     """Structural guards mirroring the repo's other JS peers."""
@@ -216,6 +258,15 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         # runtime shares the one stepper rather than rolling its own sweep.
         source = CORE_JS.read_text(encoding="utf-8")
         for symbol in ("SCHEDULE_ASYNCHRONOUS", "export function fieldCells"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
+    def test_core_js_ports_the_graph_axis(self):
+        # The graph topology and its node readout must exist in the browser
+        # engine too, plus the shared tier classifier the status line uses, so
+        # the graph runtime shares the one stepper rather than rolling its own.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("TOPOLOGY_GRAPH", "export function nodeCells",
+                       "export function tierOf", "export const TIER_NAMES"):
             self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
 
     def test_core_js_defines_no_specific_system(self):
@@ -279,6 +330,21 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         html = ECOSYSTEM_HTML.read_text(encoding="utf-8")
         self.assertIn('type="module"', html)
         self.assertIn("./ecosystem_runtime.js", html)
+
+    def test_graph_runtime_uses_shared_stepper_and_classifier(self):
+        source = GRAPH_RUNTIME_JS.read_text(encoding="utf-8")
+        # The graph runtime must import motion and the tier classifier from the
+        # one shared core -- the same engine as the other runtimes, not its own.
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("nodeCells", source)
+        self.assertIn("tierOf", source)  # the tier shown in the status line
+        self.assertIn("./program.graph.v1.json", source)
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_graph_page_loads_graph_runtime_as_module(self):
+        html = GRAPH_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./graph_runtime.js", html)
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -359,6 +425,29 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
         self.assertEqual(len(js), STEPS + 1)
         self.assertEqual(js, py)
         # And the field genuinely evolved (async is not a no-op here).
+        self.assertNotEqual(js[0], js[-1])
+
+    def test_graph_node_trajectory_agrees(self):
+        # The graph axis: a network contagion authored in .multi must step
+        # identically in JS and Python, node-value for node-value, across the
+        # whole trajectory. Adjacency is the edge set, so this also proves the
+        # two runtimes build the same adjacency from the same edges.
+        core = process_program.execute_process(
+            GRAPH_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(GRAPH_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "graph.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_nodes(path, STEPS)
+        py = [
+            [list(cell) for cell in process_core.node_cells(frame, "state")]
+            for frame in process_core.run(core, STEPS)
+        ]
+        self.assertEqual(len(js), STEPS + 1)
+        self.assertEqual(js, py)
+        # And the outbreak genuinely spread (not a no-op).
         self.assertNotEqual(js[0], js[-1])
 
 

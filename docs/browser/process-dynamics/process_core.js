@@ -19,6 +19,7 @@
 export const CORE_KIND = "semantic-core-v1";
 export const TOPOLOGY_LATTICE = "lattice";
 export const TOPOLOGY_SEQUENCE = "sequence";
+export const TOPOLOGY_GRAPH = "graph";
 export const LATTICE_EXTENT_INFINITE = "infinite";
 export const NEIGHBORHOOD_MOORE8 = "moore8";
 export const NEIGHBORHOOD_VONNEUMANN4 = "von-neumann4";
@@ -37,8 +38,31 @@ const MOORE8_OFFSETS = [
 ];
 const VONNEUMANN4_OFFSETS = [[0, -1], [-1, 0], [1, 0], [0, 1]];
 
-// The one topology query: which loci are adjacent to this one?
+// Build an adjacency map from a graph topology's edge set. Undirected edges
+// contribute both directions; insertion order is preserved and duplicates
+// dropped, so neighbour sets are deterministic across runtimes.
+function graphAdjacency(topology) {
+  const adjacency = new Map();
+  const directed = topology.directed === true;
+  const link = (a, b) => {
+    if (!adjacency.has(a)) adjacency.set(a, []);
+    const bucket = adjacency.get(a);
+    if (!bucket.includes(b)) bucket.push(b);
+  };
+  for (const [a, b] of topology.edges) {
+    link(a, b);
+    if (!directed) link(b, a);
+  }
+  return adjacency;
+}
+
+// The one topology query: which loci are adjacent to this one? `locus` is an
+// [x, y] coordinate for a lattice, an integer position for a sequence, a node
+// id for a graph; neighbours come back in the same currency.
 export function neighbors(topology, locus) {
+  if (topology.kind === TOPOLOGY_GRAPH) {
+    return graphAdjacency(topology).get(locus) ?? [];
+  }
   if (topology.kind !== TOPOLOGY_LATTICE) {
     throw new Error(`topology kind ${topology.kind} not yet supported`);
   }
@@ -68,15 +92,34 @@ export function neighbors(topology, locus) {
   return result;
 }
 
-function gridOf(core) {
+// The grid key (and a neighbour's grid key) under each topology. A lattice /
+// sequence locus is positional, so its key is its coordinate; a graph locus is
+// its node id. neighbors() returns values of the same shape, so neighbourKey
+// and locusKey agree -- a neighbour looked up in the grid lands on the right
+// record.
+function locusKey(rec, topology) {
+  return topology.kind === TOPOLOGY_GRAPH ? `n:${rec.node}` : `${rec.locus[0]},${rec.locus[1]}`;
+}
+
+function neighbourKey(nb, topology) {
+  return topology.kind === TOPOLOGY_GRAPH ? `n:${nb}` : `${nb[0]},${nb[1]}`;
+}
+
+// The locus value handed to neighbors() for a record: a coordinate for a
+// lattice, the node id for a graph.
+function adjacencyLocus(rec, topology) {
+  return topology.kind === TOPOLOGY_GRAPH ? rec.node : [rec.locus[0], rec.locus[1]];
+}
+
+function gridOf(core, topology) {
   const grid = new Map();
   for (const rec of core.state.loci) {
-    grid.set(`${rec.locus[0]},${rec.locus[1]}`, rec);
+    grid.set(locusKey(rec, topology), rec);
   }
   return grid;
 }
 
-function clauseMatches(rec, nbs, grid, match) {
+function clauseMatches(rec, nbs, grid, match, topology) {
   const self = match.self ?? {};
   for (const field of Object.keys(self)) {
     if (rec[field] !== self[field]) {
@@ -85,9 +128,9 @@ function clauseMatches(rec, nbs, grid, match) {
   }
   for (const predicate of match.neighbor_count ?? []) {
     let tally = 0;
-    for (const [nx, ny] of nbs) {
-      const nb = grid.get(`${nx},${ny}`);
-      if (nb && nb[predicate.field] === predicate.value) {
+    for (const nb of nbs) {
+      const node = grid.get(neighbourKey(nb, topology));
+      if (node && node[predicate.field] === predicate.value) {
         tally += 1;
       }
     }
@@ -98,9 +141,9 @@ function clauseMatches(rec, nbs, grid, match) {
   return true;
 }
 
-function produceFor(rec, nbs, grid, clauses, fallback) {
+function produceFor(rec, nbs, grid, clauses, fallback, topology) {
   for (const clause of clauses) {
-    if (clauseMatches(rec, nbs, grid, clause.match ?? {})) {
+    if (clauseMatches(rec, nbs, grid, clause.match ?? {}, topology)) {
       return clause.produce;
     }
   }
@@ -113,11 +156,16 @@ function isEmpty(rec, empty) {
 
 // Fixed population: every declared locus persists, only its state moves.
 function stepFixed(core, topology, clauses, fallback) {
-  const grid = gridOf(core);
+  const grid = gridOf(core, topology);
+  const isLattice = topology.kind === TOPOLOGY_LATTICE;
   return core.state.loci.map((rec) => {
-    const locus = [rec.locus[0], rec.locus[1]];
+    const locus = adjacencyLocus(rec, topology);
     const nbs = neighbors(topology, locus);
-    return { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback), locus };
+    const next = { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback, topology) };
+    // Normalize a lattice coordinate to a list; a graph node keeps its own
+    // ``locus`` view hint (if any) untouched.
+    if (isLattice) next.locus = [rec.locus[0], rec.locus[1]];
+    return next;
   });
 }
 
@@ -126,7 +174,7 @@ function stepFixed(core, topology, clauses, fallback) {
 // neighbours), since only those positions can change under a local rule.
 function stepOpen(core, topology, clauses, fallback) {
   const empty = core.state.empty;
-  const grid = gridOf(core);
+  const grid = gridOf(core, topology);
 
   const candidates = new Map(); // key -> [x, y]
   for (const rec of core.state.loci) {
@@ -142,7 +190,7 @@ function stepOpen(core, topology, clauses, fallback) {
   for (const locus of ordered) {
     const rec = grid.get(`${locus[0]},${locus[1]}`) ?? { locus, ...empty };
     const nbs = neighbors(topology, locus);
-    const produced = { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback), locus };
+    const produced = { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback, topology), locus };
     if (!isEmpty(produced, empty)) {
       next.push(produced);
     }
@@ -158,22 +206,25 @@ function stepOpen(core, topology, clauses, fallback) {
 // locus matching no clause is left unchanged, the identity-on-no-match a cyclic
 // ecology rule relies on. The emitted list keeps the original loci order.
 function stepAsync(core, topology, clauses, fallback) {
-  const grid = gridOf(core);
+  const grid = gridOf(core, topology);
+  const isLattice = topology.kind === TOPOLOGY_LATTICE;
   const keys = [...grid.keys()].sort((a, b) => {
-    const [ax, ay] = a.split(",").map(Number);
-    const [bx, by] = b.split(",").map(Number);
-    return (ax - bx) || (ay - by);
+    if (isLattice) {
+      const [ax, ay] = a.split(",").map(Number);
+      const [bx, by] = b.split(",").map(Number);
+      return (ax - bx) || (ay - by);
+    }
+    return a < b ? -1 : a > b ? 1 : 0;
   });
   for (const key of keys) {
     const rec = grid.get(key);
-    const locus = [rec.locus[0], rec.locus[1]];
+    const locus = adjacencyLocus(rec, topology);
     const nbs = neighbors(topology, locus);
-    grid.set(key, { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback), locus });
+    const next = { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback, topology) };
+    if (isLattice) next.locus = [rec.locus[0], rec.locus[1]];
+    grid.set(key, next);
   }
-  return core.state.loci.map((rec) => {
-    const updated = grid.get(`${rec.locus[0]},${rec.locus[1]}`);
-    return { ...updated };
-  });
+  return core.state.loci.map((rec) => ({ ...grid.get(locusKey(rec, topology)) }));
 }
 
 // Generative rewriting: rewrite every symbol of a sequence in parallel and
@@ -186,11 +237,12 @@ function stepAsync(core, topology, clauses, fallback) {
 // reading of `produce` (a sequence, not a single state) differs.
 function stepGenerative(core, clauses) {
   const emptyGrid = new Map();
+  const { topology } = core;
   const next = [];
   for (const rec of core.state.sequence) {
     let production = null;
     for (const clause of clauses) {
-      if (clauseMatches(rec, [], emptyGrid, clause.match ?? {})) {
+      if (clauseMatches(rec, [], emptyGrid, clause.match ?? {}, topology)) {
         production = clause.produce;
         break;
       }
@@ -245,6 +297,13 @@ export function step(core) {
   } else if (population === POPULATION_FIXED) {
     nextLoci = stepFixed(core, topology, clauses, fallback);
   } else if (population === POPULATION_OPEN) {
+    // Open population grows/prunes loci by coordinate frontier (lattice only);
+    // an open graph would be full graph rewriting, not yet specified.
+    if (topology.kind !== TOPOLOGY_LATTICE) {
+      throw new Error(
+        `open population with topology ${topology.kind} not yet supported`
+      );
+    }
     nextLoci = stepOpen(core, topology, clauses, fallback);
   } else {
     throw new Error(`population mode ${population} not yet supported`);
@@ -288,4 +347,36 @@ export function fieldCells(core, field = "state") {
 // a list of symbols. The generative analogue of activeCells; names no system.
 export function sequenceSymbols(core, field = "symbol") {
   return core.state.sequence.map((rec) => rec[field]);
+}
+
+// Sorted [node, value] of each node's `field` -- the readout a graph-topology
+// program projects from. The graph analogue of fieldCells (which keys by
+// coordinate); a graph's index is the node, not a position. Names no system.
+export function nodeCells(core, field = "state") {
+  return core.state.loci
+    .map((rec) => [rec.node, rec[field]])
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+}
+
+// The expressiveness tier (0-4) of a core, read from its axes -- a faithful
+// port of process_capabilities.expressiveness_tier so a browser status line
+// can show how expressive (and how invertible) the running program is without
+// a Python round-trip. See TIER_NAMES for the labels.
+export const TIER_NAMES = {
+  0: "static structure",
+  1: "fixed-population continuous dynamics",
+  2: "synchronous lattice / field rules",
+  3: "generative / open-population rewriting",
+  4: "full graph / hypergraph rewriting",
+};
+
+export function tierOf(core) {
+  if (core.schedule.kind === SCHEDULE_STATIC) return 0;
+  if (!core.rule.clauses || core.rule.clauses.length === 0) return 0;
+  if (core.schedule.kind === SCHEDULE_GENERATIVE) return 3;
+  if (core.topology.kind !== TOPOLOGY_LATTICE) return 4;
+  const population = core.state.population ?? POPULATION_FIXED;
+  if (population === POPULATION_OPEN) return 3;
+  if (core.schedule.kind === SCHEDULE_SYNCHRONOUS) return 2;
+  return 1;
 }
