@@ -84,9 +84,11 @@ class OpenPopulationProjectionTestSuite(unittest.TestCase):
     def test_bounding_box_contains_the_whole_trajectory(self):
         trajectory = self._trajectory()
         vp = pp.bounding_box(trajectory)
+        x_max = vp["x0"] + vp["width"]
+        y_max = vp["y0"] + vp["height"]
         for frame in trajectory:
             for x, y in process_core.active_cells(frame):
-                self.assertTrue(pp._in_viewport(x, y, vp))
+                self.assertTrue(vp["x0"] <= x < x_max and vp["y0"] <= y < y_max)
 
     def test_one_stepper_drives_both_modalities_within_viewport(self):
         trajectory = self._trajectory()

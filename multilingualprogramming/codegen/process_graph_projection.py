@@ -269,7 +269,9 @@ def spatial_animation_manifest(
     return {
         "kind": GRAPH_SPATIAL_ANIM_KIND,
         "field": field,
-        "capabilities": projection_capabilities(GRAPH_SPATIAL_ANIM_KIND, trajectory, field, node_index),
+        "capabilities": projection_capabilities(
+            GRAPH_SPATIAL_ANIM_KIND, trajectory, field, node_index
+        ),
         "nodes": list(node_index),
         "frames": to_spatial_animation(trajectory, field, node_index),
     }
@@ -285,7 +287,9 @@ def sonic_animation_manifest(
     return {
         "kind": GRAPH_SONIC_ANIM_KIND,
         "field": field,
-        "capabilities": projection_capabilities(GRAPH_SONIC_ANIM_KIND, trajectory, field, node_index),
+        "capabilities": projection_capabilities(
+            GRAPH_SONIC_ANIM_KIND, trajectory, field, node_index
+        ),
         "nodes": list(node_index),
         "frames": to_sonic_animation(trajectory, field, node_index),
     }

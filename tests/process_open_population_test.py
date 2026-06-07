@@ -30,7 +30,6 @@ These tests pin the claim down:
 import unittest
 
 from examples import game_of_life_polymodal as gol
-from multilingualprogramming.codegen import process_core
 from multilingualprogramming.codegen.process_core import (
     POPULATION_OPEN,
     active_cells,

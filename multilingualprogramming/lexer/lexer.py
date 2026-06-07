@@ -140,7 +140,7 @@ def _is_digit(char):
 def _is_hex_digit(char):
     """Check if a character is an ASCII hexadecimal digit."""
     return char.isdigit() or char.lower() in "abcdef"
-# pylint: disable=too-few-public-methods
+# pylint: disable=too-few-public-methods,too-many-instance-attributes
 class Lexer:
     """
     Tokenizes multilingual source code.

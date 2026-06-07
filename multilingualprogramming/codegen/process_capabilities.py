@@ -18,7 +18,8 @@ modalities that can invert it:
     Tier 0  static structure                     invertible everywhere (this is v0)
     Tier 1  fixed-population continuous dynamics  fully projectable; per-modality inverse
     Tier 2  synchronous lattice / field rules     projectable; inverse per contract
-    Tier 3  generative / open-population rewriting projects as output; inverse only in some modalities
+    Tier 3  generative / open-population rewriting projects as output;
+            inverse only in some modalities
     Tier 4  full graph / hypergraph rewriting      mostly view-only / non-invertible
 
 This module makes that ladder machine-checkable: it classifies a v1 core

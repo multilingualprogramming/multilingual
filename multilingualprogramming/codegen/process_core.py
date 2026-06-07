@@ -510,10 +510,10 @@ def _graph_adjacency(topology: dict[str, Any]) -> dict[Any, list[Any]]:
         if b not in bucket:
             bucket.append(b)
 
-    for a, b in topology["edges"]:
-        link(a, b)
+    for source, target in topology["edges"]:
+        link(source, target)
         if not directed:
-            link(b, a)
+            link(target, source)
     return adjacency
 
 
@@ -622,9 +622,9 @@ def _produce_for(
     advances a cell only when its successor surrounds it; every other cell
     stays put), without inventing a catch-all state for the rest.
     """
-    for clause in clauses:
-        if _clause_matches(rec, nbs, grid, clause.get("match", {})):
-            return clause["produce"]
+    for rule_clause in clauses:
+        if _clause_matches(rec, nbs, grid, rule_clause.get("match", {})):
+            return rule_clause["produce"]
     return default
 
 
@@ -745,9 +745,9 @@ def _step_generative(core: dict[str, Any]) -> list[dict[str, Any]]:
     next_sequence: list[dict[str, Any]] = []
     for rec in core["state"]["sequence"]:
         production: list[dict[str, Any]] | None = None
-        for clause in clauses:
-            if _clause_matches(rec, [], {}, clause.get("match", {})):
-                production = clause["produce"]
+        for rule_clause in clauses:
+            if _clause_matches(rec, [], {}, rule_clause.get("match", {})):
+                production = rule_clause["produce"]
                 break
         if production is None:
             next_sequence.append(dict(rec))

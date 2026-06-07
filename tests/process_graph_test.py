@@ -176,8 +176,13 @@ class GraphProgramTestSuite(unittest.TestCase):
         core = _build(EN_SOURCE)
         trajectory = process_core.run(core, 8)
         # Starts with one infected, ends with everyone recovered.
-        self.assertEqual(sum(1 for _, v in process_core.node_cells(trajectory[0], FIELD) if v == 1), 1)
-        self.assertTrue(all(v == 2 for _, v in process_core.node_cells(trajectory[-1], FIELD)))
+        self.assertEqual(
+            sum(1 for _, v in process_core.node_cells(trajectory[0], FIELD) if v == 1),
+            1,
+        )
+        self.assertTrue(
+            all(v == 2 for _, v in process_core.node_cells(trajectory[-1], FIELD))
+        )
 
     def test_english_and_french_lower_to_identical_core(self):
         en = _build(EN_SOURCE, language="en")

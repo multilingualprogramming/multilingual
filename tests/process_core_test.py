@@ -46,7 +46,7 @@ from multilingualprogramming.codegen.process_core import (
 
 def _single_field_lattice(width, height, live, field="alive", wrap=False, rule=None):
     """Build a minimal synchronous lattice core for engine-level tests."""
-    liveset = {(x, y) for x, y in live}
+    liveset = set(live)
     loci = [
         {"locus": [x, y], field: 1 if (x, y) in liveset else 0}
         for y in range(height)
