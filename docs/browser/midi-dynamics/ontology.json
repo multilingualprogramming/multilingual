@@ -1,0 +1,330 @@
+{
+  "kind": "opcode-ontology-v0",
+  "version": 0,
+  "opcodes": [
+    {
+      "code": 1,
+      "name": "emit",
+      "description": "Produce signal over time.",
+      "sonic": {
+        "role": "source",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "source",
+        "color": "#de3c4b"
+      },
+      "linear": {
+        "glyph": "dot",
+        "color": "#de3c4b"
+      },
+      "volumetric": {
+        "primitive": "point",
+        "color": "#de3c4b"
+      },
+      "midi": {
+        "role": "note",
+        "pitch": 69,
+        "velocity": 96
+      }
+    },
+    {
+      "code": 2,
+      "name": "diffuse",
+      "description": "Equalize signal with local neighbors.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "ring",
+        "color": "#3a86ff"
+      },
+      "linear": {
+        "glyph": "band",
+        "color": "#3a86ff"
+      },
+      "volumetric": {
+        "primitive": "cloud",
+        "color": "#3a86ff"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 91,
+        "velocity": 100
+      }
+    },
+    {
+      "code": 3,
+      "name": "attract",
+      "description": "Pull nearby entities through proximity.",
+      "sonic": {
+        "role": "modulator",
+        "waveform": "triangle",
+        "envelope": "swelling"
+      },
+      "spatial": {
+        "shape": "up",
+        "color": "#2d6a4f"
+      },
+      "linear": {
+        "glyph": "ramp",
+        "color": "#2d6a4f"
+      },
+      "volumetric": {
+        "primitive": "cone",
+        "color": "#2d6a4f"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 1,
+        "velocity": 110
+      }
+    },
+    {
+      "code": 4,
+      "name": "repel",
+      "description": "Push nearby entities away.",
+      "sonic": {
+        "role": "modulator",
+        "waveform": "triangle",
+        "envelope": "swelling"
+      },
+      "spatial": {
+        "shape": "down",
+        "color": "#f77f00"
+      },
+      "linear": {
+        "glyph": "fall",
+        "color": "#f77f00"
+      },
+      "volumetric": {
+        "primitive": "burst",
+        "color": "#f77f00"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 2,
+        "velocity": 110
+      }
+    },
+    {
+      "code": 5,
+      "name": "stabilize",
+      "description": "Dampen transient activation.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "square",
+        "color": "#6c757d"
+      },
+      "linear": {
+        "glyph": "segment",
+        "color": "#6c757d"
+      },
+      "volumetric": {
+        "primitive": "cube",
+        "color": "#6c757d"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 11,
+        "velocity": 80
+      }
+    },
+    {
+      "code": 6,
+      "name": "oscillate",
+      "description": "Produce periodic signal.",
+      "sonic": {
+        "role": "modulator",
+        "waveform": "sine",
+        "envelope": "tremolo"
+      },
+      "spatial": {
+        "shape": "phase",
+        "color": "#8338ec"
+      },
+      "linear": {
+        "glyph": "wave",
+        "color": "#8338ec"
+      },
+      "volumetric": {
+        "primitive": "helix",
+        "color": "#8338ec"
+      },
+      "midi": {
+        "role": "note",
+        "pitch": 64,
+        "velocity": 92
+      }
+    },
+    {
+      "code": 7,
+      "name": "transform",
+      "description": "Convert nearby signal into local signal.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "triangle",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "diamond",
+        "color": "#00a896"
+      },
+      "linear": {
+        "glyph": "double",
+        "color": "#00a896"
+      },
+      "volumetric": {
+        "primitive": "twist",
+        "color": "#00a896"
+      },
+      "midi": {
+        "role": "program",
+        "pitch": 8,
+        "velocity": 0
+      }
+    },
+    {
+      "code": 8,
+      "name": "resonate",
+      "description": "Amplify through phase alignment.",
+      "sonic": {
+        "role": "effect",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "double",
+        "color": "#ffbe0b"
+      },
+      "linear": {
+        "glyph": "pulse",
+        "color": "#ffbe0b"
+      },
+      "volumetric": {
+        "primitive": "shell",
+        "color": "#ffbe0b"
+      },
+      "midi": {
+        "role": "cc",
+        "pitch": 93,
+        "velocity": 100
+      }
+    },
+    {
+      "code": 9,
+      "name": "split",
+      "description": "Divide activation into propagating entities.",
+      "sonic": {
+        "role": "trigger",
+        "waveform": "square",
+        "envelope": "percussive"
+      },
+      "spatial": {
+        "shape": "split",
+        "color": "#fb5607"
+      },
+      "linear": {
+        "glyph": "fork",
+        "color": "#fb5607"
+      },
+      "volumetric": {
+        "primitive": "branch",
+        "color": "#fb5607"
+      },
+      "midi": {
+        "role": "drum",
+        "pitch": 36,
+        "velocity": 110
+      }
+    },
+    {
+      "code": 10,
+      "name": "merge",
+      "description": "Combine nearby activations.",
+      "sonic": {
+        "role": "trigger",
+        "waveform": "square",
+        "envelope": "percussive"
+      },
+      "spatial": {
+        "shape": "merge",
+        "color": "#7209b7"
+      },
+      "linear": {
+        "glyph": "join",
+        "color": "#7209b7"
+      },
+      "volumetric": {
+        "primitive": "funnel",
+        "color": "#7209b7"
+      },
+      "midi": {
+        "role": "drum",
+        "pitch": 38,
+        "velocity": 110
+      }
+    },
+    {
+      "code": 11,
+      "name": "contain",
+      "description": "Create a local membrane or boundary.",
+      "sonic": {
+        "role": "bus",
+        "waveform": "sine",
+        "envelope": "sustained"
+      },
+      "spatial": {
+        "shape": "membrane",
+        "color": "#252422"
+      },
+      "linear": {
+        "glyph": "band",
+        "color": "#252422"
+      },
+      "volumetric": {
+        "primitive": "cell",
+        "color": "#252422"
+      },
+      "midi": {
+        "role": "bus",
+        "pitch": 0,
+        "velocity": 0
+      }
+    },
+    {
+      "code": 12,
+      "name": "propagate",
+      "description": "Move activation through space.",
+      "sonic": {
+        "role": "source",
+        "waveform": "sawtooth",
+        "envelope": "percussive"
+      },
+      "spatial": {
+        "shape": "arrow",
+        "color": "#0077b6"
+      },
+      "linear": {
+        "glyph": "shift",
+        "color": "#0077b6"
+      },
+      "volumetric": {
+        "primitive": "flow",
+        "color": "#0077b6"
+      },
+      "midi": {
+        "role": "note",
+        "pitch": 74,
+        "velocity": 104
+      }
+    }
+  ]
+}

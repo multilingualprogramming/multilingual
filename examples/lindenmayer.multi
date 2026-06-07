@@ -1,0 +1,42 @@
+# An L-system (Lindenmayer system) as a semantic-core-v1 polymodal program,
+# authored entirely in the Multilingual language -- no Python. Build with:
+#
+#     python -m multilingualprogramming process-build examples/lindenmayer.multi
+#
+# This is the canonical "algae" DOL-system from Lindenmayer's 1968 paper:
+#
+#     axiom : A
+#     A -> A B
+#     B -> A
+#
+# whose successive generations are A, AB, ABA, ABAAB, ABAABABA, ... with
+# lengths following the Fibonacci sequence. It demonstrates the part of the
+# rewrite primitive that Game of Life does not exercise: a *production* whose
+# replacement is LONGER than the symbol it matched, so the structure grows.
+# The engine knows nothing of L-systems; the productions live here, as data.
+
+# Productions in the rule surface syntax. Under a generative schedule a
+# clause's replacement is the SEQUENCE of symbols that replaces the matched
+# symbol -- so `becomes` here takes positional `symbol(...)` records rather
+# than keyword fields, and a replacement longer than the match grows the
+# string. A symbol that matches no clause maps to itself, so there is no
+# `fallback`. There is no totalistic neighbour matching -- the match tests
+# only the symbol itself.
+def algae_rule():
+    return rewrite(
+        clause(when(symbol="A"), becomes(symbol("A"), symbol("B"))),
+        clause(when(symbol="B"), becomes(symbol("A")))
+    )
+
+# The axiom is the initial sequence: a single symbol A.
+let axiom = [{"symbol": "A"}]
+let state = {"sequence": axiom}
+
+# Assemble the four modality-free axes: a linear sequence topology rewritten
+# by the productions under a generative (parallel string-rewrite) schedule.
+let process = build_process_core(
+    state,
+    sequence_topology(),
+    algae_rule(),
+    generative_schedule()
+)

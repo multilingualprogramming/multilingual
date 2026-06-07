@@ -49,6 +49,16 @@ from multilingualprogramming.source_extensions import (
     find_package_init,
     has_source_extension,
 )
+from multilingualprogramming.codegen.linear_manifest import build_linear_manifest_file
+from multilingualprogramming.codegen.midi_manifest import build_midi_manifest_file
+from multilingualprogramming.codegen.opcode_ontology import write_ontology_manifest
+from multilingualprogramming.codegen.semantic_core import build_semantic_core_file
+from multilingualprogramming.codegen.process_program import build_process_core_file
+from multilingualprogramming.codegen.sonic_projection import build_sonic_manifest_file
+from multilingualprogramming.codegen.spatial_manifest import build_spatial_manifest_file
+from multilingualprogramming.codegen.volumetric_manifest import (
+    build_volumetric_manifest_file,
+)
 from multilingualprogramming.version import __version__
 
 
@@ -367,6 +377,101 @@ def cmd_build_ui_bundle(args):
             print(f"[WARN] {diag}")
 
 
+def cmd_spatial_build(args):
+    """Build a spatial JSON manifest from a Multilingual source file."""
+    manifest = build_spatial_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[spatial] {manifest['kind']} entities={len(manifest['entities'])}")
+
+
+def cmd_polymodal_build(args):
+    """Build a modality-free semantic core manifest from Multilingual source."""
+    core = build_semantic_core_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[polymodal] {core['kind']} entities={len(core['entities'])}")
+
+
+def cmd_process_build(args):
+    """Build a semantic-core-v1 process manifest from Multilingual source."""
+    core = build_process_core_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    state = core.get("state", {})
+    # A lattice program stores loci; a sequence (string-rewriting) program
+    # stores an ordered sequence. Report whichever this core carries.
+    if "sequence" in state:
+        size = f"symbols={len(state['sequence'])}"
+    else:
+        size = f"loci={len(state.get('loci', []))}"
+    print(f"[PASS] {args.out}")
+    print(
+        f"[process] {core['kind']} "
+        f"topology={core['topology'].get('kind')} "
+        f"schedule={core['schedule'].get('kind')} {size}"
+    )
+
+
+def cmd_sonic_build(args):
+    """Build a sonic JSON manifest from a Multilingual source file."""
+    manifest = build_sonic_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[sonic] {manifest['kind']} voices={len(manifest['voices'])}")
+
+
+def cmd_ontology_export(args):
+    """Write the shared opcode ontology as JSON for browser runtimes."""
+    manifest = write_ontology_manifest(args.out)
+    print(f"[PASS] {args.out}")
+    print(f"[ontology] {manifest['kind']} opcodes={len(manifest['opcodes'])}")
+
+
+def cmd_linear_build(args):
+    """Build a 1D linear JSON manifest from a Multilingual source file."""
+    manifest = build_linear_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[linear] {manifest['kind']} marks={len(manifest['marks'])}")
+
+
+def cmd_volumetric_build(args):
+    """Build a 3D volumetric JSON manifest from a Multilingual source file."""
+    manifest = build_volumetric_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[volumetric] {manifest['kind']} marks={len(manifest['marks'])}")
+
+
+def cmd_midi_build(args):
+    """Build a MIDI JSON manifest from a Multilingual source file."""
+    manifest = build_midi_manifest_file(
+        args.file,
+        args.out,
+        language=args.lang or "en",
+    )
+    print(f"[PASS] {args.out}")
+    print(f"[midi] {manifest['kind']} events={len(manifest['events'])}")
+
+
 def cmd_ir(args):
     """Lower a source file to semantic IR and print a summary."""
     program = _parse_program_from_file(args.file, args.lang)
@@ -576,7 +681,7 @@ def _maybe_dispatch_direct_file_run(argv):
     return True
 
 
-def main():  # pylint: disable=too-many-statements
+def main():  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
     """Run the CLI entry point and dispatch subcommands."""
     argv = sys.argv[1:]
     if _maybe_dispatch_direct_file_run(argv):
@@ -739,6 +844,113 @@ def main():  # pylint: disable=too-many-statements
         help="Output directory for generated artifacts (default: build/ui)",
     )
 
+    spatial_build_parser = subparsers.add_parser(
+        "spatial-build",
+        help="Build a fixed-semantic spatial JSON manifest",
+    )
+    spatial_build_parser.add_argument("file", help="Path to the source file")
+    spatial_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    spatial_build_parser.add_argument(
+        "--out", default="program.spatial.json",
+        help="Output JSON manifest path (default: program.spatial.json)",
+    )
+
+    polymodal_build_parser = subparsers.add_parser(
+        "polymodal-build",
+        help="Build a modality-free semantic core manifest",
+    )
+    polymodal_build_parser.add_argument("file", help="Path to the source file")
+    polymodal_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    polymodal_build_parser.add_argument(
+        "--out", default="program.semantic.json",
+        help="Output JSON manifest path (default: program.semantic.json)",
+    )
+
+    process_build_parser = subparsers.add_parser(
+        "process-build",
+        help="Build a semantic-core-v1 process manifest (dynamics as data)",
+    )
+    process_build_parser.add_argument("file", help="Path to the source file")
+    process_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    process_build_parser.add_argument(
+        "--out", default="program.v1.json",
+        help="Output JSON manifest path (default: program.v1.json)",
+    )
+
+    sonic_build_parser = subparsers.add_parser(
+        "sonic-build",
+        help="Build a sonic projection JSON manifest",
+    )
+    sonic_build_parser.add_argument("file", help="Path to the source file")
+    sonic_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    sonic_build_parser.add_argument(
+        "--out", default="program.sonic.json",
+        help="Output JSON manifest path (default: program.sonic.json)",
+    )
+
+    ontology_export_parser = subparsers.add_parser(
+        "ontology-export",
+        help="Write the shared opcode ontology JSON (for browser runtimes)",
+    )
+    ontology_export_parser.add_argument(
+        "--out", default="ontology.json",
+        help="Output JSON path (default: ontology.json)",
+    )
+
+    linear_build_parser = subparsers.add_parser(
+        "linear-build",
+        help="Build a 1D linear timeline JSON manifest",
+    )
+    linear_build_parser.add_argument("file", help="Path to the source file")
+    linear_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    linear_build_parser.add_argument(
+        "--out", default="program.linear.json",
+        help="Output JSON manifest path (default: program.linear.json)",
+    )
+
+    volumetric_build_parser = subparsers.add_parser(
+        "volumetric-build",
+        help="Build a 3D volumetric JSON manifest",
+    )
+    volumetric_build_parser.add_argument("file", help="Path to the source file")
+    volumetric_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    volumetric_build_parser.add_argument(
+        "--out", default="program.volumetric.json",
+        help="Output JSON manifest path (default: program.volumetric.json)",
+    )
+
+    midi_build_parser = subparsers.add_parser(
+        "midi-build",
+        help="Build a MIDI event JSON manifest",
+    )
+    midi_build_parser.add_argument("file", help="Path to the source file")
+    midi_build_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    midi_build_parser.add_argument(
+        "--out", default="program.midi.json",
+        help="Output JSON manifest path (default: program.midi.json)",
+    )
+
     # ir subcommand
     ir_parser = subparsers.add_parser(
         "ir", help="Show the semantic IR for a source file"
@@ -805,6 +1017,22 @@ def main():  # pylint: disable=too-many-statements
         cmd_build_wasm_bundle(args)
     elif args.command == "build-ui-bundle":
         cmd_build_ui_bundle(args)
+    elif args.command == "spatial-build":
+        cmd_spatial_build(args)
+    elif args.command == "polymodal-build":
+        cmd_polymodal_build(args)
+    elif args.command == "process-build":
+        cmd_process_build(args)
+    elif args.command == "sonic-build":
+        cmd_sonic_build(args)
+    elif args.command == "ontology-export":
+        cmd_ontology_export(args)
+    elif args.command == "linear-build":
+        cmd_linear_build(args)
+    elif args.command == "volumetric-build":
+        cmd_volumetric_build(args)
+    elif args.command == "midi-build":
+        cmd_midi_build(args)
     elif args.command == "ir":
         cmd_ir(args)
     elif args.command == "explain":

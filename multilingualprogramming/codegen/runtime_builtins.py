@@ -52,6 +52,34 @@ from multilingualprogramming.runtime.semantic_match import semantic_match
 from multilingualprogramming.runtime.tool_runtime import AgentLoop, get_registry, tool
 from multilingualprogramming.runtime.memory_store import ml_memory
 
+# Polymodal process-calculus primitives (semantic-core-v1). Imported from the
+# submodule directly (not via the codegen package) so this stays free of an
+# import cycle: process_core depends only on the standard library. Exposing
+# these as builtins is what lets a polymodal *process* program be authored in
+# the Multilingual language itself rather than a Python script -- the dynamics
+# (State, Topology, Rule, Schedule) are assembled from .multi source the same
+# way a v0 `seed` is.
+from multilingualprogramming.codegen.process_core import (
+    becomes,
+    build_process_core,
+    clause,
+    fallback,
+    generative_schedule,
+    graph_topology,
+    infinite_lattice_topology,
+    lattice_topology,
+    neighbor_count,
+    rewrite,
+    rewrite_rule,
+    rate_rule,
+    sequence_topology,
+    static_schedule,
+    symbol,
+    synchronous_schedule,
+    asynchronous_schedule,
+    continuous_schedule,
+    when,
+)
 
 def _coerce_model(model):
     """Normalize model inputs to ModelRef values."""
@@ -311,6 +339,57 @@ def _bind(canvas_or_node, slot_name, signal):
     if hasattr(canvas_or_node, 'bind'):
         canvas_or_node.bind(slot_name, signal)
     return canvas_or_node
+
+
+def _spatial_opcode(value):
+    """Create a fixed behavior opcode function for Multilingual spatial source."""
+    return lambda: value
+
+
+emit = _spatial_opcode(1)
+diffuse = _spatial_opcode(2)
+attract = _spatial_opcode(3)
+repel = _spatial_opcode(4)
+stabilize = _spatial_opcode(5)
+oscillate = _spatial_opcode(6)
+transform = _spatial_opcode(7)
+resonate = _spatial_opcode(8)
+split = _spatial_opcode(9)
+merge = _spatial_opcode(10)
+contain = _spatial_opcode(11)
+propagate = _spatial_opcode(12)
+
+
+def spatial_entity(
+    behavior,
+    x_ratio,
+    y_ratio,
+    radius,
+    intensity=1.0,
+    signal=0.0,
+    vx=0.0,
+    vy=0.0,
+    phase=0.0,
+    channel=0,
+):  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    """Return an unlabeled spatial entity row for Multilingual source."""
+    return [
+        int(behavior),
+        float(x_ratio),
+        float(y_ratio),
+        float(radius),
+        float(intensity),
+        float(signal),
+        float(vx),
+        float(vy),
+        float(phase),
+        int(channel),
+    ]
+
+
+def spatial_seed(*entities):
+    """Return a spatial world seed from unlabeled entity rows."""
+    return list(entities)
 
 
 class RuntimeBuiltins:
@@ -578,6 +657,50 @@ class RuntimeBuiltins:
         "vincular": _bind,
         "CanvasNode": _canvas,
         "Channel": _channel,
+        # Fixed-semantic spatial computation primitives
+        "emit": emit,
+        "diffuse": diffuse,
+        "attract": attract,
+        "repel": repel,
+        "stabilize": stabilize,
+        "oscillate": oscillate,
+        "transform": transform,
+        "resonate": resonate,
+        "split": split,
+        "merge": merge,
+        "contain": contain,
+        "propagate": propagate,
+        "spatial_entity": spatial_entity,
+        "spatial_seed": spatial_seed,
+        # Polymodal process calculus (semantic-core-v1) -- the four
+        # modality-free axes plus the assembler. These are the *language*
+        # primitives; specific systems (Game of Life, Seeds, ...) are programs
+        # that fill the tuple, never built-ins. A .multi process program builds
+        # its rule data and assigns the result to `process`. Localized names
+        # (construire_noyau_processus, ...) live in the shared
+        # resources/usm/builtins_aliases.json catalog, not here.
+        "lattice_topology": lattice_topology,
+        "infinite_lattice_topology": infinite_lattice_topology,
+        "sequence_topology": sequence_topology,
+        "graph_topology": graph_topology,
+        "rewrite_rule": rewrite_rule,
+        "rate_rule": rate_rule,
+        "synchronous_schedule": synchronous_schedule,
+        "static_schedule": static_schedule,
+        "generative_schedule": generative_schedule,
+        "asynchronous_schedule": asynchronous_schedule,
+        "continuous_schedule": continuous_schedule,
+        "build_process_core": build_process_core,
+        # Rule surface syntax -- declarative combinators that lower to the
+        # canonical rewrite clauses (see process_core). Localized aliases for
+        # these also live in the shared builtins_aliases.json catalog.
+        "when": when,
+        "neighbor_count": neighbor_count,
+        "becomes": becomes,
+        "fallback": fallback,
+        "symbol": symbol,
+        "clause": clause,
+        "rewrite": rewrite,
     }
 
     # Non-callable special values available in exec() namespace

@@ -1,0 +1,143 @@
+{
+  "kind": "midi-seed-v0",
+  "version": 0,
+  "source_language": "en",
+  "source": "docs/browser/spatial-dynamics/program.multi",
+  "capabilities": {
+    "projection": "midi-seed-v0",
+    "preserves": [
+      "id",
+      "opcode",
+      "phase",
+      "channel"
+    ],
+    "derived": [
+      "intensity"
+    ],
+    "lossy": [
+      "signal",
+      "intensity when velocity clips or base velocity is zero"
+    ],
+    "ambiguous": [],
+    "inverse": "partial"
+  },
+  "tempo_bpm": 96,
+  "bar_seconds": 4.0,
+  "events": [
+    {
+      "id": "ent_8d6b8920",
+      "index": 0,
+      "opcode": 11,
+      "name": "contain",
+      "role": "bus",
+      "pitch": 0,
+      "velocity": 0,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_73259498",
+      "index": 1,
+      "opcode": 1,
+      "name": "emit",
+      "role": "note",
+      "pitch": 69,
+      "velocity": 40,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_8b3154f9",
+      "index": 2,
+      "opcode": 2,
+      "name": "diffuse",
+      "role": "cc",
+      "pitch": 91,
+      "velocity": 100,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_a68fff85",
+      "index": 3,
+      "opcode": 7,
+      "name": "transform",
+      "role": "program",
+      "pitch": 8,
+      "velocity": 0,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_bee7bcec",
+      "index": 4,
+      "opcode": 9,
+      "name": "split",
+      "role": "drum",
+      "pitch": 36,
+      "velocity": 127,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_64b6f2b7",
+      "index": 5,
+      "opcode": 6,
+      "name": "oscillate",
+      "role": "note",
+      "pitch": 64,
+      "velocity": 15,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_8f028ce3",
+      "index": 6,
+      "opcode": 8,
+      "name": "resonate",
+      "role": "cc",
+      "pitch": 93,
+      "velocity": 100,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_4df28bd6",
+      "index": 7,
+      "opcode": 3,
+      "name": "attract",
+      "role": "cc",
+      "pitch": 1,
+      "velocity": 9,
+      "channel": 0,
+      "start_offset": 0.0
+    },
+    {
+      "id": "ent_ba6020af",
+      "index": 8,
+      "opcode": 4,
+      "name": "repel",
+      "role": "cc",
+      "pitch": 2,
+      "velocity": 7,
+      "channel": 0,
+      "start_offset": 0.0
+    }
+  ],
+  "relations": [
+    {
+      "kind": "containment",
+      "container": 0,
+      "members": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    }
+  ]
+}

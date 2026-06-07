@@ -35,17 +35,31 @@ class WATGeneratorManifestMixin:
         top = [s for s in program.body if not isinstance(s, FunctionDef)]
 
         exports = []
+        # B6 : regroupement par module d'origine. Ne s'active que si AU MOINS
+        # une FunctionDef porte un `source_module` non-vide. Sinon, le
+        # manifeste reste plat (compat. arrière avec les consommateurs JS
+        # antérieurs qui ignorent `modules`). Les fonctions non-attribuées
+        # tombent dans le groupe « default ».
+        modules: dict[str, list[str]] = {}
+        any_module_attribution = any(
+            getattr(f, "source_module", None) for f in funcs
+        )
         for func in funcs:
             params = _real_params(func)
             fname = _name(func.name)
             render_mode = _extract_render_mode(func)
             is_str_return = fname in getattr(self, "_string_return_funcs", set())
+            source_module = getattr(func, "source_module", None)
             export_entry = {
                 "name": fname,
                 "arg_types": ["f64"] * len(params),
                 "return_type": "str" if is_str_return else "f64",
                 "mode": render_mode,
             }
+            if source_module:
+                # Inscrit dans l'entrée d'export ET dans le regroupement par
+                # module — deux vues sur la même donnée, choix du consommateur.
+                export_entry["source_module"] = source_module
             if render_mode in _STREAM_RENDER_MODES:
                 output_kind = _extract_buffer_output(func)
                 export_entry["stream_output"] = {
@@ -66,6 +80,9 @@ class WATGeneratorManifestMixin:
                     },
                 }
             exports.append(export_entry)
+            if any_module_attribution:
+                group_key = source_module or "default"
+                modules.setdefault(group_key, []).append(fname)
 
         if top:
             exports.append({
@@ -75,7 +92,7 @@ class WATGeneratorManifestMixin:
                 "mode": "scalar_field",
             })
 
-        return {
+        manifest = {
             "abi_version": 1,
             "backend": "wat",
             "tuple_lowering": {
@@ -104,6 +121,9 @@ class WATGeneratorManifestMixin:
                 },
             },
         }
+        if any_module_attribution:
+            manifest["modules"] = modules
+        return manifest
 
     def generate_js_host_shim(self, _manifest: dict) -> str:
         """Generate a JavaScript WASI shim for browser execution.
@@ -307,6 +327,24 @@ class WATGeneratorManifestMixin:
             "  return new TextDecoder('utf-8').decode(",
             "    new Uint8Array(exports.memory.buffer, ptr, len)",
             "  );",
+            "}",
+            "",
+            "// Write a JS string into WASM memory as a length-prefixed buffer and",
+            "// return the resulting pointer. Encapsulates the encode + __ml_str_alloc",
+            "// + memcpy pattern so callers don't have to thread TextEncoder and a raw",
+            "// Uint8Array view across every call site. `strAlloc` is exports.__ml_str_alloc",
+            "// (or any compatible bucket alias) and `memory` is the live WebAssembly.Memory.",
+            "// Example:",
+            "//   const ptr = writeStringToWasm(exports.__ml_str_alloc, exports.memory, 'hi');",
+            "//   exports.greet(ptr);",
+            "const __ml_text_encoder = new TextEncoder();",
+            "export function writeStringToWasm(strAlloc, memory, jsString) {",
+            "  const bytes = __ml_text_encoder.encode(String(jsString ?? ''));",
+            "  const ptr = strAlloc(bytes.length);",
+            "  if (bytes.length > 0) {",
+            "    new Uint8Array(memory.buffer, ptr, bytes.length).set(bytes);",
+            "  }",
+            "  return ptr;",
             "}",
         ]
         return "\n".join(lines)

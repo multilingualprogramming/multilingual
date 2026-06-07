@@ -1,0 +1,51 @@
+{
+  "kind": "semantic-core-v1",
+  "version": 1,
+  "source": "docs/browser/process-dynamics/program.lsystem.v1.json",
+  "state": {
+    "sequence": [
+      {
+        "symbol": "A"
+      }
+    ]
+  },
+  "topology": {
+    "kind": "sequence"
+  },
+  "rule": {
+    "kind": "rewrite",
+    "clauses": [
+      {
+        "match": {
+          "self": {
+            "symbol": "A"
+          }
+        },
+        "produce": [
+          {
+            "symbol": "A"
+          },
+          {
+            "symbol": "B"
+          }
+        ]
+      },
+      {
+        "match": {
+          "self": {
+            "symbol": "B"
+          }
+        },
+        "produce": [
+          {
+            "symbol": "A"
+          }
+        ]
+      }
+    ],
+    "default": null
+  },
+  "schedule": {
+    "kind": "generative"
+  }
+}

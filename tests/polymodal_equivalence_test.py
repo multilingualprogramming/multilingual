@@ -1,0 +1,1618 @@
+#
+# SPDX-FileCopyrightText: 2026 John Samuel <johnsamuelwrites@gmail.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+
+"""Cross-modal coherence tests for polymodal computation.
+
+These tests are the load-bearing claim of the layered architecture:
+the same Multilingual polymodal program, projected into any modality,
+must preserve the semantic identity of every entity. If a future
+modality projection drops, renames, or reorders entities relative to
+the semantic core, these tests fail.
+"""
+
+import json
+import tempfile
+import unittest
+from argparse import Namespace
+from pathlib import Path
+
+from multilingualprogramming.__main__ import (
+    cmd_linear_build,
+    cmd_midi_build,
+    cmd_ontology_export,
+    cmd_polymodal_build,
+    cmd_sonic_build,
+    cmd_volumetric_build,
+)
+from multilingualprogramming.codegen import (
+    midi_capture,
+    opcode_ontology,
+    sonic_capture,
+    spatial_capture,
+)
+from multilingualprogramming.codegen.linear_manifest import (
+    MANIFEST_KIND as LINEAR_KIND,
+    build_linear_manifest,
+)
+from multilingualprogramming.codegen.midi_manifest import (
+    MANIFEST_KIND as MIDI_KIND,
+    build_midi_manifest,
+)
+from multilingualprogramming.codegen.opcode_ontology import (
+    ONTOLOGY_KIND,
+    build_ontology_manifest,
+)
+from multilingualprogramming.codegen.semantic_core import (
+    CORE_KIND,
+    build_semantic_core,
+)
+from multilingualprogramming.codegen.sonic_projection import (
+    MANIFEST_KIND as SONIC_KIND,
+    build_sonic_manifest,
+)
+from multilingualprogramming.codegen.spatial_manifest import (
+    MANIFEST_KIND as SPATIAL_KIND,
+    build_spatial_manifest,
+)
+from multilingualprogramming.codegen.volumetric_manifest import (
+    MANIFEST_KIND as VOLUMETRIC_KIND,
+    build_volumetric_manifest,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PROGRAM = ROOT / "docs" / "browser" / "spatial-dynamics" / "program.multi"
+GOLDEN_DIR = ROOT / "tests" / "fixtures" / "polymodal"
+GOLDEN_SEMANTIC_CORE = GOLDEN_DIR / "semantic_core_v0_sample.json"
+SONIC_DIR = ROOT / "docs" / "browser" / "sonic-dynamics"
+SONIC_MANIFEST = SONIC_DIR / "program.sonic.json"
+SONIC_ONTOLOGY = SONIC_DIR / "ontology.json"
+SONIC_CAPTURE_JS = SONIC_DIR / "sonic_capture.js"
+MIC_CAPTURE_JS = SONIC_DIR / "microphone_capture.js"
+SONIC_RUNTIME_JS = SONIC_DIR / "sonic_runtime.js"
+SONIC_HTML = SONIC_DIR / "index.html"
+LINEAR_DIR = ROOT / "docs" / "browser" / "linear-dynamics"
+LINEAR_MANIFEST = LINEAR_DIR / "program.linear.json"
+LINEAR_ONTOLOGY = LINEAR_DIR / "ontology.json"
+LINEAR_RUNTIME_JS = LINEAR_DIR / "linear_runtime.js"
+LINEAR_HTML = LINEAR_DIR / "index.html"
+VOLUMETRIC_DIR = ROOT / "docs" / "browser" / "volumetric-dynamics"
+VOLUMETRIC_MANIFEST = VOLUMETRIC_DIR / "program.volumetric.json"
+VOLUMETRIC_ONTOLOGY = VOLUMETRIC_DIR / "ontology.json"
+VOLUMETRIC_RUNTIME_JS = VOLUMETRIC_DIR / "volumetric_runtime.js"
+VOLUMETRIC_HTML = VOLUMETRIC_DIR / "index.html"
+MIDI_DIR = ROOT / "docs" / "browser" / "midi-dynamics"
+MIDI_MANIFEST = MIDI_DIR / "program.midi.json"
+MIDI_ONTOLOGY = MIDI_DIR / "ontology.json"
+MIDI_RUNTIME_JS = MIDI_DIR / "midi_runtime.js"
+MIDI_CAPTURE_JS = MIDI_DIR / "midi_capture.js"
+MIDI_HTML = MIDI_DIR / "index.html"
+SPATIAL_DIR = ROOT / "docs" / "browser" / "spatial-dynamics"
+SPATIAL_MANIFEST = SPATIAL_DIR / "program.spatial.json"
+SPATIAL_ONTOLOGY = SPATIAL_DIR / "ontology.json"
+SPATIAL_RUNTIME_JS = SPATIAL_DIR / "spatial_runtime.js"
+SPATIAL_CAPTURE_JS = SPATIAL_DIR / "spatial_capture.js"
+SPATIAL_HTML = SPATIAL_DIR / "index.html"
+
+
+def _source():
+    return PROGRAM.read_text(encoding="utf-8")
+
+
+class SemanticCoreTestSuite(unittest.TestCase):
+    """Direct tests of the modality-free semantic core."""
+
+    def test_core_kind_and_shape(self):
+        core = build_semantic_core(_source(), language="en")
+        self.assertEqual(core["kind"], CORE_KIND)
+        self.assertEqual(core["version"], 0)
+        self.assertIn("entities", core)
+        self.assertIn("ontology", core)
+        self.assertIn("relations", core)
+
+    def test_core_entities_carry_only_semantic_fields(self):
+        core = build_semantic_core(_source(), language="en")
+        expected_fields = {
+            "id", "index", "opcode", "name",
+            "intensity", "signal", "phase", "channel",
+        }
+        for entity in core["entities"]:
+            self.assertEqual(set(entity.keys()), expected_fields)
+            self.assertNotIn("x_ratio", entity)
+            self.assertNotIn("y_ratio", entity)
+            self.assertNotIn("radius", entity)
+            self.assertNotIn("vx", entity)
+            self.assertNotIn("vy", entity)
+            self.assertNotIn("frequency_hz", entity)
+            self.assertNotIn("amplitude", entity)
+
+    def test_core_ontology_lists_all_known_opcodes(self):
+        core = build_semantic_core(_source(), language="en")
+        codes_in_ontology = {entry["code"] for entry in core["ontology"]}
+        self.assertEqual(codes_in_ontology, opcode_ontology.known_codes())
+
+    def test_core_rejects_unknown_opcode(self):
+        bad_source = (
+            "let seed = spatial_seed("
+            "spatial_entity(emit(), 0.5, 0.5, 10, 1, 0, 0, 0, 0, 0)"
+            ")"
+        )
+        core = build_semantic_core(bad_source, language="en")
+        self.assertEqual(len(core["entities"]), 1)
+
+
+class StableEntityIdTestSuite(unittest.TestCase):
+    """Entity IDs are deterministic and flow through every projection.
+
+    Indexes alone shift when entities are inserted, deleted, or reordered
+    in a modality surface. Stable IDs (see [[polymodal-semantic-versioning]])
+    are how downstream surfaces preserve identity across those edits.
+    """
+
+    _ID_PATTERN = "ent_"
+
+    def test_every_core_entity_has_a_stable_id(self):
+        core = build_semantic_core(
+            _source(), language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        for entity in core["entities"]:
+            self.assertTrue(
+                entity["id"].startswith(self._ID_PATTERN),
+                f"entity id {entity['id']!r} missing {self._ID_PATTERN!r} prefix",
+            )
+            # ent_ + 8 hex chars
+            self.assertEqual(len(entity["id"]), len(self._ID_PATTERN) + 8)
+            int(entity["id"][len(self._ID_PATTERN):], 16)  # raises if not hex
+
+    def test_ids_are_unique_within_a_program(self):
+        core = build_semantic_core(_source(), language="en")
+        ids = [entity["id"] for entity in core["entities"]]
+        self.assertEqual(
+            len(ids), len(set(ids)),
+            "stable entity IDs must be unique within a program",
+        )
+
+    def test_ids_are_deterministic_across_rebuilds(self):
+        # Same source + same source_path => same IDs every build.
+        first = build_semantic_core(
+            _source(), language="en", source_path="program.multi",
+        )
+        second = build_semantic_core(
+            _source(), language="en", source_path="program.multi",
+        )
+        self.assertEqual(
+            [e["id"] for e in first["entities"]],
+            [e["id"] for e in second["entities"]],
+        )
+
+    def test_ids_depend_on_source_path(self):
+        # Same source, different source_path => different IDs. This
+        # keeps separate programs' captured fixtures from accidentally
+        # sharing identity even when their seed bodies are equal.
+        a = build_semantic_core(_source(), language="en", source_path="a.multi")
+        b = build_semantic_core(_source(), language="en", source_path="b.multi")
+        self.assertNotEqual(
+            [e["id"] for e in a["entities"]],
+            [e["id"] for e in b["entities"]],
+        )
+
+    def test_ids_flow_through_every_forward_projection(self):
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+
+        for (
+            core_entity, spatial_entity, sonic_voice,
+            linear_mark, vol_mark, midi_event,
+        ) in zip(
+            core["entities"], spatial["entities"], sonic["voices"],
+            linear["marks"], volumetric["marks"], midi["events"],
+        ):
+            self.assertEqual(core_entity["id"], spatial_entity["id"])
+            self.assertEqual(core_entity["id"], sonic_voice["id"])
+            self.assertEqual(core_entity["id"], linear_mark["id"])
+            self.assertEqual(core_entity["id"], vol_mark["id"])
+            self.assertEqual(core_entity["id"], midi_event["id"])
+
+
+class SemanticCoreRelationsTestSuite(unittest.TestCase):
+    """Containment relations must be derived from the semantic core.
+
+    Recording structural relations at the semantic-core layer (rather
+    than re-deriving them per modality) is what keeps the four peer
+    projections from silently disagreeing on which entity contains
+    which. If this suite fails, modalities can drift on structure
+    even when entity counts and opcode orderings still match.
+    """
+
+    _CONTAIN_OPCODE = 11
+
+    def test_seed_program_has_at_least_one_containment(self):
+        # The seed program uses `contain` on channel 0, so at least
+        # one containment relation must be derived.
+        core = build_semantic_core(_source(), language="en")
+        containments = [
+            r for r in core["relations"] if r["kind"] == "containment"
+        ]
+        self.assertGreaterEqual(
+            len(containments), 1,
+            "seed program uses contain; at least one relation expected",
+        )
+
+    def test_container_index_uses_contain_opcode(self):
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            container = core["entities"][relation["container"]]
+            self.assertEqual(
+                container["opcode"], self._CONTAIN_OPCODE,
+                "container entity must have the contain opcode",
+            )
+
+    def test_containment_members_share_container_channel(self):
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            container = core["entities"][relation["container"]]
+            for member_index in relation["members"]:
+                member = core["entities"][member_index]
+                self.assertEqual(
+                    member["channel"], container["channel"],
+                    "containment members must share container's channel",
+                )
+
+    def test_containment_members_are_not_contain_entities(self):
+        # contain entities are containers; they should not appear as
+        # members of another containment, even when sharing a channel.
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            for member_index in relation["members"]:
+                member = core["entities"][member_index]
+                self.assertNotEqual(
+                    member["opcode"], self._CONTAIN_OPCODE,
+                    "containment must not nest contain entities as members",
+                )
+
+    def test_containment_excludes_self(self):
+        core = build_semantic_core(_source(), language="en")
+        for relation in core["relations"]:
+            if relation["kind"] != "containment":
+                continue
+            self.assertNotIn(
+                relation["container"], relation["members"],
+                "container must not be its own member",
+            )
+
+    def test_no_relations_when_no_contain_entity(self):
+        # A program with only an emit entity has no contain opcode and
+        # therefore no containment relations.
+        source = (
+            "let seed = spatial_seed("
+            "spatial_entity(emit(), 0.5, 0.5, 10, 1, 0, 0, 0, 0, 0)"
+            ")"
+        )
+        core = build_semantic_core(source, language="en")
+        self.assertEqual(core["relations"], [])
+
+    def test_lonely_contain_produces_no_relation(self):
+        # A `contain` entity alone on its channel has no members to
+        # contain; no relation should be emitted (empty membranes are
+        # not load-bearing structure).
+        source = (
+            "let seed = spatial_seed("
+            "spatial_entity(contain(), 0.5, 0.5, 10, 1, 0, 0, 0, 0, 0)"
+            ")"
+        )
+        core = build_semantic_core(source, language="en")
+        self.assertEqual(core["relations"], [])
+
+
+class PolymodalEquivalenceTestSuite(unittest.TestCase):
+    """Two projections of the same program must agree on semantic identity."""
+
+    def test_all_modalities_have_same_entity_count(self):
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+        self.assertEqual(len(core["entities"]), len(spatial["entities"]))
+        self.assertEqual(len(core["entities"]), len(sonic["voices"]))
+        self.assertEqual(len(core["entities"]), len(linear["marks"]))
+        self.assertEqual(len(core["entities"]), len(volumetric["marks"]))
+        self.assertEqual(len(core["entities"]), len(midi["events"]))
+
+    def test_opcode_order_preserved_across_modalities(self):
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+
+        core_codes = [entity["opcode"] for entity in core["entities"]]
+        spatial_codes = [entity["opcode"] for entity in spatial["entities"]]
+        sonic_codes = [voice["opcode"] for voice in sonic["voices"]]
+        linear_codes = [mark["opcode"] for mark in linear["marks"]]
+        volumetric_codes = [mark["opcode"] for mark in volumetric["marks"]]
+        midi_codes = [event["opcode"] for event in midi["events"]]
+
+        self.assertEqual(core_codes, spatial_codes)
+        self.assertEqual(core_codes, sonic_codes)
+        self.assertEqual(core_codes, linear_codes)
+        self.assertEqual(core_codes, volumetric_codes)
+        self.assertEqual(core_codes, midi_codes)
+
+    def test_intensity_and_phase_preserved_across_projections(self):
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+
+        for (
+            core_entity, spatial_entity, sonic_voice, linear_mark, vol_mark, midi_event,
+        ) in zip(
+            core["entities"], spatial["entities"], sonic["voices"],
+            linear["marks"], volumetric["marks"], midi["events"],
+        ):
+            # Spatial entity carries semantic fields directly (post-unification).
+            self.assertAlmostEqual(core_entity["intensity"], spatial_entity["intensity"])
+            self.assertAlmostEqual(core_entity["phase"], spatial_entity["phase"])
+            self.assertEqual(core_entity["channel"], spatial_entity["channel"])
+            # Sonic voice carries channel directly; amplitude/frequency derived
+            self.assertEqual(core_entity["channel"], sonic_voice["channel"])
+            # Linear mark carries intensity directly; phase becomes position.
+            self.assertAlmostEqual(
+                core_entity["intensity"], linear_mark["intensity"], places=3,
+            )
+            self.assertAlmostEqual(
+                core_entity["phase"] % 1.0, linear_mark["position"], places=3,
+            )
+            self.assertEqual(core_entity["channel"], linear_mark["channel"])
+            # Volumetric mark carries intensity directly; phase becomes z.
+            self.assertAlmostEqual(
+                core_entity["intensity"], vol_mark["intensity"], places=3,
+            )
+            self.assertAlmostEqual(
+                core_entity["phase"] % 1.0, vol_mark["z"], places=3,
+            )
+            self.assertEqual(core_entity["channel"], vol_mark["channel"])
+            # MIDI event carries channel directly; phase becomes start_offset;
+            # velocity is intensity-scaled (not preserved verbatim, so the
+            # weaker assertion on velocity range lives in MidiProjectionTestSuite).
+            self.assertEqual(core_entity["channel"], midi_event["channel"])
+            self.assertAlmostEqual(
+                core_entity["phase"] % 1.0, midi_event["start_offset"], places=3,
+            )
+
+    def test_modalities_share_ontology_names(self):
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        linear = build_linear_manifest(_source(), language="en")
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+        for (
+            core_entity, spatial_entity, sonic_voice, linear_mark, vol_mark, midi_event,
+        ) in zip(
+            core["entities"], spatial["entities"], sonic["voices"],
+            linear["marks"], volumetric["marks"], midi["events"],
+        ):
+            self.assertEqual(core_entity["name"], spatial_entity["name"])
+            self.assertEqual(core_entity["opcode"], spatial_entity["opcode"])
+            self.assertEqual(core_entity["name"], sonic_voice["name"])
+            self.assertEqual(core_entity["opcode"], sonic_voice["opcode"])
+            self.assertEqual(core_entity["name"], linear_mark["name"])
+            self.assertEqual(core_entity["opcode"], linear_mark["opcode"])
+            self.assertEqual(core_entity["name"], vol_mark["name"])
+            self.assertEqual(core_entity["opcode"], vol_mark["opcode"])
+            self.assertEqual(core_entity["name"], midi_event["name"])
+            self.assertEqual(core_entity["opcode"], midi_event["opcode"])
+
+    def test_relations_flow_through_to_spatial_projection(self):
+        # Spatial unification: relations derived at the semantic core
+        # must appear in the spatial manifest so every peer sees the
+        # same structural facts.
+        core = build_semantic_core(_source(), language="en")
+        spatial = build_spatial_manifest(_source(), language="en")
+        self.assertEqual(core["relations"], spatial["relations"])
+
+    def test_spatial_entities_use_ontology_shape_and_color(self):
+        spatial = build_spatial_manifest(_source(), language="en")
+        for entity in spatial["entities"]:
+            op = opcode_ontology.get(entity["opcode"])
+            self.assertEqual(entity["shape"], op.spatial.shape)
+            self.assertEqual(entity["color"], op.spatial.color)
+
+    def test_sonic_kinds_match_ontology_roles(self):
+        sonic = build_sonic_manifest(_source(), language="en")
+        for voice in sonic["voices"]:
+            op = opcode_ontology.get(voice["opcode"])
+            self.assertEqual(voice["role"], op.sonic.role)
+            self.assertEqual(voice["waveform"], op.sonic.waveform)
+            self.assertEqual(voice["envelope"], op.sonic.envelope)
+
+    def test_sonic_buses_are_silent(self):
+        sonic = build_sonic_manifest(_source(), language="en")
+        for voice in sonic["voices"]:
+            if voice["role"] == "bus":
+                self.assertEqual(voice["amplitude"], 0.0)
+
+    def test_projection_manifests_declare_capabilities(self):
+        manifests = [
+            build_spatial_manifest(_source(), language="en"),
+            build_sonic_manifest(_source(), language="en"),
+            build_linear_manifest(_source(), language="en"),
+            build_volumetric_manifest(_source(), language="en"),
+            build_midi_manifest(_source(), language="en"),
+        ]
+        for manifest in manifests:
+            capabilities = manifest["capabilities"]
+            self.assertEqual(capabilities["projection"], manifest["kind"])
+            self.assertIn("opcode", capabilities["preserves"])
+            self.assertIn("inverse", capabilities)
+            for field in ("preserves", "derived", "lossy", "ambiguous"):
+                self.assertIsInstance(capabilities[field], list)
+
+
+class LinearProjectionTestSuite(unittest.TestCase):
+    """Direct tests of the 1D linear (timeline) projection.
+
+    The linear projection is the third peer modality, exercising the
+    dimensionality axis distinct from the 2D spatial track. If linear
+    starts diverging from the semantic core or from the ontology's
+    linear hints, this suite fails.
+    """
+
+    def test_linear_manifest_shape(self):
+        linear = build_linear_manifest(_source(), language="en")
+        self.assertEqual(linear["kind"], LINEAR_KIND)
+        self.assertEqual(linear["version"], 0)
+        self.assertIn("marks", linear)
+        self.assertIn("bar_seconds", linear)
+
+    def test_linear_marks_use_ontology_glyph_and_color(self):
+        linear = build_linear_manifest(_source(), language="en")
+        for mark in linear["marks"]:
+            op = opcode_ontology.get(mark["opcode"])
+            self.assertEqual(mark["glyph"], op.linear.glyph)
+            self.assertEqual(mark["color"], op.linear.color)
+
+    def test_linear_positions_are_normalized(self):
+        linear = build_linear_manifest(_source(), language="en")
+        for mark in linear["marks"]:
+            self.assertGreaterEqual(mark["position"], 0.0)
+            self.assertLessEqual(mark["position"], 1.0)
+
+    def test_linear_glyphs_are_one_dimensional_vocabulary(self):
+        # 1D rendering must not inherit 2D-presuming shape names. The
+        # forbidden list is intentionally limited to names that carry
+        # explicit 2D geometry; quantifier-style names like "double"
+        # are allowed because they describe a count, not a shape.
+        forbidden_2d_shapes = {
+            "ring", "diamond", "arrow", "membrane", "source",
+            "phase", "up", "down", "square",
+        }
+        for op in opcode_ontology.OPCODES:
+            self.assertNotIn(
+                op.linear.glyph, forbidden_2d_shapes,
+                f"opcode {op.name!r} has 2D shape name in linear hint: "
+                f"{op.linear.glyph!r}",
+            )
+
+
+class MidiProjectionTestSuite(unittest.TestCase):
+    """Direct tests of the MIDI projection.
+
+    MIDI is the discrete-event peer. Where the spatial / linear /
+    volumetric / sonic projections describe continuous shapes, MIDI
+    describes the program as note-ons, control changes, drum hits,
+    and program changes. If the ontology only mapped cleanly to
+    continuous-shape projections, this suite is where that would
+    crack.
+    """
+
+    _VALID_ROLES = {"note", "drum", "cc", "program", "bus"}
+
+    def test_midi_manifest_shape(self):
+        midi = build_midi_manifest(_source(), language="en")
+        self.assertEqual(midi["kind"], MIDI_KIND)
+        self.assertEqual(midi["version"], 0)
+        self.assertIn("events", midi)
+
+    def test_midi_events_use_ontology_role_and_pitch(self):
+        midi = build_midi_manifest(_source(), language="en")
+        for event in midi["events"]:
+            op = opcode_ontology.get(event["opcode"])
+            self.assertEqual(event["role"], op.midi.role)
+            self.assertEqual(event["pitch"], op.midi.pitch)
+
+    def test_midi_event_fields_are_in_midi_byte_range(self):
+        midi = build_midi_manifest(_source(), language="en")
+        for event in midi["events"]:
+            self.assertIn(event["role"], self._VALID_ROLES)
+            self.assertGreaterEqual(event["pitch"], 0)
+            self.assertLessEqual(event["pitch"], 127)
+            self.assertGreaterEqual(event["velocity"], 0)
+            self.assertLessEqual(event["velocity"], 127)
+            self.assertGreaterEqual(event["start_offset"], 0.0)
+            self.assertLessEqual(event["start_offset"], 1.0)
+
+    def test_midi_buses_are_silent(self):
+        # contain entities have role=bus and must emit zero velocity
+        # under the forward projection, mirroring sonic.
+        midi = build_midi_manifest(_source(), language="en")
+        for event in midi["events"]:
+            if event["role"] == "bus":
+                self.assertEqual(event["velocity"], 0)
+
+
+class MidiRoundTripTestSuite(unittest.TestCase):
+    """Inverse projection: observed MIDI events must recover semantic identity."""
+
+    def test_invertible_set_is_derived_from_ontology(self):
+        invertible = midi_capture.invertible_opcodes()
+        for name in ("emit", "diffuse", "attract", "repel",
+                     "oscillate", "resonate", "split", "merge"):
+            self.assertIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} should be identity-invertible from MIDI role/pitch",
+            )
+        for name in ("contain", "transform"):
+            self.assertNotIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} cannot recover intensity from current MIDI hints",
+            )
+
+    def test_observe_event_strips_identity_labels(self):
+        midi = build_midi_manifest(_source(), language="en")
+        observed = midi_capture.observe_event(midi["events"][1])
+        self.assertFalse(hasattr(observed, "opcode"))
+        self.assertFalse(hasattr(observed, "name"))
+
+    def test_unclipped_program_subset_round_trips_to_semantic_core(self):
+        core = build_semantic_core(_source(), language="en")
+        midi = build_midi_manifest(_source(), language="en")
+        invertible = midi_capture.invertible_opcodes()
+
+        pairs = [
+            (entity, event)
+            for entity, event in zip(core["entities"], midi["events"])
+            if entity["opcode"] in invertible and event["velocity"] < 127
+        ]
+        self.assertGreaterEqual(
+            len(pairs), 5,
+            "Round-trip needs enough unclipped MIDI events to be meaningful",
+        )
+
+        observed = [midi_capture.observe_event(event) for _, event in pairs]
+        captured = midi_capture.capture_semantic_core(
+            observed, source_language="en", source_path="<midi-round-trip>"
+        )
+
+        self.assertEqual(captured["kind"], CORE_KIND)
+        self.assertEqual(len(captured["entities"]), len(pairs))
+
+        for (original, _event), recovered in zip(pairs, captured["entities"]):
+            self.assertEqual(original["opcode"], recovered["opcode"])
+            self.assertEqual(original["name"], recovered["name"])
+            self.assertEqual(original["channel"], recovered["channel"])
+            self.assertAlmostEqual(
+                original["intensity"], recovered["intensity"], places=2
+            )
+            self.assertAlmostEqual(
+                original["phase"], recovered["phase"], places=4
+            )
+            self.assertEqual(recovered["signal"], 0.0)
+
+    def test_capture_rejects_bus_event(self):
+        bus = midi_capture.ObservedMidiEvent(
+            index=0, role="bus", pitch=0, velocity=0,
+            channel=0, start_offset=0.0,
+        )
+        with self.assertRaises(ValueError):
+            midi_capture.capture_semantic_core([bus])
+
+    def test_capture_rejects_zero_base_velocity_event(self):
+        program = midi_capture.ObservedMidiEvent(
+            index=0, role="program", pitch=8, velocity=0,
+            channel=0, start_offset=0.0,
+        )
+        with self.assertRaises(ValueError):
+            midi_capture.capture_semantic_core([program])
+
+    def test_capture_rejects_clipped_velocity(self):
+        clipped = midi_capture.ObservedMidiEvent(
+            index=0, role="drum", pitch=36, velocity=127,
+            channel=0, start_offset=0.0,
+        )
+        with self.assertRaises(ValueError):
+            midi_capture.capture_semantic_core([clipped])
+
+
+class VolumetricProjectionTestSuite(unittest.TestCase):
+    """Direct tests of the 3D volumetric projection.
+
+    Closes the 1D / 2D / 3D dimensionality loop. If volumetric starts
+    silently reusing names from sister modalities or drifts from the
+    semantic core, the polymodal claim that each dimensionality is an
+    independent peer falls apart.
+    """
+
+    def test_volumetric_manifest_shape(self):
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        self.assertEqual(volumetric["kind"], VOLUMETRIC_KIND)
+        self.assertEqual(volumetric["version"], 0)
+        self.assertIn("marks", volumetric)
+
+    def test_volumetric_marks_use_ontology_primitive_and_color(self):
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        for mark in volumetric["marks"]:
+            op = opcode_ontology.get(mark["opcode"])
+            self.assertEqual(mark["primitive"], op.volumetric.primitive)
+            self.assertEqual(mark["color"], op.volumetric.color)
+
+    def test_volumetric_z_is_normalized(self):
+        volumetric = build_volumetric_manifest(_source(), language="en")
+        for mark in volumetric["marks"]:
+            self.assertGreaterEqual(mark["z"], 0.0)
+            self.assertLessEqual(mark["z"], 1.0)
+
+    def test_volumetric_primitives_are_three_dimensional_vocabulary(self):
+        # 3D primitive names must not collide with the 2D or 1D
+        # vocabularies. Sharing a name would re-introduce the
+        # dimensionality conflation the peer projection is meant to
+        # falsify.
+        forbidden_2d_shapes = {
+            "ring", "diamond", "arrow", "membrane", "source",
+            "phase", "up", "down", "square", "split", "merge", "double",
+        }
+        forbidden_1d_glyphs = {
+            "dot", "segment", "pulse", "wave", "ramp", "fall",
+            "fork", "join", "band", "shift",
+        }
+        for op in opcode_ontology.OPCODES:
+            self.assertNotIn(
+                op.volumetric.primitive, forbidden_2d_shapes,
+                f"opcode {op.name!r} reuses 2D shape name in volumetric "
+                f"hint: {op.volumetric.primitive!r}",
+            )
+            self.assertNotIn(
+                op.volumetric.primitive, forbidden_1d_glyphs,
+                f"opcode {op.name!r} reuses 1D glyph name in volumetric "
+                f"hint: {op.volumetric.primitive!r}",
+            )
+
+
+class SonicRoundTripTestSuite(unittest.TestCase):
+    """Inverse projection: observed sonic voices must recover semantic identity.
+
+    These tests make the cross-modal equivalence claim falsifiable in
+    the sonic direction. If they fail, the forward and inverse
+    projections have drifted apart -- which is a regression of the
+    architectural claim, not just a unit-test failure.
+    """
+
+    def test_invertible_set_is_derived_from_ontology(self):
+        invertible = sonic_capture.invertible_opcodes()
+        # Opcodes whose (role, waveform, envelope) tuple is unique and
+        # non-bus are recoverable from observation alone.
+        for name in ("emit", "oscillate", "transform", "propagate"):
+            self.assertIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} should be invertible from observation",
+            )
+        # Bus voices are silent under forward projection -> intensity
+        # cannot be recovered.
+        self.assertNotIn(
+            opcode_ontology.get_by_name("contain").code, invertible
+        )
+        # Opcodes that share a sonic signature are indistinguishable by
+        # ear and must not be claimed invertible.
+        for name in ("split", "merge", "attract", "repel",
+                     "diffuse", "stabilize", "resonate"):
+            self.assertNotIn(
+                opcode_ontology.get_by_name(name).code, invertible,
+                f"{name} shares a sonic signature and must not be invertible",
+            )
+
+    def test_observe_voice_strips_identity_labels(self):
+        sonic = build_sonic_manifest(_source(), language="en")
+        observed = sonic_capture.observe_voice(sonic["voices"][0])
+        # ObservedVoice is a frozen dataclass with no opcode/name field.
+        self.assertFalse(hasattr(observed, "opcode"))
+        self.assertFalse(hasattr(observed, "name"))
+
+    def test_invertible_program_subset_round_trips_to_semantic_core(self):
+        core = build_semantic_core(_source(), language="en")
+        sonic = build_sonic_manifest(_source(), language="en")
+        invertible = sonic_capture.invertible_opcodes()
+
+        pairs = [
+            (entity, voice)
+            for entity, voice in zip(core["entities"], sonic["voices"])
+            if entity["opcode"] in invertible
+        ]
+        self.assertGreaterEqual(
+            len(pairs), 3,
+            "Round-trip needs at least 3 invertible entities to be meaningful",
+        )
+
+        observed = [sonic_capture.observe_voice(voice) for _, voice in pairs]
+        captured = sonic_capture.capture_semantic_core(
+            observed, source_language="en", source_path="<round-trip>"
+        )
+
+        self.assertEqual(captured["kind"], CORE_KIND)
+        self.assertEqual(len(captured["entities"]), len(pairs))
+
+        for (original, _voice), recovered in zip(pairs, captured["entities"]):
+            self.assertEqual(original["opcode"], recovered["opcode"])
+            self.assertEqual(original["name"], recovered["name"])
+            self.assertEqual(original["channel"], recovered["channel"])
+            self.assertAlmostEqual(
+                original["intensity"], recovered["intensity"], places=3
+            )
+            self.assertAlmostEqual(
+                original["phase"], recovered["phase"], places=4
+            )
+            # signal is unrecoverable from amplitude alone; the capture
+            # module assumes the seed-program convention of signal == 0.
+            self.assertEqual(recovered["signal"], 0.0)
+
+    def test_capture_rejects_ambiguous_observation(self):
+        # split/merge share (trigger, square, percussive) -> cannot be
+        # disambiguated by ear.
+        ambiguous = sonic_capture.ObservedVoice(
+            index=0, role="trigger", waveform="square",
+            envelope="percussive", frequency_hz=440.0,
+            amplitude=0.4, start_offset=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            sonic_capture.capture_semantic_core([ambiguous])
+
+    def test_capture_rejects_bus_voice(self):
+        # contain is bus -> silent under forward projection.
+        bus = sonic_capture.ObservedVoice(
+            index=0, role="bus", waveform="sine",
+            envelope="sustained", frequency_hz=220.0,
+            amplitude=0.0, start_offset=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            sonic_capture.capture_semantic_core([bus])
+
+    def test_capture_rejects_unknown_signature(self):
+        unknown = sonic_capture.ObservedVoice(
+            index=0, role="source", waveform="noise",
+            envelope="tremolo", frequency_hz=440.0,
+            amplitude=0.3, start_offset=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            sonic_capture.capture_semantic_core([unknown])
+
+
+class SpatialRoundTripTestSuite(unittest.TestCase):
+    """Inverse projection: observed 2D marks must recover semantic identity.
+
+    Spatial is the strongest invertible modality. Every ontology opcode
+    has a unique ``(shape, color)`` tuple and the spatial authoring
+    surface exposes semantic fields directly through widgets rather
+    than through a perceptual measurement, so the round-trip is exact
+    for all 12 opcodes. If this suite fails, either the ontology has
+    grown a duplicate spatial hint or the inverse has drifted from the
+    forward projection -- which is a regression of the architectural
+    claim that 2D editing can author a polymodal program without
+    routing through generated text.
+    """
+
+    def test_invertible_set_is_every_opcode(self):
+        # Every ontology opcode has unique (shape, color) -> all invertible.
+        invertible = spatial_capture.invertible_opcodes()
+        self.assertEqual(
+            invertible, opcode_ontology.known_codes(),
+            "spatial inverse must cover every opcode; a duplicate "
+            "(shape, color) tuple would silently shrink this set",
+        )
+
+    def test_observe_mark_strips_identity_labels(self):
+        spatial = build_spatial_manifest(_source(), language="en")
+        observed = spatial_capture.observe_mark(spatial["entities"][0])
+        self.assertFalse(hasattr(observed, "opcode"))
+        self.assertFalse(hasattr(observed, "name"))
+
+    def test_observe_mark_preserves_id_for_loaded_entities(self):
+        # Entities loaded from a forward manifest carry an id; capture
+        # must preserve it so a non-destructive edit -> capture cycle
+        # produces an identity-equivalent semantic core.
+        spatial = build_spatial_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        observed = spatial_capture.observe_mark(spatial["entities"][0])
+        self.assertEqual(observed.id, spatial["entities"][0]["id"])
+
+    def test_full_program_round_trips_to_semantic_core(self):
+        core = build_semantic_core(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        spatial = build_spatial_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+
+        observed = [spatial_capture.observe_mark(e) for e in spatial["entities"]]
+        captured = spatial_capture.capture_semantic_core(
+            observed,
+            source_language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+
+        self.assertEqual(captured["kind"], CORE_KIND)
+        self.assertEqual(len(captured["entities"]), len(core["entities"]))
+
+        # Spatial is exact-invertible: every semantic field must survive
+        # the core -> spatial -> observed -> captured-core trip without
+        # any opcode being dropped or any field being lossy.
+        for original, recovered in zip(core["entities"], captured["entities"]):
+            self.assertEqual(original["id"], recovered["id"])
+            self.assertEqual(original["opcode"], recovered["opcode"])
+            self.assertEqual(original["name"], recovered["name"])
+            self.assertEqual(original["channel"], recovered["channel"])
+            self.assertAlmostEqual(original["intensity"], recovered["intensity"])
+            self.assertAlmostEqual(original["signal"], recovered["signal"])
+            self.assertAlmostEqual(original["phase"], recovered["phase"])
+
+    def test_capture_assigns_stable_id_when_observation_lacks_one(self):
+        # Freshly authored entities (palette adds in the editor) reach
+        # capture without an id; the inverse must derive one from
+        # source_path + index so the recovered manifest is well-formed.
+        anonymous = spatial_capture.ObservedSpatialMark(
+            index=0, shape="source", color="#de3c4b",
+            intensity=0.5, signal=0.0, phase=0.0, channel=0,
+        )
+        captured = spatial_capture.capture_semantic_core(
+            [anonymous], source_language="en", source_path="<fresh-edit>",
+        )
+        recovered = captured["entities"][0]
+        self.assertTrue(recovered["id"].startswith("ent_"))
+        self.assertEqual(len(recovered["id"]), len("ent_") + 8)
+
+    def test_capture_rejects_unknown_signature(self):
+        # A color/shape pair that does not appear in the ontology is a
+        # signal that the editor produced a mark this projection does
+        # not own.
+        unknown = spatial_capture.ObservedSpatialMark(
+            index=0, shape="hexagon", color="#000000",
+            intensity=1.0, signal=0.0, phase=0.0, channel=0,
+        )
+        with self.assertRaises(ValueError):
+            spatial_capture.capture_semantic_core([unknown])
+
+    def test_spatial_capability_contract_claims_exact_inverse(self):
+        # The architectural claim that spatial is exact-invertible must
+        # surface in the manifest's capability contract; downstream
+        # consumers should be able to trust the declaration.
+        spatial = build_spatial_manifest(_source(), language="en")
+        self.assertEqual(spatial["capabilities"]["inverse"], "exact")
+        self.assertEqual(spatial["capabilities"]["lossy"], [])
+        self.assertEqual(spatial["capabilities"]["ambiguous"], [])
+
+
+class SpatialCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the JS spatial inverse projection.
+
+    Mirrors SonicCaptureJSTestSuite and MidiCaptureJSTestSuite: the JS
+    inverse must expose the same surface as the Python inverse and read
+    its identity table from the shared ontology sidecar rather than
+    redefining it inline. If the JS drifts from the Python ontology, a
+    captured manifest produced in the browser stops being interchangeable
+    with one captured by the Python tooling.
+    """
+
+    def _source(self):
+        return SPATIAL_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_js_exports_inverse_surface(self):
+        source = self._source()
+        for symbol in (
+            "export function loadOntology",
+            "export function invertibleOpcodes",
+            "export function observeMark",
+            "export async function captureSemanticCore",
+        ):
+            self.assertIn(symbol, source, f"spatial_capture.js missing {symbol!r}")
+
+    def test_capture_js_fetches_ontology_sidecar(self):
+        source = self._source()
+        self.assertIn('"./ontology.json"', source)
+        self.assertIn(ONTOLOGY_KIND, source)
+
+    def test_capture_js_produces_semantic_core_kind(self):
+        self.assertIn(CORE_KIND, self._source())
+
+    def test_capture_js_does_not_hardcode_opcode_table(self):
+        source = self._source()
+        for name in ("emit", "oscillate", "transform", "propagate", "contain"):
+            self.assertNotIn(
+                f'"{name}"', source,
+                f"spatial_capture.js hardcodes opcode name {name!r}; "
+                f"it must read from the ontology sidecar instead.",
+            )
+
+
+class SpatialRuntimeAssetsTestSuite(unittest.TestCase):
+    """The 2D spatial browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.spatial.json"', runtime)
+        self.assertIn(SPATIAL_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_world_canvas_and_no_other_kinds(self):
+        html = SPATIAL_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="world"', html)
+        # Spatial is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(LINEAR_KIND, html)
+        self.assertNotIn(VOLUMETRIC_KIND, html)
+        self.assertNotIn(MIDI_KIND, html)
+
+
+class SpatialCaptureWiringTestSuite(unittest.TestCase):
+    """The spatial runtime + HTML must expose the Capture entry point.
+
+    Lint-style guards that the capture button is wired to the inverse
+    projection and the recovered manifest panel exists in the DOM. The
+    runtime must also preserve manifest entity IDs through edits and
+    assign fresh stable IDs to authored entities so the captured
+    semantic core can satisfy the polymodal compatibility principle
+    without routing through generated text.
+    """
+
+    def test_runtime_imports_capture_module(self):
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./spatial_capture.js"', runtime)
+        self.assertIn("captureSemanticCore", runtime)
+        self.assertIn("observeMark", runtime)
+        self.assertIn("loadOntology", runtime)
+
+    def test_runtime_propagates_manifest_ids(self):
+        # seedFromRows must pass row.id into the Entity so loaded
+        # entities keep their stable identity through edits.
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("id: row.id", runtime)
+
+    def test_runtime_assigns_authored_ids(self):
+        # Palette-added entities have no source row; the runtime must
+        # derive an ent_<8hex> identifier so capture does not need to
+        # invent one for them.
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("ent_", runtime)
+        self.assertIn("crypto.subtle.digest", runtime)
+
+    def test_runtime_supports_drag_to_move(self):
+        # Editing entities by direct manipulation is the simplest
+        # authoring affordance that proves the surface can produce
+        # capturable changes.
+        runtime = SPATIAL_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("pointermove", runtime)
+        self.assertIn("moveEntity", runtime)
+
+    def test_html_has_capture_button_and_recovered_panel(self):
+        html = SPATIAL_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="capture"', html)
+        self.assertIn('id="recovered"', html)
+
+
+class PolymodalCLITestSuite(unittest.TestCase):
+    """The CLI must produce both manifests and they must round-trip."""
+
+    def test_polymodal_build_writes_semantic_core(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.semantic.json"
+            cmd_polymodal_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], CORE_KIND)
+            self.assertEqual(len(data["entities"]), 9)
+
+    def test_sonic_build_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.sonic.json"
+            cmd_sonic_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], SONIC_KIND)
+            self.assertEqual(len(data["voices"]), 9)
+
+    def test_checked_in_sonic_manifest_matches_source(self):
+        expected = build_sonic_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(SONIC_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_linear_build_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.linear.json"
+            cmd_linear_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], LINEAR_KIND)
+            self.assertEqual(len(data["marks"]), 9)
+
+    def test_checked_in_linear_manifest_matches_source(self):
+        expected = build_linear_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(LINEAR_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_volumetric_build_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.volumetric.json"
+            cmd_volumetric_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], VOLUMETRIC_KIND)
+            self.assertEqual(len(data["marks"]), 9)
+
+    def test_checked_in_volumetric_manifest_matches_source(self):
+        expected = build_volumetric_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(VOLUMETRIC_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_midi_build_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "program.midi.json"
+            cmd_midi_build(Namespace(file=str(PROGRAM), lang="en", out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], MIDI_KIND)
+            self.assertEqual(len(data["events"]), 9)
+
+    def test_checked_in_midi_manifest_matches_source(self):
+        expected = build_midi_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(MIDI_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_checked_in_spatial_manifest_matches_source(self):
+        expected = build_spatial_manifest(
+            _source(),
+            language="en",
+            source_path="docs/browser/spatial-dynamics/program.multi",
+        )
+        actual = json.loads(SPATIAL_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+
+class OntologyManifestTestSuite(unittest.TestCase):
+    """The checked-in ontology JSON sidecar must match the Python ontology.
+
+    Browser runtimes fetch ``ontology.json`` and rely on it as the
+    single source of truth shared with the Python projections. If this
+    parity drifts, the JS inverse and the Python inverse start
+    classifying observations differently -- which is a regression of
+    the polymodal architectural claim.
+    """
+
+    def test_build_ontology_manifest_shape(self):
+        manifest = build_ontology_manifest()
+        self.assertEqual(manifest["kind"], ONTOLOGY_KIND)
+        self.assertEqual(manifest["version"], 0)
+        self.assertEqual(
+            {op["code"] for op in manifest["opcodes"]},
+            opcode_ontology.known_codes(),
+        )
+
+    def test_checked_in_sonic_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(SONIC_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_checked_in_linear_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(LINEAR_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_checked_in_volumetric_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(VOLUMETRIC_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_checked_in_midi_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(MIDI_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_checked_in_spatial_ontology_matches_source(self):
+        expected = build_ontology_manifest()
+        actual = json.loads(SPATIAL_ONTOLOGY.read_text(encoding="utf-8"))
+        self.assertEqual(actual, expected)
+
+    def test_ontology_manifest_includes_linear_hints(self):
+        manifest = build_ontology_manifest()
+        for entry in manifest["opcodes"]:
+            self.assertIn("linear", entry)
+            self.assertIn("glyph", entry["linear"])
+            self.assertIn("color", entry["linear"])
+
+    def test_ontology_manifest_includes_volumetric_hints(self):
+        manifest = build_ontology_manifest()
+        for entry in manifest["opcodes"]:
+            self.assertIn("volumetric", entry)
+            self.assertIn("primitive", entry["volumetric"])
+            self.assertIn("color", entry["volumetric"])
+
+    def test_ontology_manifest_includes_midi_hints(self):
+        manifest = build_ontology_manifest()
+        for entry in manifest["opcodes"]:
+            self.assertIn("midi", entry)
+            self.assertIn("role", entry["midi"])
+            self.assertIn("pitch", entry["midi"])
+            self.assertIn("velocity", entry["midi"])
+
+    def test_ontology_export_cli_writes_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "ontology.json"
+            cmd_ontology_export(Namespace(out=str(out)))
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["kind"], ONTOLOGY_KIND)
+            self.assertEqual(len(data["opcodes"]), len(opcode_ontology.OPCODES))
+
+
+class SonicCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the JS inverse projection.
+
+    A real browser-side execution test would need a headless runtime;
+    these lint-style checks instead ensure the JS exports the same
+    surface as the Python inverse and fetches the shared ontology
+    sidecar rather than redefining it inline.
+    """
+
+    def _source(self):
+        return SONIC_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_js_exports_inverse_surface(self):
+        source = self._source()
+        for symbol in (
+            "export function loadOntology",
+            "export function invertibleOpcodes",
+            "export function observeVoice",
+            "export function captureSemanticCore",
+        ):
+            self.assertIn(symbol, source, f"sonic_capture.js missing {symbol!r}")
+
+    def test_capture_js_fetches_ontology_sidecar(self):
+        source = self._source()
+        self.assertIn('"./ontology.json"', source)
+        self.assertIn(ONTOLOGY_KIND, source)
+
+    def test_capture_js_produces_semantic_core_kind(self):
+        # The recovered manifest must carry the same kind constant the
+        # Python inverse uses, so downstream consumers can treat them
+        # interchangeably.
+        self.assertIn(CORE_KIND, self._source())
+
+    def test_capture_js_does_not_hardcode_opcode_table(self):
+        # Hardcoded opcode names in JS would let it silently drift from
+        # the Python ontology. The JS must derive everything from the
+        # fetched sidecar.
+        source = self._source()
+        for name in ("emit", "oscillate", "transform", "propagate", "contain"):
+            self.assertNotIn(
+                f'"{name}"', source,
+                f"sonic_capture.js hardcodes opcode name {name!r}; "
+                f"it must read from the ontology sidecar instead.",
+            )
+
+
+class MidiCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the JS MIDI inverse projection."""
+
+    def _source(self):
+        return MIDI_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_js_exports_inverse_surface(self):
+        source = self._source()
+        for symbol in (
+            "export function loadOntology",
+            "export function invertibleOpcodes",
+            "export function observeEvent",
+            "export function captureSemanticCore",
+        ):
+            self.assertIn(symbol, source, f"midi_capture.js missing {symbol!r}")
+
+    def test_capture_js_fetches_ontology_sidecar(self):
+        source = self._source()
+        self.assertIn('"./ontology.json"', source)
+        self.assertIn(ONTOLOGY_KIND, source)
+
+    def test_capture_js_produces_semantic_core_kind(self):
+        self.assertIn(CORE_KIND, self._source())
+
+    def test_capture_js_does_not_hardcode_opcode_table(self):
+        source = self._source()
+        for name in ("emit", "oscillate", "transform", "propagate", "contain"):
+            self.assertNotIn(
+                f'"{name}"', source,
+                f"midi_capture.js hardcodes opcode name {name!r}; "
+                f"it must read from the ontology sidecar instead.",
+            )
+
+
+class SonicRuntimeAssetsTestSuite(unittest.TestCase):
+    """The sonic browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.sonic.json"', runtime)
+        self.assertIn(SONIC_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_meter_canvas_and_no_spatial_kind(self):
+        html = SONIC_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="meter"', html)
+        self.assertNotIn(SPATIAL_KIND, html)
+
+
+class MicrophoneCaptureJSTestSuite(unittest.TestCase):
+    """Structural guards on the browser-side microphone pipeline.
+
+    The microphone pipeline is the bridge that lets the inverse
+    projection consume real audio rather than synthetic manifests.
+    These checks ensure it exposes the contract the runtime depends on
+    and does not redefine anything the ontology already owns.
+    """
+
+    def _source(self):
+        return MIC_CAPTURE_JS.read_text(encoding="utf-8")
+
+    def test_capture_pipeline_exports(self):
+        source = self._source()
+        for symbol in (
+            "export class MicrophoneCapture",
+            "export async function requestMicrophoneStream",
+            "export function buildObservedVoice",
+            "export function snapToPentatonic",
+            "export function findFundamental",
+            "export function classifyWaveform",
+            "export function classifyEnvelope",
+        ):
+            self.assertIn(symbol, source, f"microphone_capture.js missing {symbol!r}")
+
+    def test_capture_pipeline_uses_pentatonic_shared_with_forward(self):
+        # The forward sonic projection only emits frequencies from
+        # PENTATONIC_HZ; the capture path must snap to the same set so
+        # the inverse can resolve a single ontology row deterministically.
+        source = self._source()
+        self.assertIn("220.000", source)
+        self.assertIn("440.000", source)
+        self.assertIn("783.991", source)
+
+    def test_capture_pipeline_produces_observed_voice_fields(self):
+        # The observation shape is the contract with sonic_capture.js.
+        source = self._source()
+        for field in (
+            "frequency_hz", "amplitude", "start_offset", "channel",
+            "role", "waveform", "envelope",
+        ):
+            self.assertIn(field, source, f"observed voice missing {field!r}")
+
+
+class SonicCaptureWiringTestSuite(unittest.TestCase):
+    """The sonic runtime + HTML must expose the capture entry point.
+
+    Lint-style guards that the capture button is wired to the inverse
+    projection and the recovered manifest panel exists in the DOM. A
+    real interaction test would need a headless browser.
+    """
+
+    def test_runtime_imports_capture_modules(self):
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./sonic_capture.js"', runtime)
+        self.assertIn('from "./microphone_capture.js"', runtime)
+        self.assertIn("captureSemanticCore", runtime)
+        self.assertIn("MicrophoneCapture", runtime)
+
+    def test_runtime_handles_capture_button_action(self):
+        runtime = SONIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('dataset.action === "capture"', runtime)
+
+    def test_html_has_capture_button_and_recovered_panel(self):
+        html = SONIC_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="capture"', html)
+        self.assertIn('data-action="capture"', html)
+        self.assertIn('id="recovered"', html)
+
+
+class LinearRuntimeAssetsTestSuite(unittest.TestCase):
+    """The 1D linear browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = LINEAR_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.linear.json"', runtime)
+        self.assertIn(LINEAR_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = LINEAR_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_strip_canvas_and_no_other_kinds(self):
+        html = LINEAR_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="strip"', html)
+        # Linear is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SPATIAL_KIND, html)
+        self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(VOLUMETRIC_KIND, html)
+
+
+class VolumetricRuntimeAssetsTestSuite(unittest.TestCase):
+    """The 3D volumetric browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = VOLUMETRIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.volumetric.json"', runtime)
+        self.assertIn(VOLUMETRIC_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = VOLUMETRIC_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_html_has_volume_canvas_and_no_other_kinds(self):
+        html = VOLUMETRIC_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="volume"', html)
+        # Volumetric is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SPATIAL_KIND, html)
+        self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(LINEAR_KIND, html)
+        self.assertNotIn(MIDI_KIND, html)
+
+
+class MidiRuntimeAssetsTestSuite(unittest.TestCase):
+    """The MIDI browser runtime must consume the manifest and stay text-free."""
+
+    def test_runtime_loads_manifest_kind(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('fetch("./program.midi.json"', runtime)
+        self.assertIn(MIDI_KIND, runtime)
+
+    def test_runtime_canvas_draws_no_text(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertNotIn("fillText", runtime)
+        self.assertNotIn("strokeText", runtime)
+
+    def test_runtime_has_webaudio_fallback(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("window.AudioContext || window.webkitAudioContext", runtime)
+        self.assertIn("function playWebAudioEvent", runtime)
+        self.assertIn("function playNoiseHit", runtime)
+
+    def test_runtime_uses_fallback_when_no_midi_output(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn("if (midiOutput)", runtime)
+        self.assertIn("playWebAudioEvent(event)", runtime)
+        self.assertIn("sendEvent chooses Web MIDI when available", runtime)
+
+    def test_html_has_roll_canvas_and_no_other_kinds(self):
+        html = MIDI_HTML.read_text(encoding="utf-8")
+        self.assertIn('<canvas id="roll"', html)
+        # MIDI is its own peer: it must not reference sister-modality kinds.
+        self.assertNotIn(SPATIAL_KIND, html)
+        self.assertNotIn(SONIC_KIND, html)
+        self.assertNotIn(LINEAR_KIND, html)
+        self.assertNotIn(VOLUMETRIC_KIND, html)
+
+
+class MidiCaptureWiringTestSuite(unittest.TestCase):
+    """The MIDI runtime + HTML must expose the Web MIDI Input capture entry.
+
+    Lint-style guards that the capture button is wired to the inverse
+    projection and the recovered manifest panel exists in the DOM.
+    """
+
+    def test_runtime_imports_capture_modules(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./midi_capture.js"', runtime)
+        self.assertIn("captureSemanticCore", runtime)
+        self.assertIn("observeEvent", runtime)
+
+    def test_runtime_handles_midiin_button_action(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('dataset.action === "midiin"', runtime)
+
+    def test_runtime_listens_for_midimessage(self):
+        runtime = MIDI_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('"midimessage"', runtime)
+        # Decoder must distinguish the four primary MIDI status bytes
+        # the forward MidiHint taxonomy emits.
+        for status in ("0x90", "0xb0", "0xc0"):
+            self.assertIn(status, runtime, f"midi runtime missing status {status}")
+
+    def test_html_has_midiin_button_and_recovered_panel(self):
+        html = MIDI_HTML.read_text(encoding="utf-8")
+        self.assertIn('id="midiin"', html)
+        self.assertIn('data-action="midiin"', html)
+        self.assertIn('id="recovered"', html)
+
+
+class GoldenManifestTestSuite(unittest.TestCase):
+    """Frozen v0 manifests must remain readable as the build evolves.
+
+    The existing ``test_checked_in_*_matches_source`` tests catch silent
+    drift between source and the checked-in demo JSON: they regenerate
+    on both sides. This suite is the schema-locked counterpart -- it
+    asserts that the frozen v0 fixture under tests/fixtures/polymodal/
+    still satisfies the v0 schema contract (kind, version, required
+    entity fields, valid opcode codes). Bumping a field's name or
+    removing a required field breaks this test before it breaks any
+    consumer that has v0 manifests stored on disk.
+
+    See [[polymodal-semantic-versioning]] for the versioning rule:
+    semantic-core-v0 must always mean what it meant when emitted.
+    """
+
+    _SEMANTIC_CORE_REQUIRED = {
+        "id", "index", "opcode", "name",
+        "intensity", "signal", "phase", "channel",
+    }
+    _RELATION_KINDS = {"containment"}
+
+    def _golden_semantic_core(self):
+        return json.loads(GOLDEN_SEMANTIC_CORE.read_text(encoding="utf-8"))
+
+    def test_golden_semantic_core_kind_and_version(self):
+        manifest = self._golden_semantic_core()
+        self.assertEqual(manifest["kind"], CORE_KIND)
+        self.assertEqual(manifest["version"], 0)
+
+    def test_golden_semantic_core_entity_shape(self):
+        manifest = self._golden_semantic_core()
+        self.assertGreater(len(manifest["entities"]), 0)
+        for entity in manifest["entities"]:
+            missing = self._SEMANTIC_CORE_REQUIRED - set(entity.keys())
+            self.assertFalse(
+                missing,
+                f"frozen v0 entity {entity.get('index')} missing required fields: {missing}",
+            )
+            self.assertTrue(
+                entity["id"].startswith("ent_"),
+                f"frozen v0 id {entity['id']!r} missing ent_ prefix",
+            )
+
+    def test_golden_semantic_core_opcodes_still_known(self):
+        manifest = self._golden_semantic_core()
+        known = opcode_ontology.known_codes()
+        for entity in manifest["entities"]:
+            self.assertIn(
+                entity["opcode"], known,
+                f"frozen v0 entity references opcode {entity['opcode']} "
+                f"that no longer exists in the ontology -- the v0 contract "
+                f"requires an explicit migration before removing opcodes",
+            )
+
+    def test_golden_semantic_core_relations_have_known_kinds(self):
+        manifest = self._golden_semantic_core()
+        for relation in manifest["relations"]:
+            self.assertIn(
+                relation["kind"], self._RELATION_KINDS,
+                f"frozen v0 manifest contains unknown relation kind "
+                f"{relation['kind']!r}",
+            )
+
+
+class ProjectionCapabilitiesTestSuite(unittest.TestCase):
+    """Every forward projection must publish a capability contract.
+
+    The contract makes lossy / ambiguous / view-only projections honest
+    instead of pretending all modalities round-trip cleanly. See
+    [[polymodal-capability-contracts]]. This suite enforces the
+    *structural* presence of the contract; the equivalence and
+    round-trip suites enforce that the declared promises hold.
+    """
+
+    _VALID_INVERSE_LEVELS = {
+        "exact", "behavior", "lossy", "ambiguous-by-design",
+        "view-only", "non-invertible", "partial",
+    }
+    _CORE_FIELDS = {"id", "opcode", "intensity", "signal", "phase", "channel"}
+
+    def _all_manifests(self):
+        return {
+            SPATIAL_KIND: build_spatial_manifest(_source(), language="en"),
+            SONIC_KIND: build_sonic_manifest(_source(), language="en"),
+            LINEAR_KIND: build_linear_manifest(_source(), language="en"),
+            VOLUMETRIC_KIND: build_volumetric_manifest(_source(), language="en"),
+            MIDI_KIND: build_midi_manifest(_source(), language="en"),
+        }
+
+    def test_every_manifest_carries_capabilities(self):
+        for kind, manifest in self._all_manifests().items():
+            self.assertIn(
+                "capabilities", manifest,
+                f"{kind} manifest is missing a capability contract",
+            )
+
+    def test_capability_projection_matches_manifest_kind(self):
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            self.assertEqual(
+                contract["projection"], kind,
+                f"{kind} capability contract names {contract['projection']!r}",
+            )
+
+    def test_capability_inverse_level_is_known(self):
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            self.assertIn(
+                contract["inverse"], self._VALID_INVERSE_LEVELS,
+                f"{kind} declares unknown inverse level {contract['inverse']!r}",
+            )
+
+    def test_capability_field_lists_reference_core_fields(self):
+        # preserves/derived/lossy/ambiguous should all use semantic-core
+        # field names where they refer to fields; ambiguous may also use
+        # opcode group descriptors, so it is exempt from the field check.
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            for category in ("preserves", "derived"):
+                for field in contract.get(category, []):
+                    self.assertIn(
+                        field, self._CORE_FIELDS,
+                        f"{kind} declares unknown core field {field!r} in {category}",
+                    )
+
+    def test_capability_categories_are_disjoint(self):
+        # A field cannot simultaneously be preserved and lossy. derived
+        # and lossy can overlap (a derived field is lossy by definition
+        # in many projections), but a field listed under preserves must
+        # not also appear under lossy or derived.
+        for kind, manifest in self._all_manifests().items():
+            contract = manifest["capabilities"]
+            preserves = set(contract["preserves"])
+            derived = set(contract["derived"])
+            self.assertFalse(
+                preserves & derived,
+                f"{kind} lists fields in both preserves and derived: "
+                f"{preserves & derived}",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

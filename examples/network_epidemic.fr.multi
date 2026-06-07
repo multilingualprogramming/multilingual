@@ -1,0 +1,53 @@
+# Une contagion en réseau comme programme polymodal semantic-core-v1, écrit
+# entièrement dans le langage Multilingual -- sans Python. Construire avec :
+#
+#     python -m multilingualprogramming process-build examples/network_epidemic.fr.multi --lang fr
+#
+# C'est le même programme que examples/network_epidemic.multi, mais en français :
+# il se réduit à un noyau de processus identique. Les clés du manifeste
+# ("match", "state", "node", ...) restent en anglais car ce sont des noms de
+# schéma, neutres vis-à-vis de la langue.
+#
+# Le Jeu de la vie et l'écosystème tournent sur un treillis, où le voisinage est
+# décidé par la position. Beaucoup de processus réels ne le sont pas : une
+# épidémie, une rumeur, une panne en cascade se propagent le long d'un GRAPHE de
+# contacts arbitraire. La topologie de graphe découple l'interaction de la
+# position -- l'adjacence est l'ensemble explicite des arêtes, non la géométrie.
+#
+# Voici le modèle SIR discret sur un graphe de contacts : deux communautés bien
+# connectées reliées par un seul pont. État par nœud : 0 sensible, 1 infecté,
+# 2 rétabli.
+
+# La transition SIR discrète. Dans l'ordre : un nœud infecté (1) se rétablit (2) ;
+# un nœud sensible (0) ayant au moins un voisin infecté l'attrape (1). Un nœud ne
+# correspondant à aucune clause reste inchangé (il n'y a pas de `repli`).
+déf regle_sir():
+    soit contact = [c pour c dans range(1, 12)]
+    retour reecrire(
+        clause(quand(state=1), devient(state=2)),
+        clause(quand(state=0), nombre_voisins("state", 1, contact), devient(state=1))
+    )
+
+# Deux communautés de six nœuds. Chacune est un anneau (i -- i+1) plus trois
+# longues diagonales ; les identifiants 0..5 sont la communauté A, 6..11 la B.
+# Le pont [0, 9] relie le nœud de droite de A au nœud de gauche de B.
+soit anneau = [[i, (i + 1) % 6] pour i dans range(6)]
+soit cordes = [[0, 3], [1, 4], [2, 5]]
+soit interne = anneau + cordes
+soit aretes = [[c * 6 + a, c * 6 + b] pour c dans range(2) pour a, b dans interne] + [[0, 9]]
+
+# Disposer les communautés en deux hexagones -- un indice d'affichage seulement ;
+# le moteur ne lit que `node` et les arêtes. Le nœud 3 (extrême gauche de A,
+# loin du pont) part infecté, tous les autres sensibles.
+soit hex_dec = [[2, 0], [1, 2], [-1, 2], [-2, 0], [-1, -2], [1, -2]]
+soit cellules = [{"node": c * 6 + i, "locus": [3 + c * 8 + hex_dec[i][0], 3 + hex_dec[i][1]], "state": (1 si c * 6 + i == 3 sinon 0)} pour c dans range(2) pour i dans range(6)]
+soit etat = {"loci": cellules}
+
+# Assembler les quatre axes : une topologie de graphe réécrite par la règle SIR
+# sous un ordonnancement synchrone.
+soit process = construire_noyau_processus(
+    etat,
+    graphe_topologie(aretes),
+    regle_sir(),
+    ordonnancement_synchrone()
+)

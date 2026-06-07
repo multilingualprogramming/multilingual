@@ -98,6 +98,8 @@ from multilingualprogramming.codegen.wat_generator_support import (
     _SET_NAMES,
     _STR_NAMES,
     _ZIP_NAMES,
+    BUILTIN_LIST_RETURNERS,
+    BUILTIN_STRING_RETURNERS,
     _name,
     _real_params,
 )
@@ -148,6 +150,18 @@ class WATCodeGenerator(
         # Locals known to hold list/tuple pointers (heap-allocated).
         self._list_locals: set[str] = set()
         self._tuple_locals: set[str] = set()
+        # B3 : locals known to hold i32-shaped values (in [-2^31, 2^31)),
+        # earned via bitwise/shift ops, i32 builtins (imul32/iadd32/shr_u32),
+        # or chained `+`/`*` on int-like operands. Consumed by
+        # `_emit_numeric_binop` to dispatch to i32 wraparound on `+` and `*`.
+        self._int_like_locals: set[str] = set()
+        # B2 : locals déclarés (local $x v128) au lieu de (local $x f64) car
+        # ils tiennent une valeur SIMD f64x2 issue de `v128_pair(a, b)` ou
+        # d'une opération `+ - * /` entre deux opérandes v128-shaped.
+        # `_emit_numeric_binop` consulte `_is_v128_expr` pour dispatcher vers
+        # `f64x2.*` quand les deux côtés sont v128, et `_append_wat_function`
+        # consulte ce set pour typer les locals correctement dans le WAT.
+        self._v128_locals: set[str] = set()
         # Compiler-known dict locals: var_name -> string-key to element index.
         self._dict_key_maps: dict[str, dict[str, int]] = {}
         # Import alias resolution for recognized builtin/math lowerings.
@@ -188,9 +202,20 @@ class WATCodeGenerator(
         # Populated for methods that are overridden in ≥1 subclass.
         self._dispatch_func_names: dict[str, str] = {}
         # Functions known to return heap-backed sequence pointers.
-        self._sequence_func_names: set[str] = set()
+        # Seeded from `BUILTIN_LIST_RETURNERS` (single source of truth in
+        # wat_generator_support) ; user-defined list-returning functions are
+        # added by the orchestrator via `_returns_list_like` analysis.
+        self._sequence_func_names: set[str] = set(BUILTIN_LIST_RETURNERS)
+        # Fonctions à retour multi-valeur (retour (a, b, ...)). Nom -> arité N>=2.
+        # Lowering : signature `(result f64 f64 ...)`, retour empile N valeurs,
+        # destructuring `soit (x, y) = f(...)` consomme N valeurs en local.set
+        # reverse. Détecté par `_multi_value_return_arity` à la collecte des
+        # métadonnées de fonctions.
+        self._multi_value_func_arity: dict[str, int] = {}
         # Functions known to return string-like values with $__last_str_len metadata.
-        self._string_return_funcs: set[str] = set()
+        # Seeded from BUILTIN_STRING_RETURNERS (single source of truth) ; user
+        # functions are added via _returns_string_like.
+        self._string_return_funcs: set[str] = set(BUILTIN_STRING_RETURNERS)
         # Runtime string formatting helpers.
         self._string_format_helpers_emitted: bool = False
         # Narrow closure-factory support for returned nested functions with one captured cell.
@@ -474,7 +499,27 @@ class WATCodeGenerator(
         if line:
             self._emit(f"{indent};; @{line}:{col}")
         if isinstance(stmt, VariableDeclaration):
-            if isinstance(stmt.name, (TupleLiteral, ListLiteral)) and \
+            # Destructuring multi-valeur : `soit (a, b) = f(...)` où f est marquée
+            # à arité ≥2 dans _multi_value_func_arity. L'appel laisse N valeurs
+            # sur la pile ; on les consomme en `local.set` ordre inverse.
+            if (
+                isinstance(stmt.name, (TupleLiteral, ListLiteral))
+                and isinstance(stmt.value, CallExpr)
+                and _name(stmt.value.func) in self._multi_value_func_arity
+                and self._multi_value_func_arity[_name(stmt.value.func)]
+                    == len(stmt.name.elements)
+            ):
+                arity = len(stmt.name.elements)
+                names = ", ".join(_name(el) for el in stmt.name.elements)
+                self._emit(f"{indent};; let ({names}) = ...")
+                self._gen_expr(stmt.value, indent)
+                # Stack top = last element ; local.set in reverse order.
+                for element in reversed(stmt.name.elements):
+                    name = _name(element)
+                    if not self._is_module_global(name):
+                        self._locals.add(name)
+                    self._emit_name_set(name, indent)
+            elif isinstance(stmt.name, (TupleLiteral, ListLiteral)) and \
                     self._gen_unpack_assignment(stmt.name, stmt.value, indent):
                 self._emit(f"{indent};; unpacking declaration lowered")
             else:
@@ -583,6 +628,23 @@ class WATCodeGenerator(
                 self._emit(f"{indent}i32.add")
                 self._gen_expr(stmt.value, indent)   # f64 value
                 self._emit(f"{indent}f64.store")
+            elif (
+                isinstance(target, (TupleLiteral, ListLiteral))
+                and isinstance(stmt.value, CallExpr)
+                and _name(stmt.value.func) in self._multi_value_func_arity
+                and self._multi_value_func_arity[_name(stmt.value.func)]
+                    == len(target.elements)
+            ):
+                # Destructuring multi-valeur : `soit a, b = f(...)`. L'appel
+                # laisse N valeurs sur la pile (top = dernier élément).
+                arity = len(target.elements)
+                self._emit(f"{indent};; ({', '.join(_name(el) for el in target.elements)}) = ...")
+                self._gen_expr(stmt.value, indent)
+                for element in reversed(target.elements):
+                    name = _name(element)
+                    if not self._is_module_global(name):
+                        self._locals.add(name)
+                    self._emit_name_set(name, indent)
             elif self._gen_unpack_assignment(target, stmt.value, indent):
                 self._emit(f"{indent};; unpacking assignment lowered")
             else:
@@ -871,11 +933,19 @@ class WATCodeGenerator(
             self._gen_for(stmt, indent)
 
         elif isinstance(stmt, ReturnStatement):
-            if stmt.value:
+            # Retour multi-valeur (`retour (a, b)`) : empile chaque élément
+            # individuellement, puis `return`. La signature de la fonction est
+            # déjà `(result f64 f64 …)` via _multi_value_func_arity.
+            if isinstance(stmt.value, TupleLiteral) and len(stmt.value.elements) >= 2:
+                for element in stmt.value.elements:
+                    self._gen_expr(element, indent)
+                self._emit(f"{indent}return")
+            elif stmt.value:
                 self._gen_expr(stmt.value, indent)
+                self._emit(f"{indent}return")
             else:
                 self._emit(f"{indent}f64.const 0")
-            self._emit(f"{indent}return")
+                self._emit(f"{indent}return")
 
         elif isinstance(stmt, BreakStatement):
             if self._loop_stack:
@@ -1313,6 +1383,127 @@ class WATCodeGenerator(
                 self._gen_expr(node.args[0], indent)
                 self._gen_expr(node.args[1], indent)
                 self._emit(f"{indent}call $math_atan2")
+            elif resolved_fname in {"imul32"} and len(node.args) == 2:
+                # 32-bit integer multiplication with wraparound, mirroring
+                # JS Math.imul. The bitwise ops `& | ^ << >>` already use the
+                # signed-i32 convention (trunc_f64_s / convert_i32_s) ; this
+                # extends it to multiplication. f64.mul does NOT wrap, hence
+                # the need for a dedicated builtin. Required by mulberry32
+                # PRNG and any 32-bit hash (FNV, CRC32, …).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i32.mul")
+                self._emit(f"{indent}f64.convert_i32_s")
+            elif resolved_fname in {"iadd32"} and len(node.args) == 2:
+                # 32-bit integer addition with wraparound. Uses an i64
+                # intermediate so the sum cannot overflow before wrapping :
+                #   i64.extend_i32_s ; i64.add ; i32.wrap_i64.
+                # Naïvement écrire `(a + b) ^ 0` traperait quand le sum f64
+                # dépasse [-2^31, 2^31).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i64.extend_i32_s")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i64.extend_i32_s")
+                self._emit(f"{indent}i64.add")
+                self._emit(f"{indent}i32.wrap_i64")
+                self._emit(f"{indent}f64.convert_i32_s")
+            elif resolved_fname in {"shr_u32"} and len(node.args) == 2:
+                # Unsigned right shift (zero-fill), mirroring JS `>>>`. The
+                # built-in `>>` is signed (sign-extending). Required by
+                # mulberry32 (which mixes (t ^ (t >>> 15)) etc.).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}i32.shr_u")
+                self._emit(f"{indent}f64.convert_i32_s")
+            elif resolved_fname in {"format_fixed"} and len(node.args) == 2:
+                # format_fixed(v, n) — formate v à n décimales (n runtime,
+                # clampé à [0, 9]). Renvoie un f64 ptr ; longueur dans
+                # $__last_str_len. Remplace les `formatter_fixe_2/3/5/6`
+                # spécialisés côté fractales par un seul appel.
+                helper = self._ensure_fixed_dyn_helper()
+                self._gen_expr(node.args[0], indent)  # v (f64)
+                self._gen_expr(node.args[1], indent)  # n (f64)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}call {helper}")
+                # Helper retourne (ptr_f64, len_f64). On stocke len dans la
+                # globale `$__last_str_len` puis on garde ptr sur la pile,
+                # conformément à la convention multilingual (cf.
+                # _emit_string_value_with_len, _update_string_tracking).
+                self._emit(f"{indent}i32.trunc_f64_u")
+                self._emit(f"{indent}global.set $__last_str_len")
+            elif resolved_fname in {"format_exp"} and len(node.args) == 2:
+                # format_exp(v, n) — formate v en notation exponentielle avec
+                # n décimales de mantisse (n runtime, clampé à [0, 9]).
+                # Sortie : `[-]d.dddddde[-]E` (pas de `e+`, exposant 1-3 chiffres).
+                # Remplace le hand-roll `formatter_exponentiel_*` (~60 lignes)
+                # côté fractales_partage.
+                helper = self._ensure_exp_dyn_helper()
+                self._gen_expr(node.args[0], indent)  # v (f64)
+                self._gen_expr(node.args[1], indent)  # n (f64)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}call {helper}")
+                self._emit(f"{indent}i32.trunc_f64_u")
+                self._emit(f"{indent}global.set $__last_str_len")
+            elif resolved_fname in {"format_prec"} and len(node.args) == 2:
+                # format_prec(v, n) — formate v à n chiffres significatifs,
+                # strip des zéros de queue (et du '.' final s'il devient
+                # orphelin). Matche `v.toPrecision(n).replace(/\\.?0+$/, '')`
+                # sur la plage non-exponentielle. Remplace la branche JS
+                # `n.toPrecision(12).replace(/\\.?0+$/, '')` côté fractales
+                # (cf. renderer-navigation.js W16).
+                helper = self._ensure_prec_dyn_helper()
+                self._gen_expr(node.args[0], indent)  # v (f64)
+                self._gen_expr(node.args[1], indent)  # n (f64)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}call {helper}")
+                self._emit(f"{indent}i32.trunc_f64_u")
+                self._emit(f"{indent}global.set $__last_str_len")
+            elif resolved_fname in {"v128_pair"} and len(node.args) == 2:
+                # B2 : `v128_pair(a, b)` construit un v128 (f64x2) sur la pile
+                # WAT. Cohérent avec le patron utilisé par `$mandelbrot_pair_simd` :
+                #   v128.const f64x2 0 0
+                #   <a>  f64x2.replace_lane 0
+                #   <b>  f64x2.replace_lane 1
+                # Le résultat est consommé soit par un opérateur v128 (cf.
+                # `_emit_v128_arith_binop`), soit affecté à un local typé v128
+                # (cf. `_v128_locals` + `_append_wat_function`), soit extrait
+                # via `v128_lane(v, i)`.
+                self._emit(f"{indent}v128.const f64x2 0 0")
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}f64x2.replace_lane 0")
+                self._gen_expr(node.args[1], indent)
+                self._emit(f"{indent}f64x2.replace_lane 1")
+            elif resolved_fname in {"v128_lane"} and len(node.args) == 2:
+                # B2 : `v128_lane(v, i)` extrait la lane i (0 ou 1) d'un v128
+                # vers un f64 scalaire. `i` doit être un littéral 0|1 (la
+                # contrainte est imposée par WAT — `f64x2.extract_lane` prend
+                # un immediate de lane index). Permet de récupérer un résultat
+                # SIMD en valeur f64 ordinaire à la fin du calcul.
+                lane_node = node.args[1]
+                if not isinstance(lane_node, NumeralLiteral):
+                    raise ValueError("v128_lane(v, i) : i doit être un littéral 0 ou 1")
+                try:
+                    lane = int(str(lane_node.value))
+                except ValueError as exc:
+                    raise ValueError("v128_lane(v, i) : i doit être un entier") from exc
+                if lane not in (0, 1):
+                    raise ValueError(f"v128_lane(v, i) : i={lane} hors [0, 1]")
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}f64x2.extract_lane {lane}")
+            elif resolved_fname in {"u32_to_f64"} and len(node.args) == 1:
+                # Reinterpret a signed-i32-as-f64 value as unsigned-i32-as-f64.
+                # Negatives become value + 2^32. Identity for non-negatives.
+                # Used to convert mulberry32 output (signed-view i32) to a
+                # uint32 magnitude before dividing by 2^32 → [0, 1).
+                self._gen_expr(node.args[0], indent)
+                self._emit(f"{indent}i32.trunc_f64_s")
+                self._emit(f"{indent}f64.convert_i32_u")
             elif resolved_fname in {"math.hypot", "hypot"} and len(node.args) == 2:
                 # hypot(a,b) = sqrt(a²+b²)
                 self._gen_expr(node.args[0], indent)

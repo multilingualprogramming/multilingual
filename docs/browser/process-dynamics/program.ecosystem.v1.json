@@ -1,0 +1,1105 @@
+{
+  "kind": "semantic-core-v1",
+  "version": 1,
+  "source": "docs/browser/process-dynamics/program.ecosystem.v1.json",
+  "state": {
+    "loci": [
+      {
+        "locus": [
+          0,
+          0
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          0,
+          1
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          0,
+          2
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          0,
+          3
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          0,
+          4
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          0,
+          5
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          0,
+          6
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          0,
+          7
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          0,
+          8
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          0,
+          9
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          0,
+          10
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          0,
+          11
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          1,
+          0
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          1,
+          1
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          1,
+          2
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          1,
+          3
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          1,
+          4
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          1,
+          5
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          1,
+          6
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          1,
+          7
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          1,
+          8
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          1,
+          9
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          1,
+          10
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          1,
+          11
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          2,
+          0
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          2,
+          1
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          2,
+          2
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          2,
+          3
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          2,
+          4
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          2,
+          5
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          2,
+          6
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          2,
+          7
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          2,
+          8
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          2,
+          9
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          2,
+          10
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          2,
+          11
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          3,
+          0
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          3,
+          1
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          3,
+          2
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          3,
+          3
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          3,
+          4
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          3,
+          5
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          3,
+          6
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          3,
+          7
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          3,
+          8
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          3,
+          9
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          3,
+          10
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          3,
+          11
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          4,
+          0
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          4,
+          1
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          4,
+          2
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          4,
+          3
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          4,
+          4
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          4,
+          5
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          4,
+          6
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          4,
+          7
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          4,
+          8
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          4,
+          9
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          4,
+          10
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          4,
+          11
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          5,
+          0
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          5,
+          1
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          5,
+          2
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          5,
+          3
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          5,
+          4
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          5,
+          5
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          5,
+          6
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          5,
+          7
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          5,
+          8
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          5,
+          9
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          5,
+          10
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          5,
+          11
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          6,
+          0
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          6,
+          1
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          6,
+          2
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          6,
+          3
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          6,
+          4
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          6,
+          5
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          6,
+          6
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          6,
+          7
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          6,
+          8
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          6,
+          9
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          6,
+          10
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          6,
+          11
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          7,
+          0
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          7,
+          1
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          7,
+          2
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          7,
+          3
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          7,
+          4
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          7,
+          5
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          7,
+          6
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          7,
+          7
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          7,
+          8
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          7,
+          9
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          7,
+          10
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          7,
+          11
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          8,
+          0
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          8,
+          1
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          8,
+          2
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          8,
+          3
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          8,
+          4
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          8,
+          5
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          8,
+          6
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          8,
+          7
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          8,
+          8
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          8,
+          9
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          8,
+          10
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          8,
+          11
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          9,
+          0
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          9,
+          1
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          9,
+          2
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          9,
+          3
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          9,
+          4
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          9,
+          5
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          9,
+          6
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          9,
+          7
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          9,
+          8
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          9,
+          9
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          9,
+          10
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          9,
+          11
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          10,
+          0
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          10,
+          1
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          10,
+          2
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          10,
+          3
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          10,
+          4
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          10,
+          5
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          10,
+          6
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          10,
+          7
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          10,
+          8
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          10,
+          9
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          10,
+          10
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          10,
+          11
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          11,
+          0
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          11,
+          1
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          11,
+          2
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          11,
+          3
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          11,
+          4
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          11,
+          5
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          11,
+          6
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          11,
+          7
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          11,
+          8
+        ],
+        "species": 1
+      },
+      {
+        "locus": [
+          11,
+          9
+        ],
+        "species": 2
+      },
+      {
+        "locus": [
+          11,
+          10
+        ],
+        "species": 0
+      },
+      {
+        "locus": [
+          11,
+          11
+        ],
+        "species": 1
+      }
+    ]
+  },
+  "topology": {
+    "kind": "lattice",
+    "width": 12,
+    "height": 12,
+    "wrap": true,
+    "neighborhood": "moore8"
+  },
+  "rule": {
+    "kind": "rewrite",
+    "clauses": [
+      {
+        "match": {
+          "self": {
+            "species": 0
+          },
+          "neighbor_count": [
+            {
+              "field": "species",
+              "value": 1,
+              "in": [
+                3,
+                4,
+                5,
+                6,
+                7,
+                8
+              ]
+            }
+          ]
+        },
+        "produce": {
+          "species": 1
+        }
+      },
+      {
+        "match": {
+          "self": {
+            "species": 1
+          },
+          "neighbor_count": [
+            {
+              "field": "species",
+              "value": 2,
+              "in": [
+                3,
+                4,
+                5,
+                6,
+                7,
+                8
+              ]
+            }
+          ]
+        },
+        "produce": {
+          "species": 2
+        }
+      },
+      {
+        "match": {
+          "self": {
+            "species": 2
+          },
+          "neighbor_count": [
+            {
+              "field": "species",
+              "value": 0,
+              "in": [
+                3,
+                4,
+                5,
+                6,
+                7,
+                8
+              ]
+            }
+          ]
+        },
+        "produce": {
+          "species": 0
+        }
+      }
+    ],
+    "default": null
+  },
+  "schedule": {
+    "kind": "asynchronous"
+  }
+}

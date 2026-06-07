@@ -1,0 +1,46 @@
+# A heat-diffusion field as a semantic-core-v1 polymodal program, authored
+# entirely in the Multilingual language -- no Python. Build with:
+#
+#     python -m multilingualprogramming process-build examples/diffusion.multi
+#
+# This is the first example on the *continuous* axis. Game of Life, the
+# L-system and the ecology are discrete rewriting: a cell's next state is chosen
+# from a finite set by a pattern match. Diffusion has no match -- only a rate of
+# change, du/dt = D * (mean of neighbours - u), integrated over time. The engine
+# in `process_core` knows no physics; the diffusion coefficient lives here, as
+# data, exactly as the research doc requires.
+#
+# It exercises the two axes the discrete examples did not: a *continuous*
+# per-cell value (a real `u`, not a boolean or small integer) and a
+# *continuous-dt* schedule (one explicit-Euler step `u += dt * du/dt` from the
+# previous frame).
+
+# The diffusion rule as a rate rule, not a rewrite. du/dt = D*(mean_nbr(u) - u)
+# is D*mean_nbr(u) - D*u: a `self` coefficient of -D on the cell's own value and
+# a `neighbor_mean` coefficient of +D on the mean over its neighbours. The
+# manifest keys ("self", "neighbor_mean", "u") stay English -- they are schema
+# names, language-neutral data.
+def diffusion_rule():
+    let coefficient = 0.2
+    return rate_rule({
+        "u": {"self": {"u": -coefficient}, "neighbor_mean": {"u": coefficient}}
+    })
+
+# A fixed lattice fully populated with a continuous field. Every cell exists for
+# all time (fixed population); only its `u` value moves. A single hot cell at the
+# centre (value 1.0) seeds a bump that spreads while total mass is conserved.
+let width = 11
+let height = 11
+let cx = width // 2
+let cy = height // 2
+let loci = [{"locus": [x, y], "u": 1.0 if x == cx and y == cy else 0.0} for x in range(width) for y in range(height)]
+let state = {"loci": loci}
+
+# Assemble the four modality-free axes: a toroidal lattice with the von-Neumann-4
+# stencil, integrated by the diffusion rate rule under a continuous-dt schedule.
+let process = build_process_core(
+    state,
+    lattice_topology(width, height, True, "von-neumann4"),
+    diffusion_rule(),
+    continuous_schedule(1.0)
+)

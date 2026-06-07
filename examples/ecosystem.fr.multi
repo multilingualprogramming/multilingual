@@ -1,0 +1,49 @@
+# Un écosystème à dominance cyclique comme programme polymodal
+# semantic-core-v1, écrit entièrement dans le langage Multilingual -- sans
+# Python. Construire avec :
+#
+#     python -m multilingualprogramming process-build examples/ecosystem.fr.multi --lang fr
+#
+# C'est le même programme que examples/ecosystem.multi, mais en français : il
+# se réduit à un noyau de processus identique. Les clés du manifeste
+# ("match", "species", ...) restent en anglais car ce sont des noms de schéma,
+# neutres vis-à-vis de la langue.
+#
+# L'écologie spatiale « pierre-papier-ciseaux » : trois espèces en cycle,
+# chacune envahie par la suivante (0 par 1, 1 par 2, 2 par 0). Une cellule bascule
+# vers son envahisseur quand assez de ses voisines le sont déjà ; sinon elle
+# tient. Exécuté séquentiellement (chaque cellule réagit aux voisines qui ont
+# déjà bougé ce tour-ci), le modèle s'auto-organise en ondes spirales.
+#
+# Il exerce les deux axes que le Jeu de la vie et le L-système n'exerçaient
+# pas : un état hétérogène par locus (une valeur `species`, non un booléen) et
+# un ordonnancement asynchrone (mise à jour séquentielle en place).
+
+# La règle d'invasion cyclique. Une cellule de l'espèce k est conquise par
+# l'espèce (k+1) mod 3 quand au moins `seuil` de ses huit voisines sont déjà
+# cette suivante. Une cellule qui n'atteint aucun seuil ne correspond à aucune
+# clause et reste inchangée (il n'y a pas de `repli`).
+déf regle_cyclique():
+    soit seuil = 3
+    soit assez = [c pour c dans range(seuil, 9)]
+    retour reecrire(
+        clause(quand(species=0), nombre_voisins("species", 1, assez), devient(species=1)),
+        clause(quand(species=1), nombre_voisins("species", 2, assez), devient(species=2)),
+        clause(quand(species=2), nombre_voisins("species", 0, assez), devient(species=0))
+    )
+
+# Un treillis fixe entièrement peuplé des trois espèces. Chaque cellule existe
+# pour toujours (population fixe) ; seule son espèce change.
+soit largeur = 12
+soit hauteur = 12
+soit cellules = [{"locus": [x, y], "species": (x + y) % 3} pour x dans range(largeur) pour y dans range(hauteur)]
+soit etat = {"loci": cellules}
+
+# Assembler les quatre axes : un treillis torique réécrit par la règle cyclique
+# sous un ordonnancement asynchrone (séquentiel).
+soit process = construire_noyau_processus(
+    etat,
+    topologie_treillis(largeur, hauteur),
+    regle_cyclique(),
+    ordonnancement_asynchrone()
+)

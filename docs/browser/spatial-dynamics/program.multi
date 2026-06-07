@@ -1,0 +1,18 @@
+# Fixed-semantic spatial dynamics seed program.
+#
+# This is the Multilingual source artifact for the browser prototype. The
+# JavaScript file beside it is a visual host/runtime, not the authored program.
+#
+let seed = spatial_seed(
+    spatial_entity(contain(), 0.50, 0.50, 230, 1.00, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(emit(), 0.32, 0.50, 70, 0.42, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(diffuse(), 0.43, 0.48, 92, 1.00, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(transform(), 0.54, 0.50, 86, 0.08, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(split(), 0.64, 0.50, 80, 1.40, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(oscillate(), 0.50, 0.36, 80, 0.16, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(resonate(), 0.50, 0.64, 94, 1.00, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(attract(), 0.74, 0.42, 150, 0.08, 0.00, 0.00, 0.00, 0.00, 0),
+    spatial_entity(repel(), 0.74, 0.58, 130, 0.06, 0.00, 0.00, 0.00, 0.00, 0),
+)
+
+print(len(seed))

@@ -436,3 +436,45 @@ class LexerBehaviorTestSuite(LexerTestBase):
         self.assertEqual(if_token.type, TokenType.KEYWORD)
         self.assertEqual(if_token.value, "もし")
         self.assertEqual(if_token.concept, "COND_IF")
+
+
+class ContextSensitiveReservationTestSuite(LexerTestBase):
+    """Keyword reservation is scoped to the source's language.
+
+    A word that is a keyword only in *other* languages (``i`` = Swedish/
+    Danish ``in``; ``y`` = Spanish ``and``) must remain a usable identifier
+    in a program written in a language that does not reserve it, even when
+    the language is auto-detected rather than declared.
+    """
+
+    def _kinds(self, source, language=None):
+        return {
+            t.value: t.type
+            for t in Lexer(source, language=language).tokenize()
+            if t.type != TokenType.EOF
+        }
+
+    def test_i_and_y_are_identifiers_in_autodetected_english(self):
+        kinds = self._kinds("let i = 5\nlet y = i + 1\nprint(y)")
+        self.assertEqual(kinds["i"], TokenType.IDENTIFIER)
+        self.assertEqual(kinds["y"], TokenType.IDENTIFIER)
+
+    def test_spanish_still_reserves_y_as_and(self):
+        # 'imprimir' is a Spanish-only keyword, so the program auto-detects
+        # as Spanish and 'y' keeps its AND meaning.
+        tokens = Lexer("imprimir(1 y 1)").tokenize()
+        y_token = next(t for t in tokens if t.value == "y")
+        self.assertEqual(y_token.type, TokenType.KEYWORD)
+        self.assertEqual(y_token.concept, "AND")
+
+    def test_ambiguous_only_source_keeps_permissive_behaviour(self):
+        # With no unambiguous keyword to commit to, detection stays unset and
+        # the permissive all-language match still applies (no regression).
+        tokens = Lexer("i").tokenize()
+        i_token = next(t for t in tokens if t.value == "i")
+        self.assertEqual(i_token.type, TokenType.KEYWORD)
+
+    def test_declared_language_is_never_overridden(self):
+        # An explicit language must win regardless of source content.
+        kinds = self._kinds("let i = 5", language="en")
+        self.assertEqual(kinds["i"], TokenType.IDENTIFIER)

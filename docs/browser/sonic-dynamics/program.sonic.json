@@ -1,0 +1,148 @@
+{
+  "kind": "sonic-seed-v0",
+  "version": 0,
+  "source_language": "en",
+  "source": "docs/browser/spatial-dynamics/program.multi",
+  "capabilities": {
+    "projection": "sonic-seed-v0",
+    "preserves": [
+      "id",
+      "opcode",
+      "phase",
+      "channel"
+    ],
+    "derived": [
+      "intensity"
+    ],
+    "lossy": [
+      "signal"
+    ],
+    "ambiguous": [
+      "diffuse/stabilize/resonate",
+      "attract/repel",
+      "split/merge"
+    ],
+    "inverse": "partial"
+  },
+  "tempo_bpm": 96,
+  "bar_seconds": 4.0,
+  "voices": [
+    {
+      "id": "ent_8d6b8920",
+      "index": 0,
+      "opcode": 11,
+      "name": "contain",
+      "role": "bus",
+      "waveform": "sine",
+      "envelope": "sustained",
+      "frequency_hz": 220.0,
+      "amplitude": 0.0,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_73259498",
+      "index": 1,
+      "opcode": 1,
+      "name": "emit",
+      "role": "source",
+      "waveform": "sine",
+      "envelope": "sustained",
+      "frequency_hz": 261.626,
+      "amplitude": 0.168,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_8b3154f9",
+      "index": 2,
+      "opcode": 2,
+      "name": "diffuse",
+      "role": "effect",
+      "waveform": "sine",
+      "envelope": "sustained",
+      "frequency_hz": 293.665,
+      "amplitude": 0.4,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_a68fff85",
+      "index": 3,
+      "opcode": 7,
+      "name": "transform",
+      "role": "effect",
+      "waveform": "triangle",
+      "envelope": "sustained",
+      "frequency_hz": 329.628,
+      "amplitude": 0.032,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_bee7bcec",
+      "index": 4,
+      "opcode": 9,
+      "name": "split",
+      "role": "trigger",
+      "waveform": "square",
+      "envelope": "percussive",
+      "frequency_hz": 391.995,
+      "amplitude": 0.56,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_64b6f2b7",
+      "index": 5,
+      "opcode": 6,
+      "name": "oscillate",
+      "role": "modulator",
+      "waveform": "sine",
+      "envelope": "tremolo",
+      "frequency_hz": 440.0,
+      "amplitude": 0.096,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_8f028ce3",
+      "index": 6,
+      "opcode": 8,
+      "name": "resonate",
+      "role": "effect",
+      "waveform": "sine",
+      "envelope": "sustained",
+      "frequency_hz": 523.251,
+      "amplitude": 0.4,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_4df28bd6",
+      "index": 7,
+      "opcode": 3,
+      "name": "attract",
+      "role": "modulator",
+      "waveform": "triangle",
+      "envelope": "swelling",
+      "frequency_hz": 587.33,
+      "amplitude": 0.048,
+      "start_offset": 0.0,
+      "channel": 0
+    },
+    {
+      "id": "ent_ba6020af",
+      "index": 8,
+      "opcode": 4,
+      "name": "repel",
+      "role": "modulator",
+      "waveform": "triangle",
+      "envelope": "swelling",
+      "frequency_hz": 659.255,
+      "amplitude": 0.036,
+      "start_offset": 0.0,
+      "channel": 0
+    }
+  ]
+}

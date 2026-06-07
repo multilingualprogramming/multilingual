@@ -8,6 +8,7 @@
 # pylint: disable=duplicate-code
 
 import importlib.util
+import math as _m
 import os
 import tempfile
 import unittest
@@ -533,6 +534,481 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertAlmostEqual(self._call_export(prog, "cneg60"), 0.5, places=5)
         self.assertAlmostEqual(self._call_export(prog, "c300"), 0.5, places=5)
         self.assertAlmostEqual(self._call_export(prog, "c240"), -0.5, places=5)
+
+    def test_math_atan_range_reduction_precision(self):
+        # Regression : la version 6-termes sans réduction (x-1)/(x+1) plafonnait
+        # à ~5% d'erreur pour atan(1) (= π/4). La double réduction (1/x ET
+        # (x-1)/(x+1)) + 12 termes Taylor doit donner ≥10 décimales correctes.
+        prog = _parse_source(
+            "déf a0():\n    retour math.atan(0.0)\n"
+            "déf a_un():\n    retour math.atan(1.0)\n"             # π/4
+            "déf a_demi():\n    retour math.atan(0.5)\n"           # 0.4636476090...
+            "déf a_neg_demi():\n    retour math.atan(-0.5)\n"
+            "déf a_tan_pi8():\n    retour math.atan(0.41421356237309503)\n"  # π/8
+            "déf a_juste_au_dessus():\n    retour math.atan(0.42)\n"        # franchit le seuil
+            "déf a_petit():\n    retour math.atan(0.1)\n"
+            "déf a_grand():\n    retour math.atan(10.0)\n"          # > 1, force la réduction 1/x
+            "déf a_tres_grand():\n    retour math.atan(1000.0)\n"   # 1.5697963...
+            "déf a_neg_grand():\n    retour math.atan(-50.0)\n"
+            "déf a_pi8():\n    retour math.atan2(0.4142135623730951, 1.0)\n"  # π/8
+            "déf a_pi4():\n    retour math.atan2(1.0, 1.0)\n"        # π/4
+            "déf a_3pi4():\n    retour math.atan2(1.0, -1.0)\n"      # 3π/4
+            "déf a_neg_pi2():\n    retour math.atan2(-1.0, 0.0)\n",
+            language="fr",
+        )
+        # Tolérance ~1e-10 (places=10) sur la branche standard, vs ~5e-2 avant.
+        self.assertAlmostEqual(self._call_export(prog, "a0"), 0.0, places=12)
+        self.assertAlmostEqual(self._call_export(prog, "a_un"), _m.pi / 4, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_demi"), _m.atan(0.5), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_neg_demi"), -_m.atan(0.5), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_tan_pi8"), _m.pi / 8, places=10)
+        self.assertAlmostEqual(
+            self._call_export(prog, "a_juste_au_dessus"), _m.atan(0.42), places=10
+        )
+        self.assertAlmostEqual(self._call_export(prog, "a_petit"), _m.atan(0.1), places=12)
+        self.assertAlmostEqual(self._call_export(prog, "a_grand"), _m.atan(10.0), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_tres_grand"), _m.atan(1000.0), places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_neg_grand"), _m.atan(-50.0), places=10)
+        # atan2 hérite de la précision atan (≥10 décimales).
+        self.assertAlmostEqual(self._call_export(prog, "a_pi8"), _m.pi / 8, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_pi4"), _m.pi / 4, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_3pi4"), 3 * _m.pi / 4, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "a_neg_pi2"), -_m.pi / 2, places=12)
+
+    def test_imul32_iadd32_shr_u32_match_js_semantics(self):
+        # imul32, iadd32, shr_u32, u32_to_f64 sont les briques d'un PRNG
+        # mulberry32 / d'un hash FNV portés à `.multi`. Vérifie la sémantique
+        # de wraparound i32 et la conversion signée→non-signée.
+        prog = _parse_source(
+            "déf mul_wrap():\n    retour imul32(2147483647.0, 2.0)\n"
+            "déf mul_fnv_prime():\n    retour imul32(123.0, 16777619.0)\n"
+            "déf add_wrap():\n    retour iadd32(2000000000.0, 2000000000.0)\n"
+            "déf shr_u_signed():\n    retour shr_u32(-1.0, 1.0)\n"
+            "déf u32_neg():\n    retour u32_to_f64(-1.0)\n"
+            "déf u32_pos():\n    retour u32_to_f64(1234567.0)\n",          # identity
+            language="fr",
+        )
+        # imul32(2^31-1, 2) wraps to -2 (signed view).
+        self.assertEqual(self._call_export(prog, "mul_wrap"), -2.0)
+        # imul32(123, 16777619) = 123*16777619 = 2063647137 (fits in i32).
+        self.assertEqual(self._call_export(prog, "mul_fnv_prime"), 2063647137.0)
+        # iadd32(2e9, 2e9) = 4e9 wraps to 4e9 - 2^32 = -294967296.
+        self.assertEqual(self._call_export(prog, "add_wrap"), -294967296.0)
+        # shr_u32(-1, 1) = 0xFFFFFFFF >>> 1 = 0x7FFFFFFF = 2147483647.
+        self.assertEqual(self._call_export(prog, "shr_u_signed"), 2147483647.0)
+        # u32_to_f64(-1) = 4294967295.
+        self.assertEqual(self._call_export(prog, "u32_neg"), 4294967295.0)
+        self.assertEqual(self._call_export(prog, "u32_pos"), 1234567.0)
+
+    def test_i32_wraparound_on_mul_and_add_for_int_shaped_operands(self):
+        # B3 : `*` et `+` doivent s'abaisser à `i32.mul`/`i32.add` (wraparound)
+        # quand les deux opérandes sont « i32-shaped » — soit issus d'un op
+        # bitwise/shift, soit d'un builtin i32 (imul32/iadd32/shr_u32), soit
+        # un local précédemment tracké, soit un littéral entier qui rentre
+        # dans i32. Permet d'écrire FNV/mulberry32 en `.multi` sans appeler
+        # imul32/iadd32 explicitement (cf. roadmap multilingual W2 → B3).
+        prog = _parse_source(
+            # mul_wrap : 2147483647 * 2 — un opérande tracké comme i32 (via
+            # `& 0xFFFFFFFF`) suffit à passer en i32.mul. Wraparound → -2.
+            "déf mul_wrap():\n"
+            "    soit a = 2147483647 & -1\n"
+            "    retour a * 2\n"
+            # add_wrap : 2e9 + 2e9 — opérande tracké via shift identité.
+            # 4e9 ne tient pas en i32 → wraparound → 4e9 - 2^32 = -294967296.
+            "déf add_wrap():\n"
+            "    soit a = 2000000000 << 0\n"
+            "    retour a + 2000000000\n"
+            # fnv1a_step : un pas de FNV-1a (hash ^= byte ; hash *= prime).
+            # Doit produire exactement le même résultat que via imul32 explicite.
+            # Le seed est passé en vue signée (FNV offset basis 2166136261 vaut
+            # -2128831035 en i32 signé) parce que `i32.trunc_f64_s` du bitwise
+            # ^ trappe sur les valeurs hors [-2^31, 2^31) — orthogonal à B3.
+            "déf fnv1a_step(seed_signed, octet):\n"
+            "    soit h = seed_signed ^ octet\n"
+            "    retour h * 16777619\n"
+            # chained : (a & m) + (b & m) — deux opérandes bitwise → i32.add wraparound.
+            "déf chained_bitwise_add():\n"
+            "    retour (2000000000 & -1) + (2000000000 & -1)\n"
+            # Régression : littéral pur * littéral pur NE doit PAS wraparound
+            # (sinon on casse l'arithmétique f64 ordinaire). 1e9 * 5 = 5e9.
+            "déf pure_literal_mul_stays_f64():\n"
+            "    retour 1000000000.0 * 5.0\n",
+            language="fr",
+        )
+        self.assertEqual(self._call_export(prog, "mul_wrap"), -2.0)
+        self.assertEqual(self._call_export(prog, "add_wrap"), -294967296.0)
+        # FNV-1a : on calcule en Python la valeur attendue avec la même
+        # sémantique i32-wraparound que le code généré.
+        seed_unsigned = 2166136261
+        seed_signed = seed_unsigned - (1 << 32)  # -2128831035 en vue signée
+        octet = 0x41
+        h_u = (seed_unsigned ^ octet) & 0xFFFFFFFF
+        prod_u = (h_u * 16777619) & 0xFFFFFFFF
+        # Vue signée i32 (ce que le WAT retourne via f64.convert_i32_s).
+        expected = prod_u - (1 << 32) if prod_u >= (1 << 31) else prod_u
+        self.assertEqual(
+            self._call_export(prog, "fnv1a_step", float(seed_signed), float(octet)),
+            float(expected),
+        )
+        # chained : 2e9 + 2e9 (i32) = 4e9 → wrap → -294967296.
+        self.assertEqual(self._call_export(prog, "chained_bitwise_add"), -294967296.0)
+        # Régression : pas de faux positif sur arithmétique f64 pure.
+        self.assertEqual(self._call_export(prog, "pure_literal_mul_stays_f64"), 5e9)
+
+    def test_v128_pair_arith_dispatches_to_f64x2(self):
+        # B2 : `v128_pair(a, b)` construit un v128 (f64x2) ; `+ - * /` entre
+        # deux opérandes v128-shaped dispatchent vers `f64x2.{add,sub,mul,div}`
+        # au lieu de `f64.*`. `v128_lane(v, i)` (i littéral 0|1) extrait une
+        # lane en f64 scalaire. Les v128 ne traversent pas les frontières de
+        # fonction — ils vivent en local v128, déclaré comme tel dans le WAT
+        # via `_v128_locals` (mirrors le patron `_int_like_locals` de B3).
+        prog = _parse_source(
+            # Smoke test : pair + extract — preuve qu'un v128 peut être stocké
+            # dans un local et qu'on récupère les deux lanes individuellement.
+            "déf lane0(a, b):\n"
+            "    soit v = v128_pair(a, b)\n"
+            "    retour v128_lane(v, 0)\n"
+            "déf lane1(a, b):\n"
+            "    soit v = v128_pair(a, b)\n"
+            "    retour v128_lane(v, 1)\n"
+            # add : deux v128 → f64x2.add — somme par lane.
+            "déf add_lane0(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    soit w = u + v\n"
+            "    retour v128_lane(w, 0)\n"
+            "déf add_lane1(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    soit w = u + v\n"
+            "    retour v128_lane(w, 1)\n"
+            # mul + sub + div : couvre les quatre opérateurs binaires.
+            "déf mul_lane0(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u * v, 0)\n"
+            "déf sub_lane1(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u - v, 1)\n"
+            "déf div_lane0(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u / v, 0)\n"
+            # Chaîne : (u*u + v) lane 1 — exerce le dispatch v128 imbriqué.
+            "déf chained_lane1(a, b, c, d):\n"
+            "    soit u = v128_pair(a, b)\n"
+            "    soit v = v128_pair(c, d)\n"
+            "    retour v128_lane(u * u + v, 1)\n"
+            # Mandelbrot pair en SIMD source-level : un pas de l'itération
+            # z = z*z + c sur les deux lanes en parallèle, sans le builtin
+            # `simd_mandelbrot_pair` — la preuve que B2 permet d'écrire des
+            # noyaux SIMD en `.multi` au lieu de WAT à la main (workaround W1).
+            "déf mandelbrot_step_re_lane0(zx0, zx1, zy0, zy1, cx0, cx1):\n"
+            "    soit zx = v128_pair(zx0, zx1)\n"
+            "    soit zy = v128_pair(zy0, zy1)\n"
+            "    soit cx = v128_pair(cx0, cx1)\n"
+            "    soit nzx = zx * zx - zy * zy + cx\n"
+            "    retour v128_lane(nzx, 0)\n"
+            "déf mandelbrot_step_re_lane1(zx0, zx1, zy0, zy1, cx0, cx1):\n"
+            "    soit zx = v128_pair(zx0, zx1)\n"
+            "    soit zy = v128_pair(zy0, zy1)\n"
+            "    soit cx = v128_pair(cx0, cx1)\n"
+            "    soit nzx = zx * zx - zy * zy + cx\n"
+            "    retour v128_lane(nzx, 1)\n",
+            language="fr",
+        )
+        # Smoke : pair + extract identité.
+        self.assertEqual(self._call_export(prog, "lane0", 3.0, 7.0), 3.0)
+        self.assertEqual(self._call_export(prog, "lane1", 3.0, 7.0), 7.0)
+        # add : (1+10, 2+20) → 11, 22.
+        self.assertEqual(self._call_export(prog, "add_lane0", 1.0, 2.0, 10.0, 20.0), 11.0)
+        self.assertEqual(self._call_export(prog, "add_lane1", 1.0, 2.0, 10.0, 20.0), 22.0)
+        # mul : (3*4, _) → 12.
+        self.assertEqual(self._call_export(prog, "mul_lane0", 3.0, 5.0, 4.0, 6.0), 12.0)
+        # sub : (_, 5-6) → -1.
+        self.assertEqual(self._call_export(prog, "sub_lane1", 3.0, 5.0, 4.0, 6.0), -1.0)
+        # div : (10/4, _) → 2.5.
+        self.assertEqual(self._call_export(prog, "div_lane0", 10.0, 20.0, 4.0, 5.0), 2.5)
+        # chained : (_, 5*5 + 7) → 32.
+        self.assertEqual(self._call_export(prog, "chained_lane1", 3.0, 5.0, 4.0, 7.0), 32.0)
+        # Mandelbrot step (z = z*z + c, partie réelle uniquement) :
+        #   lane 0 : (0.3)² - (0.1)² + (-0.5) = 0.09 - 0.01 - 0.5 = -0.42
+        #   lane 1 : (0.4)² - (0.2)² + (-0.7) = 0.16 - 0.04 - 0.7 = -0.58
+        self.assertAlmostEqual(
+            self._call_export(prog, "mandelbrot_step_re_lane0",
+                              0.3, 0.4, 0.1, 0.2, -0.5, -0.7),
+            -0.42, places=12,
+        )
+        self.assertAlmostEqual(
+            self._call_export(prog, "mandelbrot_step_re_lane1",
+                              0.3, 0.4, 0.1, 0.2, -0.5, -0.7),
+            -0.58, places=12,
+        )
+
+    def test_pow_f64_negative_integer_exponent(self):
+        # Regression : $pow_f64 avait le drapeau de signe inversé pour les
+        # exposants entiers (neg = 0 < exp au lieu de exp < 0). Conséquence :
+        # pow(10, -3) renvoyait 1000 et pow(10, 3) renvoyait 0.001 — exactement
+        # inversés. Le bug est resté caché car le code fractales n'utilisait
+        # `**` qu'avec des exposants positifs (interpolation), jamais avec un
+        # entier négatif. Le formatage exponentiel (mantisse = x / pow(10, e))
+        # l'a déclenché en 2026-05-23.
+        prog = _parse_source(
+            "déf p_pos(x):\n    retour x ** 3.0\n"
+            "déf p_neg(x):\n    retour x ** -3.0\n"
+            "déf p_neg_grand(x):\n    retour x ** -10.0\n",
+            language="fr",
+        )
+        self.assertAlmostEqual(self._call_export(prog, "p_pos", 10.0), 1000.0, places=10)
+        self.assertAlmostEqual(self._call_export(prog, "p_neg", 10.0), 0.001, places=12)
+        self.assertAlmostEqual(self._call_export(prog, "p_neg", 2.0), 0.125, places=12)
+        self.assertAlmostEqual(self._call_export(prog, "p_neg_grand", 10.0), 1e-10, places=20)
+
+    def test_multi_value_returns_tuple(self):
+        # B1 : `retour (a, b)` lower à signature `(result f64 f64)`, push N
+        # valeurs avant `return`. `soit (x, y) = f(...)` destructure via
+        # `local.set` ordre inverse. Remplace les paires _x/_y dans fractales.
+        prog = _parse_source(
+            "déf paire(x, y):\n    retour (x + 1.0, y * 2.0)\n"
+            "déf utilise_x(x, y):\n    soit a, b = paire(x, y)\n    retour a\n"
+            "déf utilise_y(x, y):\n    soit a, b = paire(x, y)\n    retour b\n"
+            "déf utilise_somme(x, y):\n    soit a, b = paire(x, y)\n    retour a + b\n"
+            "déf cayley(x, y):\n"
+            "    soit den_re = x + 1.0\n"
+            "    soit den_im = y\n"
+            "    soit d2 = den_re * den_re + den_im * den_im\n"
+            "    retour ("
+            "((x - 1.0) * den_re + y * den_im) / d2, "
+            "(y * den_re - (x - 1.0) * den_im) / d2"
+            ")\n"
+            "déf cayley_x(x, y):\n    soit cx, cy = cayley(x, y)\n    retour cx\n"
+            "déf cayley_y(x, y):\n    soit cx, cy = cayley(x, y)\n    retour cy\n",
+            language="fr",
+        )
+        # Basic destructuring
+        self.assertEqual(self._call_export(prog, "utilise_x", 3.0, 5.0), 4.0)
+        self.assertEqual(self._call_export(prog, "utilise_y", 3.0, 5.0), 10.0)
+        self.assertEqual(self._call_export(prog, "utilise_somme", 3.0, 5.0), 14.0)
+        # Cayley: z=2+0i → (1)/(3) = 0.333... ; (0)/(3) = 0
+        self.assertAlmostEqual(
+            self._call_export(prog, "cayley_x", 2.0, 0.0), 1.0 / 3.0, places=12
+        )
+        self.assertAlmostEqual(self._call_export(prog, "cayley_y", 2.0, 0.0), 0.0, places=12)
+
+    def test_ml_list_count_and_item_helpers(self):
+        # B5 : __ml_list_count(ptr) et __ml_list_item(ptr, i) exposent le
+        # layout des listes heap-backed sans que le caller hôte doive
+        # calculer les offsets bruts. Vérifie sur une liste créée via [0]*n.
+        prog = _parse_source(
+            "déf make_liste():\n"
+            "    soit l = [0.0]*5\n"
+            "    l[0] = 11.0\n"
+            "    l[1] = 22.0\n"
+            "    l[2] = 33.0\n"
+            "    l[3] = 44.0\n"
+            "    l[4] = 55.0\n"
+            "    retour l\n",
+            language="fr",
+        )
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        ptr = ex["make_liste"](store)
+        # __ml_list_count : doit retourner 5 (la liste a 5 éléments).
+        self.assertEqual(ex["__ml_list_count"](store, ptr), 5.0)
+        # __ml_list_item : 11, 22, 33, 44, 55.
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 0.0), 11.0)
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 1.0), 22.0)
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 4.0), 55.0)
+
+    def test_format_fixed_dynamic_n(self):
+        # B4 : `format_fixed(v, n)` builtin avec n variable au runtime
+        # (clampé à [0, 9]). Remplace les formatter_fixe_2/3/5/6 dans fractales.
+        prog = _parse_source(
+            "déf fmt(v, n):\n    retour format_fixed(v, n)\n",
+            language="fr",
+        )
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        # n=2 → 2 décimales
+        self.assertEqual(read(ex["fmt"](store, 3.14159, 2.0)), "3.14")
+        # n=5 → 5 décimales (rounding ulp banker's)
+        self.assertEqual(read(ex["fmt"](store, -0.43633, 5.0)), "-0.43633")
+        # n=0 → entier arrondi (nearest-even)
+        self.assertEqual(read(ex["fmt"](store, 2.5, 0.0)), "2")  # round-half-to-even
+        # Borne haute = 15 (couvre la précision utile de f64). Au-delà → n=15.
+        self.assertEqual(read(ex["fmt"](store, 1.0, 12.0)), "1.000000000000")
+        self.assertEqual(read(ex["fmt"](store, 1.0, 99.0)), "1.000000000000000")
+        # Clamp n<0 → n=0
+        self.assertEqual(read(ex["fmt"](store, 7.7, -3.0)), "8")
+
+    def test_format_prec_dynamic_n(self):
+        # W16 : `format_prec(v, n)` — formatte v à n chiffres significatifs,
+        # strip des zéros de queue + '.' orphelin. Matche
+        # `v.toPrecision(n).replace(/\.?0+$/, '')` sur la plage non-exponentielle
+        # (le caller fractales gate `abs in [1e-4, 1e5)`).
+        prog = _parse_source(
+            "déf fmt(v, n):\n    retour format_prec(v, n)\n",
+            language="fr",
+        )
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        # n=12, valeurs simples — trailing zeros stripped.
+        self.assertEqual(read(ex["fmt"](store, 3.14, 12.0)), "3.14")
+        self.assertEqual(read(ex["fmt"](store, 12345.6789, 12.0)), "12345.6789")
+        # Petite valeur : preserve les chiffres significatifs au-delà de N=9.
+        self.assertEqual(read(ex["fmt"](store, 0.0001, 12.0)), "0.0001")
+        self.assertEqual(read(ex["fmt"](store, 0.000123456789012, 12.0)), "0.000123456789012")
+        # Negative.
+        self.assertEqual(read(ex["fmt"](store, -1.5, 12.0)), "-1.5")
+        # v=0 → "0" (after=0, pas de strip qui mangerait le chiffre).
+        self.assertEqual(read(ex["fmt"](store, 0.0, 12.0)), "0")
+        # Entier "rond" dans la plage : "100" reste "100" (pas de '.' donc strip skipped).
+        self.assertEqual(read(ex["fmt"](store, 100.0, 12.0)), "100")
+        # Cas où après strip il ne reste que l'entier + '.' à enlever.
+        self.assertEqual(read(ex["fmt"](store, 99999.0, 12.0)), "99999")
+
+    def test_format_exp_dynamic_n(self):
+        # B4 (suite) : `format_exp(v, n)` builtin avec n variable au runtime
+        # (clampé à [0, 9]). Remplace les ~60 lignes de
+        # `formatter_exponentiel_signe` côté fractales_partage.
+        # Cible : matche `v.toExponential(n).replace("e+", "e")` côté JS.
+        prog = _parse_source(
+            "déf fmt(v, n):\n    retour format_exp(v, n)\n",
+            language="fr",
+        )
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        # Zero → "0.NNe0" (n>0) or "0e0" (n=0).
+        self.assertEqual(read(ex["fmt"](store, 0.0, 5.0)), "0.00000e0")
+        self.assertEqual(read(ex["fmt"](store, 0.0, 0.0)), "0e0")
+        # Positive small / large mantissas.
+        self.assertEqual(read(ex["fmt"](store, 1.0, 2.0)), "1.00e0")
+        self.assertEqual(read(ex["fmt"](store, 123.456, 2.0)), "1.23e2")
+        self.assertEqual(read(ex["fmt"](store, 0.000123, 5.0)), "1.23000e-4")
+        # Negative — round-half-to-even (banker's) via f64.nearest, same as fixedN.
+        self.assertEqual(read(ex["fmt"](store, -1234.5, 3.0)), "-1.234e3")
+        # Rounding bump into the next exponent (9.9999 with 3 frac → 1.000e1).
+        self.assertEqual(read(ex["fmt"](store, 9.9999, 3.0)), "1.000e1")
+        # Larger magnitude — exponent has 2 digits.
+        self.assertEqual(read(ex["fmt"](store, 1.5e10, 4.0)), "1.5000e10")
+        # Clamp n > 9 → n = 9.
+        self.assertEqual(read(ex["fmt"](store, 1.0, 12.0)), "1.000000000e0")
+        # Clamp n < 0 → n = 0.
+        self.assertEqual(read(ex["fmt"](store, 7.7e3, -3.0)), "8e3")
+
+    def test_string_concat_rhs_fstring_and_call(self):
+        # Avant 2026-05-23 : `s + f"..."` et `s + func_call()` levaient
+        # `Unsupported string expression for WAT concat`. Le caller devait
+        # affecter le RHS à un local temporaire. Le fix : récupérer la
+        # longueur depuis `$__last_str_len` après évaluation (que les
+        # f-strings ET les appels string-returning remplissent déjà).
+        prog = _parse_source(
+            "déf maker(n):\n    retour f\"item_{n:.0f}\"\n"
+            "déf concat_fstring(n):\n    retour \"prefix_\" + f\"{n:.0f}\"\n"
+            "déf concat_call(n):\n    retour \"got_\" + maker(n)\n"
+            "déf triple(a, b):\n    retour f\"a={a:.2f}\" + \"_\" + f\"b={b:.2f}\"\n",
+            language="fr",
+        )
+        # Lire le résultat string : déclare un export "go" qui invoque
+        # concat_fstring(42) et utilise read_string sur le résultat. Plus
+        # simple : on vérifie juste que la compilation passe sans erreur.
+        wat = WATCodeGenerator().generate(prog)
+        self.assertIn("call $__str_concat", wat)
+        self.assertIn("global.get $__last_str_len", wat)
+        self.assertNotIn("Unsupported string expression", wat)
+        # Exécuter pour vérifier le résultat. Sous WASI on lit via stdout,
+        # mais ici on appelle juste la fonction et on récupère l'i32 ptr +
+        # __ml_str_len pour décoder.
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        def read_str(ptr_f64):
+            ptr = int(ptr_f64)
+            length = ex["__ml_str_len"](store)
+            return bytes(memory.data_ptr(store)[ptr:ptr + length]).decode("utf-8")
+        self.assertEqual(read_str(ex["concat_fstring"](store, 42.0)), "prefix_42")
+        self.assertEqual(read_str(ex["concat_call"](store, 7.0)), "got_item_7")
+        self.assertEqual(read_str(ex["triple"](store, 1.0, 2.5)), "a=1.00_b=2.50")
+
+    def test_pow_f64_general_real_exponents(self):
+        # Renvoie NaN pour exposant non-entier avant 2026-05-23 ; doit
+        # désormais retomber sur exp(b·ln(a)) pour base > 0. Précision
+        # limitée par math.exp/math.log (~1e-6) donc tolérance places=4
+        # sur les exposants non-entiers.
+        prog = _parse_source(
+            "déf p(base, exp):\n    retour base ** exp\n",
+            language="fr",
+        )
+        # Cas non-entier positif : 2^0.5 = sqrt(2) — déjà spécial-casé, exact.
+        self.assertAlmostEqual(
+            self._call_export(prog, "p", 2.0, 0.5), _m.sqrt(2), places=12
+        )
+        # Cas non-entier général : 2^1.5 = 2*sqrt(2) ≈ 2.828
+        self.assertAlmostEqual(self._call_export(prog, "p", 2.0, 1.5), 2.0 ** 1.5, places=4)
+        # 10^2.3 ≈ 199.526
+        self.assertAlmostEqual(self._call_export(prog, "p", 10.0, 2.3), 10.0 ** 2.3, places=2)
+        # 0.5^0.3 ≈ 0.812 (base < 1)
+        self.assertAlmostEqual(self._call_export(prog, "p", 0.5, 0.3), 0.5 ** 0.3, places=4)
+        # Exposant non-entier négatif : 2^-1.5 = 1/(2*sqrt(2)) ≈ 0.354
+        self.assertAlmostEqual(self._call_export(prog, "p", 2.0, -1.5), 2.0 ** -1.5, places=4)
+        # Base ≤ 0 avec exposant non-entier : NaN (pas de valeur réelle).
+        result_neg_base = self._call_export(prog, "p", -2.0, 0.5)
+        self.assertTrue(_m.isnan(result_neg_base), "expected NaN")
 
 
 @unittest.skipUnless(

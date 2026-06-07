@@ -23,6 +23,8 @@ from multilingualprogramming.parser.ast_nodes import (
 
 from multilingualprogramming.codegen.wat_ir_adapter import lower_ir_to_wat_ast
 from multilingualprogramming.codegen.wat_generator_support import (
+    BUILTIN_LIST_RETURNERS,
+    BUILTIN_STRING_RETURNERS,
     _LEN_NAMES,
     _extract_render_mode,
     _name,
@@ -79,6 +81,9 @@ class WATGeneratorOrchestratorMixin:
                 self._string_return_funcs.add(fname)
             if self._returns_list_like(func):
                 self._sequence_func_names.add(fname)
+            arity = self._multi_value_return_arity(func)
+            if arity > 1:
+                self._multi_value_func_arity[fname] = arity
 
     def _emit_program_sections(self, funcs: list, classes: list, top: list) -> None:
         """Emit functions, classes, dispatch helpers, and optional main body."""
@@ -173,6 +178,10 @@ def _reset_generator_state(generator) -> None:
         "_string_len_locals": {},
         "_list_locals": set(),
         "_tuple_locals": set(),
+        # B3 : locals i32-shaped (cf. _emit_numeric_binop wraparound).
+        "_int_like_locals": set(),
+        # B2 : locals SIMD v128 (cf. _emit_numeric_binop dispatch f64x2.*).
+        "_v128_locals": set(),
         "_static_sequence_elements": {},
         "_zip_pair_locals": set(),
         "_dict_key_maps": {},
@@ -187,8 +196,14 @@ def _reset_generator_state(generator) -> None:
         "_str_concat_helper_emitted": False,
         "_str_slice_helper_emitted": False,
         "_str_eq_helper_emitted": False,
-        "_sequence_func_names": set(),
-        "_string_return_funcs": set(),
+        # Seeded from BUILTIN_LIST_RETURNERS (single source of truth in
+        # wat_generator_support). Adding a new list-returning builtin requires
+        # ONLY editing that frozenset. The orchestrator unions discovered user
+        # list-returning functions onto this seed via _collect_function_metadata.
+        "_sequence_func_names": set(BUILTIN_LIST_RETURNERS),
+        # Seeded from BUILTIN_STRING_RETURNERS (cf. format_fixed, …) ;
+        # user-defined string-returning funcs ajoutés ensuite.
+        "_string_return_funcs": set(BUILTIN_STRING_RETURNERS),
         "_string_format_helpers_emitted": False,
         "_closure_factory_funcs": {},
         "_closure_locals": {},
@@ -207,6 +222,9 @@ def _reset_generator_state(generator) -> None:
         "_module_global_dict_names": set(),
         "_func_param_list_names": {},
         "_func_string_params": {},
+        # Fonctions multi-valuées (retour (a, b, …)) : nom → arité N≥2.
+        # Calleur destructure via `soit (x, y) = f(...)` (cf. B1 2026-05-23).
+        "_multi_value_func_arity": {},
         "_str_make_headered_helper_emitted": False,
     }
     for name, value in state.items():

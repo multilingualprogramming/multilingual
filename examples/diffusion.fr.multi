@@ -1,0 +1,46 @@
+# Un champ de diffusion thermique comme programme polymodal semantic-core-v1,
+# écrit entièrement dans le langage Multilingual -- sans Python. Construire avec :
+#
+#     python -m multilingualprogramming process-build examples/diffusion.fr.multi --lang fr
+#
+# C'est le même programme que examples/diffusion.multi, mais en français : il se
+# réduit à un noyau de processus identique. Les clés du manifeste ("self",
+# "neighbor_mean", "u") restent en anglais car ce sont des noms de schéma,
+# neutres vis-à-vis de la langue.
+#
+# C'est le premier exemple sur l'axe *continu*. Le Jeu de la vie, le L-système
+# et l'écologie sont de la réécriture discrète : l'état suivant d'une cellule est
+# choisi dans un ensemble fini par filtrage. La diffusion n'a pas de filtrage --
+# seulement un taux de variation, du/dt = D * (moyenne des voisines - u), intégré
+# au fil du temps. Le moteur dans `process_core` ne connaît aucune physique ; le
+# coefficient de diffusion vit ici, comme donnée.
+
+# La règle de diffusion comme règle de taux, non de réécriture.
+# du/dt = D*(moyenne_voisines(u) - u) est D*moyenne_voisines(u) - D*u : un
+# coefficient `self` de -D sur la valeur propre de la cellule et un coefficient
+# `neighbor_mean` de +D sur la moyenne de ses voisines.
+déf regle_diffusion():
+    soit coefficient = 0.2
+    retour regle_taux({
+        "u": {"self": {"u": -coefficient}, "neighbor_mean": {"u": coefficient}}
+    })
+
+# Un treillis fixe entièrement peuplé d'un champ continu. Chaque cellule existe
+# pour toujours (population fixe) ; seule sa valeur `u` bouge. Une seule cellule
+# chaude au centre (valeur 1.0) amorce une bosse qui s'étale tandis que la masse
+# totale est conservée.
+soit largeur = 11
+soit hauteur = 11
+soit cx = largeur // 2
+soit cy = hauteur // 2
+soit cellules = [{"locus": [x, y], "u": 1.0 si x == cx et y == cy sinon 0.0} pour x dans range(largeur) pour y dans range(hauteur)]
+soit etat = {"loci": cellules}
+
+# Assembler les quatre axes : un treillis torique avec le voisinage von-Neumann-4,
+# intégré par la règle de taux de diffusion sous un ordonnancement continu.
+soit process = construire_noyau_processus(
+    etat,
+    topologie_treillis(largeur, hauteur, True, "von-neumann4"),
+    regle_diffusion(),
+    ordonnancement_continu(1.0)
+)

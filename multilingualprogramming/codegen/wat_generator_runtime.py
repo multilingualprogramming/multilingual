@@ -240,8 +240,17 @@ class WATGeneratorRuntimeMixin:
             self._emit(f"{indent}f64.const {float(byte_len)}")
             return True
         if isinstance(node, BinaryOp) and node.op == "+" and self._is_string_binop(node):
-            self._gen_string_len_expr(node.left, indent)
-            self._gen_string_len_expr(node.right, indent)
+            # Récursion : si l'un des opérandes n'a pas de longueur calculable
+            # statiquement (FString, CallExpr, …), on renonce à l'addition et
+            # on retourne False — l'appelant retombera sur `$__last_str_len`
+            # rempli par l'évaluation du runtime-concat.
+            start = len(self._instrs)
+            if not self._gen_string_len_expr(node.left, indent):
+                del self._instrs[start:]
+                return False
+            if not self._gen_string_len_expr(node.right, indent):
+                del self._instrs[start:]
+                return False
             self._emit(f"{indent}f64.add")
             return True
         return False
@@ -465,6 +474,31 @@ class WATGeneratorRuntimeMixin:
                 result.append(elem)
         return result
 
+    def _update_int_like_tracking(self, name: str, value) -> None:
+        """Track *name* as i32-shaped iff *value* is provably so (B3).
+
+        Re-uses `_is_int_like_expr` from the expression mixin (recursive,
+        already understands bitwise/shift/i32-builtin/chained `+`*). Drops
+        the name from the set on re-assignment to a non-int-like value so
+        stale i32 wraparound never bites a now-f64 local.
+        """
+        if self._is_int_like_expr(value):
+            self._int_like_locals.add(name)
+        elif name in self._int_like_locals:
+            self._int_like_locals.discard(name)
+
+    def _update_v128_tracking(self, name: str, value) -> None:
+        """Track *name* as a v128 local iff *value* is a v128 expression (B2).
+
+        Once a name is in `_v128_locals`, `_append_wat_function` declares it
+        as `(local $name v128)` and `_emit_numeric_binop` dispatches `+ - * /`
+        to `f64x2.*` when both operands resolve to v128. A re-assignment to
+        a non-v128 value would create a WAT type mismatch — so once a local
+        is v128 it MUST stay v128 within the function ; we don't downgrade.
+        """
+        if self._is_v128_expr(value):
+            self._v128_locals.add(name)
+
     def _update_dict_tracking(self, name: str, value) -> None:
         """Refresh tracked static-dict metadata after storing into *name*."""
         if (isinstance(value, CallExpr)
@@ -486,6 +520,8 @@ class WATGeneratorRuntimeMixin:
         self._update_string_tracking(name, value, indent)
         self._update_collection_tracking(name, value)
         self._update_dict_tracking(name, value)
+        self._update_int_like_tracking(name, value)
+        self._update_v128_tracking(name, value)
         if isinstance(value, LambdaExpr):
             if self._lambda_table:
                 self._lambda_locals[name] = self._lambda_table[-1]
@@ -509,6 +545,8 @@ class WATGeneratorRuntimeMixin:
             self._list_locals.remove(name)
         if name in self._tuple_locals:
             self._tuple_locals.remove(name)
+        if name in self._v128_locals:
+            self._v128_locals.remove(name)
         if name in getattr(self, "_module_global_list_names", set()):
             self._module_global_list_names.remove(name)
         if name in getattr(self, "_module_global_tuple_names", set()):
@@ -755,6 +793,633 @@ class WATGeneratorRuntimeMixin:
         if m:
             return int(m.group(1))
         return None
+
+    _FMT_FIXED_DYN_MAX_N = 15
+
+    def _ensure_fixed_dyn_helper(self) -> str:
+        """Émet (une fois) `$__fmt_fixed_dyn(v, n)` qui dispatche vers les
+        helpers fixedN existants selon la valeur runtime de n (0..15). Clamp
+        en dehors : n<0 → ".0f" (entier arrondi), n>15 → ".15f".
+
+        Permet une fonction multilingual `format_fixed(v, n)` avec n variable
+        au runtime — sans cela il faut une fonction par N (formatter_fixe_2/3/5/6
+        comme on l'a vu côté fractales). La borne haute (15) couvre la précision
+        utile de f64 (~15-17 chiffres significatifs) et permet à `format_prec`
+        de préserver toutes les décimales d'un centerX/Y de zoom profond.
+        """
+        if getattr(self, "_string_format_fixed_dyn_emitted", False):
+            return "$__fmt_fixed_dyn"
+        self._string_format_fixed_dyn_emitted = True
+        max_n = self._FMT_FIXED_DYN_MAX_N
+        # On garantit que tous les helpers fixedN qu'on va appeler existent.
+        self._ensure_string_format_helpers()
+        for k in range(2, max_n + 1):
+            self._ensure_fixedN_format_helper(k)
+        lines = ["  (func $__fmt_fixed_dyn (param $v f64) (param $n i32) (result f64 f64)"]
+        # Clamp inférieur : n<0 → n=0.
+        lines.append("    local.get $n")
+        lines.append("    i32.const 0")
+        lines.append("    i32.lt_s")
+        lines.append("    if")
+        lines.append("      i32.const 0")
+        lines.append("      local.set $n")
+        lines.append("    end")
+        # Clamp supérieur : n>max_n → n=max_n.
+        lines.append("    local.get $n")
+        lines.append(f"    i32.const {max_n}")
+        lines.append("    i32.gt_s")
+        lines.append("    if")
+        lines.append(f"      i32.const {max_n}")
+        lines.append("      local.set $n")
+        lines.append("    end")
+        # n=0 → arrondir + helper par défaut (entier).
+        lines.append("    local.get $n")
+        lines.append("    i32.eqz")
+        lines.append("    if (result f64 f64)")
+        lines.append("      local.get $v")
+        lines.append("      f64.nearest")
+        lines.append("      call $__fmt_default_tmpstr")
+        lines.append("    else")
+        # Cascade if pour n=1..(max_n-1). Compact mais lisible.
+        for k in range(1, max_n):
+            indent = "      " + "  " * (k - 1)
+            lines.append(f"{indent}local.get $n")
+            lines.append(f"{indent}i32.const {k}")
+            lines.append(f"{indent}i32.eq")
+            lines.append(f"{indent}if (result f64 f64)")
+            lines.append(f"{indent}  local.get $v")
+            lines.append(f"{indent}  call $__fmt_fixed{k}_tmpstr")
+            lines.append(f"{indent}else")
+        # n=max_n (cas par défaut au fond de la cascade)
+        deepest = "      " + "  " * (max_n - 1)
+        lines.append(f"{deepest}local.get $v")
+        lines.append(f"{deepest}call $__fmt_fixed{max_n}_tmpstr")
+        # Ferme chaque `else` ouvert ((max_n-1) cas + le tout-extérieur n=0).
+        for k in range(max_n - 1, 0, -1):
+            indent = "      " + "  " * (k - 1)
+            lines.append(f"{indent}end")
+        lines.append("    end")
+        lines.append("  )")
+        self._funcs.append("\n".join(lines))
+        return "$__fmt_fixed_dyn"
+
+    def _ensure_prec_dyn_helper(self) -> str:
+        """Emit (once) `$__fmt_prec_dyn(v, n)` — formats v with up to n
+        significant digits, stripping trailing zeros (and a dangling '.').
+        Matches `v.toPrecision(n).replace(/\\.?0+$/, '')` for the non-exponential
+        range (|v| in [1e-4, 1e21)). For very small / very large magnitudes
+        the result is the plain-decimal form (no exponential fallback) — the
+        fractales caller already gates `abs in [1e-4, 1e5)` upstream, so the
+        full toPrecision rule is not required.
+
+        Implementation : `after = clamp(n - 1 - floor(log10(|v|)), 0, 15)` then
+        call `$__fmt_fixed_dyn(v, after)` and strip trailing zeros / dot
+        in-place. Reuses fixed_dyn's scratch buffer (caller contract : single
+        formatter in flight at a time, same as fixed/exp).
+        """
+        if getattr(self, "_string_format_prec_dyn_emitted", False):
+            return "$__fmt_prec_dyn"
+        self._string_format_prec_dyn_emitted = True
+        self._ensure_fixed_dyn_helper()
+        max_n = self._FMT_FIXED_DYN_MAX_N
+        lines = [
+            "  (func $__fmt_prec_dyn (param $v f64) (param $n i32) (result f64 f64)",
+            "    (local $abs_v f64)",
+            "    (local $e_int i32)",
+            "    (local $after i32)",
+            "    (local $ptr_f64 f64)",
+            "    (local $len_f64 f64)",
+            "    (local $ptr i32)",
+            "    (local $len i32)",
+            "    (local $had_frac i32)",
+            "    local.get $v",
+            "    f64.abs",
+            "    local.set $abs_v",
+            "    ;; v ≈ 0 → after = 0 (result will be the integer-rendered '0').",
+            "    local.get $abs_v",
+            "    f64.const 1e-300",
+            "    f64.lt",
+            "    if",
+            "      i32.const 0",
+            "      local.set $after",
+            "    else",
+            "      ;; e_int = (i32) floor(log10(|v|))",
+            "      local.get $abs_v",
+            "      call $math_log10",
+            "      f64.floor",
+            "      i32.trunc_f64_s",
+            "      local.set $e_int",
+            "      ;; after = n - 1 - e_int",
+            "      local.get $n",
+            "      i32.const 1",
+            "      i32.sub",
+            "      local.get $e_int",
+            "      i32.sub",
+            "      local.set $after",
+            "      local.get $after",
+            "      i32.const 0",
+            "      i32.lt_s",
+            "      if",
+            "        i32.const 0",
+            "        local.set $after",
+            "      end",
+            "      local.get $after",
+            f"      i32.const {max_n}",
+            "      i32.gt_s",
+            "      if",
+            f"        i32.const {max_n}",
+            "        local.set $after",
+            "      end",
+            "    end",
+            "    local.get $after",
+            "    i32.const 0",
+            "    i32.gt_s",
+            "    local.set $had_frac",
+            "    ;; Call fixed_dyn(v, after) → (ptr_f64, len_f64).",
+            "    local.get $v",
+            "    local.get $after",
+            "    call $__fmt_fixed_dyn",
+            "    local.set $len_f64",
+            "    local.set $ptr_f64",
+            "    local.get $ptr_f64",
+            "    i32.trunc_f64_u",
+            "    local.set $ptr",
+            "    local.get $len_f64",
+            "    i32.trunc_f64_u",
+            "    local.set $len",
+            "    ;; Only strip when we actually wrote a '.' + frac digits.",
+            "    ;; Otherwise we'd eat zeros off integer outputs like '100'.",
+            "    local.get $had_frac",
+            "    if",
+            "      block $strip_done",
+            "        loop $strip_lp",
+            "          local.get $len",
+            "          i32.const 0",
+            "          i32.le_s",
+            "          br_if $strip_done",
+            "          local.get $ptr",
+            "          local.get $len",
+            "          i32.add",
+            "          i32.const 1",
+            "          i32.sub",
+            "          i32.load8_u",
+            "          i32.const 48",
+            "          i32.ne",
+            "          br_if $strip_done",
+            "          local.get $len",
+            "          i32.const 1",
+            "          i32.sub",
+            "          local.set $len",
+            "          br $strip_lp",
+            "        end",
+            "      end",
+            "      ;; Strip the dangling '.' if all frac digits were zero.",
+            "      local.get $len",
+            "      i32.const 0",
+            "      i32.gt_s",
+            "      if",
+            "        local.get $ptr",
+            "        local.get $len",
+            "        i32.add",
+            "        i32.const 1",
+            "        i32.sub",
+            "        i32.load8_u",
+            "        i32.const 46",
+            "        i32.eq",
+            "        if",
+            "          local.get $len",
+            "          i32.const 1",
+            "          i32.sub",
+            "          local.set $len",
+            "        end",
+            "      end",
+            "    end",
+            "    local.get $ptr",
+            "    f64.convert_i32_u",
+            "    local.get $len",
+            "    f64.convert_i32_u",
+            "  )",
+        ]
+        self._funcs.append("\n".join(lines))
+        return "$__fmt_prec_dyn"
+
+    def _ensure_exp_dyn_helper(self) -> str:  # pylint: disable=too-many-statements
+        """Emit (once) `$__fmt_exp_dyn(v, n)` — formats v in exponential form
+        with n decimals in the mantissa, mirroring JS
+        `v.toExponential(n).replace("e+", "e")`. n is clamped to [0, 9].
+        Used by the `format_exp(v, n)` source-level builtin to collapse the
+        ~60-line fractales `formatter_exponentiel_signe` hand-roll.
+
+        Output shape: `[-]d.dddddde[-]E` (no `e+`, exponent has 1-3 digits).
+        Mantissa rounding uses IEEE round-half-to-even via `f64.nearest`.
+        Returns (ptr_f64, len_f64) — caller stores len into `$__last_str_len`.
+        """
+        if getattr(self, "_string_format_exp_dyn_emitted", False):
+            return "$__fmt_exp_dyn"
+        self._string_format_exp_dyn_emitted = True
+        self._ensure_string_format_helpers()
+        mem_end = self._WASM_PAGES * 65536
+        scratch = mem_end - 64
+        fmt = scratch + 12  # shared with fixedN — same single-formatter-at-a-time contract
+        lines = [
+            "  (func $__fmt_exp_dyn (param $v f64) (param $n_in i32) (result f64 f64)",
+            "    (local $n i32)",
+            "    (local $abs_v f64)",
+            "    (local $neg i32)",
+            "    (local $e f64)",
+            "    (local $e_int i32)",
+            "    (local $e_abs i32)",
+            "    (local $pow_e f64)",
+            "    (local $scale f64)",
+            "    (local $scale_i64 i64)",
+            "    (local $m f64)",
+            "    (local $m_scaled i64)",
+            "    (local $int_digit i64)",
+            "    (local $frac i64)",
+            "    (local $denom i64)",
+            "    (local $copy_i i32)",
+            "    (local $exp_neg i32)",
+            "    (local $i_loop i32)",
+            "    ;; Clamp n to [0, 9].",
+            "    local.get $n_in",
+            "    local.set $n",
+            "    local.get $n",
+            "    i32.const 0",
+            "    i32.lt_s",
+            "    if",
+            "      i32.const 0",
+            "      local.set $n",
+            "    end",
+            "    local.get $n",
+            "    i32.const 9",
+            "    i32.gt_s",
+            "    if",
+            "      i32.const 9",
+            "      local.set $n",
+            "    end",
+            f"    i32.const {fmt}",
+            "    local.set $copy_i",
+            "    ;; sign + abs",
+            "    local.get $v",
+            "    f64.const 0",
+            "    f64.lt",
+            "    local.set $neg",
+            "    local.get $v",
+            "    f64.abs",
+            "    local.set $abs_v",
+            "    ;; Zero (or subnormal) case : write '0[.NN]e0'.",
+            "    local.get $abs_v",
+            "    f64.const 1e-300",
+            "    f64.lt",
+            "    if (result f64 f64)",
+            "      local.get $copy_i",
+            "      i32.const 48",
+            "      i32.store8",
+            "      local.get $copy_i",
+            "      i32.const 1",
+            "      i32.add",
+            "      local.set $copy_i",
+            "      local.get $n",
+            "      i32.const 0",
+            "      i32.gt_s",
+            "      if",
+            "        local.get $copy_i",
+            "        i32.const 46",
+            "        i32.store8",
+            "        local.get $copy_i",
+            "        i32.const 1",
+            "        i32.add",
+            "        local.set $copy_i",
+            "        i32.const 0",
+            "        local.set $i_loop",
+            "        block $z_done",
+            "          loop $z_loop",
+            "            local.get $i_loop",
+            "            local.get $n",
+            "            i32.ge_s",
+            "            br_if $z_done",
+            "            local.get $copy_i",
+            "            i32.const 48",
+            "            i32.store8",
+            "            local.get $copy_i",
+            "            i32.const 1",
+            "            i32.add",
+            "            local.set $copy_i",
+            "            local.get $i_loop",
+            "            i32.const 1",
+            "            i32.add",
+            "            local.set $i_loop",
+            "            br $z_loop",
+            "          end",
+            "        end",
+            "      end",
+            "      local.get $copy_i",
+            "      i32.const 101",
+            "      i32.store8",
+            "      local.get $copy_i",
+            "      i32.const 1",
+            "      i32.add",
+            "      local.set $copy_i",
+            "      local.get $copy_i",
+            "      i32.const 48",
+            "      i32.store8",
+            "      local.get $copy_i",
+            "      i32.const 1",
+            "      i32.add",
+            "      local.set $copy_i",
+            f"      i32.const {fmt}",
+            "      f64.convert_i32_u",
+            "      local.get $copy_i",
+            f"      i32.const {fmt}",
+            "      i32.sub",
+            "      f64.convert_i32_u",
+            "    else",
+            "      ;; e = floor(log10(abs_v))",
+            "      local.get $abs_v",
+            "      call $math_log10",
+            "      f64.floor",
+            "      local.set $e",
+            "      ;; pow_e = pow_f64(10, e)",
+            "      f64.const 10",
+            "      local.get $e",
+            "      call $pow_f64",
+            "      local.set $pow_e",
+            "      ;; m = abs_v / pow_e",
+            "      local.get $abs_v",
+            "      local.get $pow_e",
+            "      f64.div",
+            "      local.set $m",
+            "      ;; m correction (math.log10 precision ~1e-6 ; m may slip out of [1, 10))",
+            "      local.get $m",
+            "      f64.const 10",
+            "      f64.ge",
+            "      if",
+            "        local.get $m",
+            "        f64.const 10",
+            "        f64.div",
+            "        local.set $m",
+            "        local.get $e",
+            "        f64.const 1",
+            "        f64.add",
+            "        local.set $e",
+            "      end",
+            "      local.get $m",
+            "      f64.const 1",
+            "      f64.lt",
+            "      if",
+            "        local.get $m",
+            "        f64.const 10",
+            "        f64.mul",
+            "        local.set $m",
+            "        local.get $e",
+            "        f64.const 1",
+            "        f64.sub",
+            "        local.set $e",
+            "      end",
+            "      ;; scale = pow_f64(10, n)",
+            "      f64.const 10",
+            "      local.get $n",
+            "      f64.convert_i32_s",
+            "      call $pow_f64",
+            "      local.set $scale",
+            "      ;; m_scaled = round(m * scale) as i64",
+            "      local.get $m",
+            "      local.get $scale",
+            "      f64.mul",
+            "      f64.nearest",
+            "      i64.trunc_f64_s",
+            "      local.set $m_scaled",
+            "      local.get $scale",
+            "      i64.trunc_f64_s",
+            "      local.set $scale_i64",
+            "      ;; If rounding pushed mantissa to 10.0 (m_scaled >= 10*scale),",
+            "      ;; reset to 1.0 (m_scaled = scale) and bump exponent.",
+            "      local.get $m_scaled",
+            "      local.get $scale_i64",
+            "      i64.const 10",
+            "      i64.mul",
+            "      i64.ge_s",
+            "      if",
+            "        local.get $scale_i64",
+            "        local.set $m_scaled",
+            "        local.get $e",
+            "        f64.const 1",
+            "        f64.add",
+            "        local.set $e",
+            "      end",
+            "      ;; Split int / frac (scale = 1 when n=0).",
+            "      local.get $n",
+            "      i32.eqz",
+            "      if",
+            "        local.get $m_scaled",
+            "        local.set $int_digit",
+            "        i64.const 0",
+            "        local.set $frac",
+            "      else",
+            "        local.get $m_scaled",
+            "        local.get $scale_i64",
+            "        i64.div_s",
+            "        local.set $int_digit",
+            "        local.get $m_scaled",
+            "        local.get $scale_i64",
+            "        i64.rem_s",
+            "        local.set $frac",
+            "      end",
+            "      local.get $e",
+            "      i32.trunc_f64_s",
+            "      local.set $e_int",
+            "      ;; Write '-' if negative.",
+            "      local.get $neg",
+            "      if",
+            "        local.get $copy_i",
+            "        i32.const 45",
+            "        i32.store8",
+            "        local.get $copy_i",
+            "        i32.const 1",
+            "        i32.add",
+            "        local.set $copy_i",
+            "      end",
+            "      ;; Write int_digit (single char '0'..'9' since m in [1, 10)).",
+            "      local.get $copy_i",
+            "      local.get $int_digit",
+            "      i32.wrap_i64",
+            "      i32.const 48",
+            "      i32.add",
+            "      i32.store8",
+            "      local.get $copy_i",
+            "      i32.const 1",
+            "      i32.add",
+            "      local.set $copy_i",
+            "      ;; Write '.' + n frac digits (MSB-first) when n > 0.",
+            "      local.get $n",
+            "      i32.const 0",
+            "      i32.gt_s",
+            "      if",
+            "        local.get $copy_i",
+            "        i32.const 46",
+            "        i32.store8",
+            "        local.get $copy_i",
+            "        i32.const 1",
+            "        i32.add",
+            "        local.set $copy_i",
+            "        local.get $scale_i64",
+            "        local.set $denom",
+            "        i32.const 0",
+            "        local.set $i_loop",
+            "        block $f_done",
+            "          loop $f_loop",
+            "            local.get $i_loop",
+            "            local.get $n",
+            "            i32.ge_s",
+            "            br_if $f_done",
+            "            local.get $denom",
+            "            i64.const 10",
+            "            i64.div_s",
+            "            local.set $denom",
+            "            local.get $copy_i",
+            "            local.get $frac",
+            "            local.get $denom",
+            "            i64.div_s",
+            "            i64.const 10",
+            "            i64.rem_s",
+            "            i32.wrap_i64",
+            "            i32.const 48",
+            "            i32.add",
+            "            i32.store8",
+            "            local.get $copy_i",
+            "            i32.const 1",
+            "            i32.add",
+            "            local.set $copy_i",
+            "            local.get $i_loop",
+            "            i32.const 1",
+            "            i32.add",
+            "            local.set $i_loop",
+            "            br $f_loop",
+            "          end",
+            "        end",
+            "      end",
+            "      ;; 'e'",
+            "      local.get $copy_i",
+            "      i32.const 101",
+            "      i32.store8",
+            "      local.get $copy_i",
+            "      i32.const 1",
+            "      i32.add",
+            "      local.set $copy_i",
+            "      ;; exponent sign + magnitude",
+            "      local.get $e_int",
+            "      i32.const 0",
+            "      i32.lt_s",
+            "      local.set $exp_neg",
+            "      local.get $exp_neg",
+            "      if",
+            "        local.get $copy_i",
+            "        i32.const 45",
+            "        i32.store8",
+            "        local.get $copy_i",
+            "        i32.const 1",
+            "        i32.add",
+            "        local.set $copy_i",
+            "        i32.const 0",
+            "        local.get $e_int",
+            "        i32.sub",
+            "        local.set $e_abs",
+            "      else",
+            "        local.get $e_int",
+            "        local.set $e_abs",
+            "      end",
+            "      ;; Write |e_int| as 1-3 digits (max exponent of f64 is ~308).",
+            "      block $ed_done",
+            "        local.get $e_abs",
+            "        i32.const 100",
+            "        i32.ge_u",
+            "        if",
+            "          local.get $copy_i",
+            "          local.get $e_abs",
+            "          i32.const 100",
+            "          i32.div_u",
+            "          i32.const 48",
+            "          i32.add",
+            "          i32.store8",
+            "          local.get $copy_i",
+            "          i32.const 1",
+            "          i32.add",
+            "          local.set $copy_i",
+            "          local.get $copy_i",
+            "          local.get $e_abs",
+            "          i32.const 10",
+            "          i32.div_u",
+            "          i32.const 10",
+            "          i32.rem_u",
+            "          i32.const 48",
+            "          i32.add",
+            "          i32.store8",
+            "          local.get $copy_i",
+            "          i32.const 1",
+            "          i32.add",
+            "          local.set $copy_i",
+            "          local.get $copy_i",
+            "          local.get $e_abs",
+            "          i32.const 10",
+            "          i32.rem_u",
+            "          i32.const 48",
+            "          i32.add",
+            "          i32.store8",
+            "          local.get $copy_i",
+            "          i32.const 1",
+            "          i32.add",
+            "          local.set $copy_i",
+            "          br $ed_done",
+            "        end",
+            "        local.get $e_abs",
+            "        i32.const 10",
+            "        i32.ge_u",
+            "        if",
+            "          local.get $copy_i",
+            "          local.get $e_abs",
+            "          i32.const 10",
+            "          i32.div_u",
+            "          i32.const 48",
+            "          i32.add",
+            "          i32.store8",
+            "          local.get $copy_i",
+            "          i32.const 1",
+            "          i32.add",
+            "          local.set $copy_i",
+            "          local.get $copy_i",
+            "          local.get $e_abs",
+            "          i32.const 10",
+            "          i32.rem_u",
+            "          i32.const 48",
+            "          i32.add",
+            "          i32.store8",
+            "          local.get $copy_i",
+            "          i32.const 1",
+            "          i32.add",
+            "          local.set $copy_i",
+            "          br $ed_done",
+            "        end",
+            "        local.get $copy_i",
+            "        local.get $e_abs",
+            "        i32.const 48",
+            "        i32.add",
+            "        i32.store8",
+            "        local.get $copy_i",
+            "        i32.const 1",
+            "        i32.add",
+            "        local.set $copy_i",
+            "      end",
+            f"      i32.const {fmt}",
+            "      f64.convert_i32_u",
+            "      local.get $copy_i",
+            f"      i32.const {fmt}",
+            "      i32.sub",
+            "      f64.convert_i32_u",
+            "    end",
+            "  )",
+        ]
+        self._funcs.append("\n".join(lines))
+        return "$__fmt_exp_dyn"
 
     def _ensure_fixedN_format_helper(self, n: int) -> str:  # pylint: disable=too-many-statements
         """Emit (once) a ``$__fmt_fixedN_tmpstr`` helper for N decimal places."""
@@ -1059,6 +1724,54 @@ class WATGeneratorRuntimeMixin:
             return False
 
         return any(_stmt_returns_string(stmt) for stmt in func_def.body)
+
+    def _multi_value_return_arity(self, func_def: FunctionDef) -> int:
+        """Return N≥2 if every reachable `retour` returns a TupleLiteral of arity N
+        (with non-string elements) ; 1 otherwise.
+
+        Multi-value returns lower to a WAT signature `(result f64 f64 …)` and
+        `retour (a, b)` pushes N values then `return`. Heterogeneous arities or
+        mixed tuple/non-tuple returns disable the optimization (function falls
+        back to single-value semantics).
+        """
+        seen_arities: set[int] = set()
+        has_non_tuple_return: list[bool] = [False]
+
+        def _collect(stmt):
+            if isinstance(stmt, ReturnStatement):
+                if stmt.value is None:
+                    has_non_tuple_return[0] = True
+                    return
+                if isinstance(stmt.value, TupleLiteral):
+                    # tuple de 1 élément ≡ scalaire (cas rare ; on l'ignore).
+                    if len(stmt.value.elements) >= 2:
+                        # Refuse les éléments string — multi-valeur ne porte que
+                        # des f64 pour l'instant.
+                        if any(self._is_string_value(el) for el in stmt.value.elements):
+                            has_non_tuple_return[0] = True
+                            return
+                        seen_arities.add(len(stmt.value.elements))
+                        return
+                has_non_tuple_return[0] = True
+                return
+            if isinstance(stmt, IfStatement):
+                for inner in stmt.body + (stmt.else_body or []):
+                    _collect(inner)
+                return
+            # Autres compounds : peuvent contenir return — descendre. (Boucles
+            # sont skip-safe : un retour à l'intérieur compte aussi.)
+            for attr in ("body", "else_body", "finally_body"):
+                inner_body = getattr(stmt, attr, None)
+                if inner_body:
+                    for inner in inner_body:
+                        _collect(inner)
+
+        for stmt in func_def.body:
+            _collect(stmt)
+
+        if has_non_tuple_return[0] or len(seen_arities) != 1:
+            return 1
+        return next(iter(seen_arities))
 
     def _returns_list_like(self, func_def: FunctionDef) -> bool:
         """Best-effort check for functions that return list/tuple-like values.

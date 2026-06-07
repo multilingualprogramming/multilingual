@@ -1,0 +1,39 @@
+# Le Jeu de la vie comme programme polymodal semantic-core-v1, écrit
+# entièrement dans le langage Multilingual -- sans Python. Construire avec :
+#
+#     python -m multilingualprogramming process-build examples/game_of_life.fr.multi --lang fr
+#
+# C'est le même programme que examples/game_of_life.multi, mais en français :
+# il se réduit à un noyau de processus identique. Les clés du manifeste
+# ("match", "alive", ...) restent en anglais car ce sont des noms de schéma,
+# neutres vis-à-vis de la langue.
+
+# La règle B3/S23 de Conway, écrite dans la syntaxe de surface des règles. Une
+# cellule morte ayant exactement 3 voisines vivantes naît ; une cellule vivante
+# ayant 2 ou 3 voisines survit ; tout le reste prend la valeur morte par défaut.
+# Les combinateurs (quand/nombre_voisins/devient/clause/reecrire) se réduisent
+# aux mêmes clauses de réécriture génériques : la dynamique est écrite, pas
+# imbriquée à la main. Le moteur ne connaît aucun automate par son nom.
+déf regle_de_vie():
+    soit naissance = [3]
+    soit survie = [2, 3]
+    retour reecrire(
+        clause(quand(alive=0), nombre_voisins("alive", 1, naissance), devient(alive=1)),
+        clause(quand(alive=1), nombre_voisins("alive", 1, survie), devient(alive=1)),
+        repli(alive=0)
+    )
+
+# Un planeur, en coordonnées de cellules vivantes. Population ouverte sur un
+# treillis infini : seules les cellules vivantes existent, et la règle fait
+# naître et mourir les cellules à mesure que le planeur se déplace.
+soit planeur = [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]]
+soit cellules = [{"locus": cellule, "alive": 1} pour cellule dans planeur]
+soit etat = {"loci": cellules, "population": "open", "empty": {"alive": 0}}
+
+# Assembler les quatre axes indépendants de la modalité en un noyau.
+soit process = construire_noyau_processus(
+    etat,
+    topologie_treillis_infini(),
+    regle_de_vie(),
+    ordonnancement_synchrone()
+)

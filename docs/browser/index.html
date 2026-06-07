@@ -156,6 +156,21 @@
         font-size: 0.85rem;
       }
 
+      .card ul.demolist {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      .card ul.demolist li {
+        margin-bottom: 0.35rem;
+      }
+
+      .card ul.demolist a {
+        color: var(--accent);
+        text-decoration: underline;
+        font-weight: 700;
+      }
+
       @media (max-width: 640px) {
         .hero {
           padding: 1.4rem;
@@ -168,10 +183,12 @@
     <main class="shell">
       <section class="hero">
         <p class="eyebrow">Multilingual Programming</p>
-        <h1>Two browser runtimes. One language model.</h1>
+        <h1>Many browser runtimes. One language model.</h1>
         <p class="lead">
-          This GitHub Pages site demonstrates both interactive execution through Pyodide
-          and ahead-of-time deployment through precompiled WebAssembly bundles.
+          This GitHub Pages site demonstrates interactive execution through Pyodide,
+          ahead-of-time deployment through precompiled WebAssembly bundles, and the
+          polymodal computation track: one modality-free program projected into
+          linear, spatial, volumetric, sonic, and MIDI browser runtimes.
         </p>
         <div class="links">
           <a class="button button--solid" href="../playground.html">Open Pyodide Playground</a>
@@ -180,6 +197,27 @@
       </section>
 
       <section class="grid">
+        <article class="card">
+          <span class="tag">Process calculus</span>
+          <h2>Process Dynamics — semantic-core-v1</h2>
+          <p>
+            One modality-free &langle;State, Topology, Rule, Schedule&rangle;
+            program advanced by a single shared stepper and projected into a
+            canvas and sound at once. Each page fills a different axis of the
+            calculus and shows the program's expressiveness tier in the status
+            line. Open any one, then hop between them with the nav at the top.
+          </p>
+          <ul class="demolist">
+            <li><a href="./process-dynamics/index.html">Game of Life</a> — synchronous lattice (Tier 2)</li>
+            <li><a href="./process-dynamics/lsystem.html">L-system</a> — generative rewriting (Tier 3)</li>
+            <li><a href="./process-dynamics/ecosystem.html">Ecosystem</a> — asynchronous field (Tier 1)</li>
+            <li><a href="./process-dynamics/graph.html">Network contagion</a> — graph topology (Tier 4)</li>
+            <li><a href="./process-dynamics/diffusion.html">Diffusion</a> — continuous-time rate (Tier 1)</li>
+          </ul>
+          <p class="route">browser/process-dynamics/</p>
+          <a class="button button--solid" href="./process-dynamics/">Open Process Dynamics</a>
+        </article>
+
         <article class="card">
           <span class="tag">Scalar compute</span>
           <h2>Fibonacci Bundle</h2>
@@ -227,6 +265,93 @@
           </ul>
           <p class="route">browser/memory-game/</p>
           <a class="button button--solid" href="./memory-game/">Open Memory Game</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Post-textual research</span>
+          <h2>Spatial Dynamics</h2>
+          <p>
+            A browser-native 2D workspace where fixed visual primitives interact
+            through emit, diffuse, attract, repel, oscillate, split, merge, and
+            contain laws.
+          </p>
+          <ul>
+            <li>No source editor inside the workspace</li>
+            <li>No labels drawn on the computational canvas</li>
+            <li>Click the symbol palette to sculpt behavior</li>
+          </ul>
+          <p class="route">browser/spatial-dynamics/</p>
+          <a class="button button--solid" href="./spatial-dynamics/">Open Spatial Dynamics</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Polymodal projection</span>
+          <h2>Sonic Dynamics</h2>
+          <p>
+            The same program.multi as Spatial Dynamics, projected into a
+            WebAudio composition instead of a 2D scene. Includes a
+            microphone capture path that runs the inverse projection
+            (audio -> semantic core) in the browser.
+          </p>
+          <ul>
+            <li>No textual source inside the workspace</li>
+            <li>Frequency, amplitude, and routing derived from semantic fields</li>
+            <li>Press play to hear the spatial program as sound</li>
+          </ul>
+          <p class="route">browser/sonic-dynamics/</p>
+          <a class="button button--solid" href="./sonic-dynamics/">Open Sonic Dynamics</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Polymodal projection</span>
+          <h2>Linear Dynamics</h2>
+          <p>
+            The same program.multi as Spatial Dynamics, projected into a
+            one-dimensional timeline. Each entity becomes a positioned
+            mark along a single axis; channel drives the vertical lane.
+          </p>
+          <ul>
+            <li>1D peer of the 2D spatial track</li>
+            <li>Glyph vocabulary deliberately distinct from 2D shape names</li>
+            <li>Press play to sweep a cursor across the timeline</li>
+          </ul>
+          <p class="route">browser/linear-dynamics/</p>
+          <a class="button button--solid" href="./linear-dynamics/">Open Linear Dynamics</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Polymodal projection</span>
+          <h2>Volumetric Dynamics</h2>
+          <p>
+            The same program.multi as Spatial Dynamics, projected into a
+            three-dimensional scene rendered on canvas with a hand-rolled
+            rotation and perspective -- no WebGL or 3D library required.
+          </p>
+          <ul>
+            <li>3D peer closing the 1D / 2D / 3D dimensionality loop</li>
+            <li>Primitive vocabulary deliberately disjoint from 1D and 2D names</li>
+            <li>Press play to rotate the scene around the Y axis</li>
+          </ul>
+          <p class="route">browser/volumetric-dynamics/</p>
+          <a class="button button--solid" href="./volumetric-dynamics/">Open Volumetric Dynamics</a>
+        </article>
+
+        <article class="card">
+          <span class="tag">Polymodal projection</span>
+          <h2>MIDI Dynamics</h2>
+          <p>
+            The same program.multi as Spatial Dynamics, projected into a
+            sequence of discrete MIDI events rendered as a piano roll. An
+            optional Web MIDI Out button forwards the events to a connected
+            synthesizer.
+          </p>
+          <ul>
+            <li>Discrete-event peer of the continuous-shape projections</li>
+            <li>Each opcode commits to a MIDI role (note / drum / cc / program / bus)</li>
+            <li>Stress-tests whether the ontology is genuinely modality-free</li>
+          </ul>
+          <p class="route">browser/midi-dynamics/</p>
+          <a class="button button--solid" href="./midi-dynamics/">Open MIDI Dynamics</a>
         </article>
       </section>
     </main>

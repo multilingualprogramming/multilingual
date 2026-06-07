@@ -1,0 +1,103 @@
+{
+  "kind": "semantic-core-v1",
+  "version": 1,
+  "source": "docs/browser/process-dynamics/program.open.v1.json",
+  "state": {
+    "loci": [
+      {
+        "locus": [
+          1,
+          0
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          2,
+          1
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          0,
+          2
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          1,
+          2
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          2,
+          2
+        ],
+        "alive": 1
+      }
+    ],
+    "population": "open",
+    "empty": {
+      "alive": 0
+    }
+  },
+  "topology": {
+    "kind": "lattice",
+    "extent": "infinite",
+    "neighborhood": "moore8"
+  },
+  "rule": {
+    "kind": "rewrite",
+    "clauses": [
+      {
+        "match": {
+          "self": {
+            "alive": 0
+          },
+          "neighbor_count": [
+            {
+              "field": "alive",
+              "value": 1,
+              "in": [
+                3
+              ]
+            }
+          ]
+        },
+        "produce": {
+          "alive": 1
+        }
+      },
+      {
+        "match": {
+          "self": {
+            "alive": 1
+          },
+          "neighbor_count": [
+            {
+              "field": "alive",
+              "value": 1,
+              "in": [
+                2,
+                3
+              ]
+            }
+          ]
+        },
+        "produce": {
+          "alive": 1
+        }
+      }
+    ],
+    "default": {
+      "alive": 0
+    }
+  },
+  "schedule": {
+    "kind": "synchronous"
+  }
+}

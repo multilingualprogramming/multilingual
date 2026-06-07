@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Polymodal Process — semantic-core-v1</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --ink: #e8eefc;
+      --line: rgba(232, 238, 252, 0.18);
+      --panel: rgba(11, 16, 32, 0.82);
+      --accent: #5ad1ff;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 24px;
+    }
+    header { text-align: center; max-width: 640px; }
+    h1 { font-size: 1.2rem; margin: 0 0 6px; }
+    p { margin: 0; font-size: 0.9rem; opacity: 0.8; line-height: 1.4; }
+    canvas {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #0b1020;
+      width: min(80vw, 520px);
+      height: min(80vw, 520px);
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+    button {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    #status { font-variant-numeric: tabular-nums; font-size: 0.85rem; opacity: 0.85; }
+    nav.demos { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 12px; font-size: 0.82rem; }
+    nav.demos a { color: var(--ink); opacity: 0.65; text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+    nav.demos a:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    nav.demos a.active { color: var(--accent); border-color: var(--accent); opacity: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>One rule, two senses</h1>
+    <p>
+      A single <code>semantic-core-v1</code> manifest (Game of Life as
+      &langle;State, Topology, Rule, Schedule&rangle; data) advanced by one
+      shared, modality-free stepper. The grid you see and the voices you hear
+      are the same frame — neither modality steps the program itself. The status
+      line shows the program's expressiveness tier, read from its axes by the
+      shared classifier.
+    </p>
+    <nav class="demos">
+      <a href="./index.html" class="active">Life</a>
+      <a href="./lsystem.html">L-system</a>
+      <a href="./ecosystem.html">Ecosystem</a>
+      <a href="./graph.html">Network</a>
+      <a href="./diffusion.html">Diffusion</a>
+    </nav>
+  </header>
+
+  <canvas id="spatial" width="520" height="520"></canvas>
+
+  <div class="toolbar">
+    <button id="sound">Sound: off</button>
+    <button id="mode">Mode: bounded</button>
+    <span id="status">loading…</span>
+  </div>
+
+  <script type="module">
+    import { boot } from "./process_runtime.js";
+
+    // The same engine runs a bounded (finite lattice) and an unbounded
+    // (open-population, infinite lattice) program; the only difference is the
+    // manifest. The unbounded glider travels across a fixed viewport forever.
+    const params = new URLSearchParams(window.location.search);
+    const open = params.get("manifest") === "program.open.v1.json";
+    const mode = document.getElementById("mode");
+    mode.textContent = open ? "Mode: unbounded" : "Mode: bounded";
+    mode.addEventListener("click", () => {
+      window.location.search = open ? "" : "?manifest=program.open.v1.json";
+    });
+
+    boot({ steps: open ? 48 : 60 }).catch((err) => {
+      document.getElementById("status").textContent = `error: ${err.message}`;
+      throw err;
+    });
+  </script>
+</body>
+</html>

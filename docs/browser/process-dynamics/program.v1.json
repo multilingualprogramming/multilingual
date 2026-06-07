@@ -1,0 +1,1074 @@
+{
+  "kind": "semantic-core-v1",
+  "version": 1,
+  "source": "docs/browser/process-dynamics/program.v1.json",
+  "state": {
+    "loci": [
+      {
+        "locus": [
+          0,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          0
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          2,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          0
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          1
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          3,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          1
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          2
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          1,
+          2
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          2,
+          2
+        ],
+        "alive": 1
+      },
+      {
+        "locus": [
+          3,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          2
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          3
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          4
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          5
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          6
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          7
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          8
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          9
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          10
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          0,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          1,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          2,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          3,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          4,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          5,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          6,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          7,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          8,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          9,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          10,
+          11
+        ],
+        "alive": 0
+      },
+      {
+        "locus": [
+          11,
+          11
+        ],
+        "alive": 0
+      }
+    ]
+  },
+  "topology": {
+    "kind": "lattice",
+    "width": 12,
+    "height": 12,
+    "wrap": true,
+    "neighborhood": "moore8"
+  },
+  "rule": {
+    "kind": "rewrite",
+    "clauses": [
+      {
+        "match": {
+          "self": {
+            "alive": 0
+          },
+          "neighbor_count": [
+            {
+              "field": "alive",
+              "value": 1,
+              "in": [
+                3
+              ]
+            }
+          ]
+        },
+        "produce": {
+          "alive": 1
+        }
+      },
+      {
+        "match": {
+          "self": {
+            "alive": 1
+          },
+          "neighbor_count": [
+            {
+              "field": "alive",
+              "value": 1,
+              "in": [
+                2,
+                3
+              ]
+            }
+          ]
+        },
+        "produce": {
+          "alive": 1
+        }
+      }
+    ],
+    "default": {
+      "alive": 0
+    }
+  },
+  "schedule": {
+    "kind": "synchronous"
+  }
+}

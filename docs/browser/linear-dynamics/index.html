@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Polymodal Linear Dynamics</title>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #11151c;
+      --panel: rgba(12, 15, 20, 0.78);
+      --line: rgba(241, 239, 228, 0.18);
+      --ink: #f1efe4;
+      --focus: #f7c948;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: system-ui, sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: var(--surface);
+    }
+
+    .palette {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      border-radius: 8px;
+    }
+
+    button {
+      width: 44px;
+      height: 44px;
+      position: relative;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+      cursor: pointer;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    button[aria-pressed="true"] {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 2px rgba(247, 201, 72, 0.2) inset;
+    }
+
+    .icon-play::before {
+      width: 0;
+      height: 0;
+      border-top: 10px solid transparent;
+      border-bottom: 10px solid transparent;
+      border-left: 16px solid currentColor;
+      content: "";
+      transform: translateX(2px);
+    }
+
+    .icon-stop::before {
+      width: 18px;
+      height: 18px;
+      background: currentColor;
+      content: "";
+    }
+
+    noscript {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+      background: var(--bg);
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="strip" aria-label="polymodal linear dynamics workspace"></canvas>
+
+  <nav class="palette" aria-label="linear playback">
+    <button id="start" class="icon-play" type="button" data-action="start" aria-label="start" aria-pressed="false"></button>
+    <button id="stop" class="icon-stop" type="button" data-action="stop" aria-label="stop" aria-pressed="true"></button>
+  </nav>
+
+  <noscript>This polymodal linear prototype requires JavaScript.</noscript>
+  <script type="module" src="./linear_runtime.js"></script>
+</body>
+</html>

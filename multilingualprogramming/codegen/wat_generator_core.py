@@ -110,6 +110,7 @@ class WATGeneratorCoreMixin:
             "_string_len_locals",
             "_list_locals",
             "_tuple_locals",
+            "_v128_locals",
             "_static_sequence_elements",
             "_zip_pair_locals",
             "_dict_key_maps",
@@ -131,6 +132,7 @@ class WATGeneratorCoreMixin:
             ("_string_len_locals", dict),
             ("_list_locals", set),
             ("_tuple_locals", set),
+            ("_v128_locals", set),
             ("_static_sequence_elements", dict),
             ("_zip_pair_locals", set),
             ("_dict_key_maps", dict),
@@ -171,12 +173,28 @@ class WATGeneratorCoreMixin:
         lines = [f'  (func ${wat_func_name} (export "{func_name}")']
         for param_name in param_names:
             lines.append(f"    (param ${self._wat_symbol(param_name)} f64)")
-        lines.append("    (result f64)")
+        # Fonctions multi-valuées : signature `(result f64 f64 ...)` × arité.
+        arity = self._multi_value_func_arity.get(func_name, 1)
+        if arity > 1:
+            lines.append(f"    (result {' '.join(['f64'] * arity)})")
+        else:
+            lines.append("    (result f64)")
         for local_name in local_names:
-            lines.append(f"    (local ${self._wat_symbol(local_name)} f64)")
+            # B2 : un local en `_v128_locals` est typé v128 dans le WAT
+            # (`local.set/get` valident le type du local ; un v128 ne peut
+            # pas être stocké dans un local f64). Les v128 ne traversent
+            # pas la frontière de fonction (params/result restent f64).
+            local_type = "v128" if local_name in self._v128_locals else "f64"
+            lines.append(f"    (local ${self._wat_symbol(local_name)} {local_type})")
         lines.extend(body_instrs)
         if implicit_return:
-            lines.append("    f64.const 0  ;; implicit return")
+            if arity > 1:
+                # Fallback implicit return : empile N zéros (chemin rarement
+                # atteint — chaque branche utilisateur termine par un retour).
+                for _ in range(arity):
+                    lines.append("    f64.const 0  ;; implicit return")
+            else:
+                lines.append("    f64.const 0  ;; implicit return")
         lines.append("  )")
         self._funcs.append("\n".join(lines))
 
@@ -634,19 +652,44 @@ class WATGeneratorCoreMixin:
       f64.div
       return
     end
-    f64.const 0.0
+    ;; neg = (exp < 0) — used at the end to invert result for negative exponents.
     local.get $exp
+    f64.const 0.0
     f64.lt
     local.set $neg
     local.get $exp
     f64.abs
     local.set $exp
+    ;; Si exp n'est pas entier, repli sur exp(b·ln(a)) pour base > 0.
+    ;; (À ce point, $exp est déjà passé par f64.abs, donc on calcule
+    ;;  |result| = base^|exp| via exp(|exp|·ln(base)), puis on inverse
+    ;;  si neg=1.) base ≤ 0 avec exp non-entier reste NaN (pas de valeur réelle).
     local.get $exp
     f64.trunc
     local.get $exp
     f64.ne
     if
-      f64.const nan
+      local.get $base
+      f64.const 0.0
+      f64.le
+      if
+        f64.const nan
+        return
+      end
+      local.get $base
+      call $math_log
+      local.get $exp
+      f64.mul
+      call $math_exp
+      local.set $result
+      local.get $neg
+      if
+        f64.const 1.0
+        local.get $result
+        f64.div
+        local.set $result
+      end
+      local.get $result
       return
     end
     local.get $exp
@@ -817,6 +860,36 @@ class WATGeneratorCoreMixin:
     local.get $base
     i32.const 4
     i32.add
+  )
+  ;; Layout des listes multilingual (heap-backed) :
+  ;;   ptr+0  : header f64 = nombre d'éléments
+  ;;   ptr+8  : item 0 (f64)
+  ;;   ptr+16 : item 1 (f64)
+  ;;   …
+  ;; Les helpers ci-dessous exposent ce layout aux callers hôte sans qu'ils
+  ;; aient à manipuler les offsets bruts (cf. fractales/renderer-exploration.js
+  ;; qui faisait `view.getFloat64(base + 8 + 8 * (2 + 2 * k), true)` à la main).
+  ;;
+  ;; __ml_list_count(ptr) : nombre d'éléments. Lit le header f64 à ptr+0.
+  (func $__ml_list_count (export "__ml_list_count") (param $ptr f64) (result f64)
+    local.get $ptr
+    i32.trunc_f64_u
+    f64.load
+  )
+  ;; __ml_list_item(ptr, i) : i-ième élément (zero-indexed). Lit f64 à ptr+8+8*i.
+  ;; Pas de borne checking : caller responsabilisé (cohérent avec le reste du
+  ;; runtime multilingual).
+  (func $__ml_list_item (export "__ml_list_item") (param $ptr f64) (param $i f64) (result f64)
+    local.get $ptr
+    i32.trunc_f64_u
+    local.get $i
+    i32.trunc_f64_u
+    i32.const 8
+    i32.mul
+    i32.const 8
+    i32.add
+    i32.add
+    f64.load
   )
   ;; Print a double-precision float always showing a decimal point.
   ;; Integer values (v == trunc(v), |v| < 1e15) are printed as "N.0".
@@ -2144,70 +2217,107 @@ class WATGeneratorCoreMixin:
     call $math_cos
     f64.div
   )
-  ;; exp(x): 10-term Horner polynomial for e^x.
+  ;; exp(x) avec réduction d'intervalle : k = round(x/ln2), r = x - k·ln2,
+  ;; exp(x) = 2^k · exp(r). 2^k construit par bit-pattern IEEE-754. Taylor à
+  ;; 11 termes sur r ∈ [-ln2/2, ln2/2] ≈ [-0.347, 0.347] → ~1e-15. Avant :
+  ;; Taylor direct sur x sans réduction (~5% à |x|=5, divergent à |x|>20).
   (func $math_exp (param $x f64) (result f64)
-    (local $t f64)
+    (local $t f64) (local $r f64) (local $kf f64) (local $k i32)
+    (local $two_pow_k f64)
+    ;; kf = round(x / ln2) en f64 (utilisé pour le calcul de r). k = trunc(kf)
+    ;; en i32 pour construire 2^k.
+    local.get $x
+    f64.const 1.4426950408889634
+    f64.mul
+    f64.nearest
+    local.set $kf
+    local.get $kf
+    i32.trunc_f64_s
+    local.set $k
+    ;; r = x - kf·ln2.
+    local.get $x
+    local.get $kf
+    f64.const 0.6931471805599453
+    f64.mul
+    f64.sub
+    local.set $r
+    ;; Taylor 10 termes (degrés 0..10) sur r.
     f64.const 2.7557319223985888e-7
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 2.7557319223985888e-6
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 2.4801587301587302e-5
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.9841269841269841e-4
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.3888888888888889e-3
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 8.3333333333333332e-3
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 4.1666666666666664e-2
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.6666666666666667e-1
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 5.0e-1
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.0
     f64.add
     local.set $t
-    local.get $x
+    local.get $r
     local.get $t
     f64.mul
     f64.const 1.0
     f64.add
+    local.set $t
+    ;; 2^k via bit-pattern IEEE-754 : champ exposant biaisé = (1023 + k) << 52.
+    ;; k clampé implicitement par i32.trunc_f64_s ; valeurs hors [-1022, 1023]
+    ;; produisent inf/0 (acceptable — exp(huge) = inf, exp(very-negative) ≈ 0).
+    local.get $k
+    i32.const 1023
+    i32.add
+    i64.extend_i32_s
+    i64.const 52
+    i64.shl
+    f64.reinterpret_i64
+    local.set $two_pow_k
+    local.get $t
+    local.get $two_pow_k
+    f64.mul
   )
   ;; log(x): natural log with IEEE-754 mantissa range reduction.
   ;;
@@ -2351,9 +2461,15 @@ class WATGeneratorCoreMixin:
     f64.const 0.4342944819032518
     f64.mul
   )
-  ;; atan(x): 6-term series for |x| ≤ 1; uses atan(x)=π/2-atan(1/x) for |x|>1.
+  ;; atan(x) avec double réduction d'intervalle pour ~1e-12 de précision :
+  ;;   1) signe : atan(-x) = -atan(x)
+  ;;   2) |x| > 1     → atan(x) = π/2 − atan(1/x)        (réduit à |y| ≤ 1)
+  ;;   3) |x| > tan(π/8) ≈ 0.4142 → atan(x) = π/4 + atan((x−1)/(x+1))
+  ;;                                                      (réduit à |y| ≤ tan(π/8))
+  ;;   4) série de Taylor à 12 termes (degrés 1..23) sur |y| ≤ tan(π/8) :
+  ;;      erreur de troncature ~ y^25 / 25 < 5e-12.
   (func $math_atan (param $x f64) (result f64)
-    (local $t f64) (local $x2 f64) (local $neg i32) (local $r f64)
+    (local $t f64) (local $x2 f64) (local $neg i32) (local $r f64) (local $offset f64)
     i32.const 0
     local.set $neg
     local.get $x
@@ -2366,6 +2482,7 @@ class WATGeneratorCoreMixin:
       f64.neg
       local.set $x
     end
+    ;; Réduction 1 : |x| > 1 → atan(x) = π/2 − atan(1/x).
     local.get $x
     f64.const 1.0
     f64.gt
@@ -2386,34 +2503,92 @@ class WATGeneratorCoreMixin:
       local.get $r
       return
     end
+    ;; Réduction 2 : |x| > tan(π/8) → atan(x) = π/4 + atan((x−1)/(x+1)).
+    ;; offset accumule π/4 si on a réduit, 0 sinon.
+    f64.const 0.0
+    local.set $offset
+    local.get $x
+    f64.const 0.41421356237309503
+    f64.gt
+    if
+      f64.const 0.7853981633974483
+      local.set $offset
+      local.get $x
+      f64.const 1.0
+      f64.sub
+      local.get $x
+      f64.const 1.0
+      f64.add
+      f64.div
+      local.set $x
+    end
+    ;; Série de Taylor (Horner) : atan(y) = y·P(y²) avec
+    ;; P(u) = 1 − u/3 + u²/5 − u³/7 + u⁴/9 − u⁵/11 + u⁶/13 − u⁷/15 + u⁸/17
+    ;;        − u⁹/19 + u¹⁰/21 − u¹¹/23.
     local.get $x
     local.get $x
     f64.mul
     local.set $x2
-    f64.const -0.09090909090909091
+    f64.const -0.043478260869565216  ;; -1/23
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const 0.1111111111111111
+    f64.const 0.047619047619047616   ;;  1/21
     f64.add
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const -0.14285714285714285
+    f64.const -0.05263157894736842   ;; -1/19
     f64.add
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const 0.2
+    f64.const 0.058823529411764705   ;;  1/17
     f64.add
     local.set $t
     local.get $x2
     local.get $t
     f64.mul
-    f64.const -0.3333333333333333
+    f64.const -0.06666666666666667   ;; -1/15
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const 0.07692307692307693    ;;  1/13
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const -0.09090909090909091   ;; -1/11
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const 0.1111111111111111     ;;  1/9
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const -0.14285714285714285   ;; -1/7
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const 0.2                    ;;  1/5
+    f64.add
+    local.set $t
+    local.get $x2
+    local.get $t
+    f64.mul
+    f64.const -0.3333333333333333    ;; -1/3
     f64.add
     local.set $t
     local.get $x2
@@ -2422,9 +2597,12 @@ class WATGeneratorCoreMixin:
     f64.const 1.0
     f64.add
     local.set $t
+    ;; r = x·t + offset
     local.get $x
     local.get $t
     f64.mul
+    local.get $offset
+    f64.add
     local.set $r
     local.get $neg
     if
