@@ -43,9 +43,14 @@ OPEN_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.open.v1.json"
 LSYSTEM_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.lsystem.v1.json"
 INDEX_HTML = PROCESS_DIR / "index.html"
 LSYSTEM_HTML = PROCESS_DIR / "lsystem.html"
+ECOSYSTEM_HTML = PROCESS_DIR / "ecosystem.html"
 SEQUENCE_RUNTIME_JS = PROCESS_DIR / "sequence_runtime.js"
+ECOSYSTEM_RUNTIME_JS = PROCESS_DIR / "ecosystem_runtime.js"
 PACKAGE_JSON = PROCESS_DIR / "package.json"
 LSYSTEM_SOURCE = ROOT / "examples" / "lindenmayer.multi"
+ECOSYSTEM_MANIFEST = PROCESS_DIR / "program.ecosystem.v1.json"
+ECOSYSTEM_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.ecosystem.v1.json"
+ECOSYSTEM_SOURCE = ROOT / "examples" / "ecosystem.multi"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -73,6 +78,20 @@ process.stdout.write(JSON.stringify(trajectory.map((f) => sequenceSymbols(f).joi
 """
 
 
+# The asynchronous / multi-state-field path reads each locus's value out of
+# every frame (via the shared fieldCells) instead of the active-cell mask --
+# otherwise identical (the one shared `run` drives it too).
+_FIELD_DRIVER = """\
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+const [, , corePath, manifestPath, steps] = process.argv;
+const { run, fieldCells } = await import(pathToFileURL(corePath).href);
+const core = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+const trajectory = run(core, Number(steps));
+process.stdout.write(JSON.stringify(trajectory.map((f) => fieldCells(f, 'species'))));
+"""
+
+
 def _run_driver(driver_src: str, manifest_path: Path, steps: int):
     with tempfile.TemporaryDirectory() as tmp:
         driver = Path(tmp) / "driver.mjs"
@@ -92,6 +111,10 @@ def _js_trajectory(manifest_path: Path, steps: int) -> list[list[list[int]]]:
 
 def _js_words(manifest_path: Path, steps: int) -> list[str]:
     return _run_driver(_SEQUENCE_DRIVER, manifest_path, steps)
+
+
+def _js_field(manifest_path: Path, steps: int):
+    return _run_driver(_FIELD_DRIVER, manifest_path, steps)
 
 
 def _py_trajectory(core: dict, steps: int) -> list[list[list[int]]]:
@@ -146,6 +169,25 @@ class ManifestStabilityTestSuite(unittest.TestCase):
         self.assertEqual(on_disk["topology"]["kind"], "sequence")
         self.assertEqual(on_disk["schedule"]["kind"], "generative")
 
+    def test_checked_in_ecosystem_manifest_matches_multi_build(self):
+        # The browser ecosystem manifest is the .multi program built to JSON;
+        # it must not drift from examples/ecosystem.multi.
+        regenerated = process_program.execute_process(
+            ECOSYSTEM_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=ECOSYSTEM_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(ECOSYSTEM_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_ecosystem_manifest_is_lattice_asynchronous(self):
+        on_disk = json.loads(ECOSYSTEM_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["kind"], "semantic-core-v1")
+        self.assertEqual(on_disk["topology"]["kind"], "lattice")
+        self.assertEqual(on_disk["schedule"]["kind"], "asynchronous")
+        # Heterogeneous state: loci carry a multi-valued species, not a boolean.
+        self.assertIn("species", on_disk["state"]["loci"][0])
+
 
 class JsStepperSourceTestSuite(unittest.TestCase):
     """Structural guards mirroring the repo's other JS peers."""
@@ -166,6 +208,14 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         source = CORE_JS.read_text(encoding="utf-8")
         for symbol in ("SCHEDULE_GENERATIVE", "TOPOLOGY_SEQUENCE",
                        "export function sequenceSymbols"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
+    def test_core_js_ports_the_asynchronous_axis(self):
+        # The asynchronous (sequential-update) schedule and the multi-state
+        # field readout must exist in the browser engine too, so the ecosystem
+        # runtime shares the one stepper rather than rolling its own sweep.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("SCHEDULE_ASYNCHRONOUS", "export function fieldCells"):
             self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
 
     def test_core_js_defines_no_specific_system(self):
@@ -214,6 +264,21 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         html = LSYSTEM_HTML.read_text(encoding="utf-8")
         self.assertIn('type="module"', html)
         self.assertIn("./sequence_runtime.js", html)
+
+    def test_ecosystem_runtime_uses_shared_stepper(self):
+        source = ECOSYSTEM_RUNTIME_JS.read_text(encoding="utf-8")
+        # The field runtime must import motion from the one shared core -- the
+        # same engine as the lattice and sequence runtimes, not its own sweep.
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("fieldCells", source)
+        self.assertIn("SCHEDULE_ASYNCHRONOUS", source)
+        self.assertIn("./program.ecosystem.v1.json", source)
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_ecosystem_page_loads_ecosystem_runtime_as_module(self):
+        html = ECOSYSTEM_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./ecosystem_runtime.js", html)
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -271,6 +336,30 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
         self.assertEqual(js, py)
         # Canonical algae generations, so the agreement is on real growth.
         self.assertEqual(js, ["A", "AB", "ABA", "ABAAB", "ABAABABA", "ABAABABAABAAB"])
+
+    def test_asynchronous_field_trajectory_agrees(self):
+        # The asynchronous axis: a heterogeneous-state field (cyclic-dominance
+        # ecosystem) authored in .multi must step identically in JS and Python,
+        # value for value, across the whole trajectory. Sequential in-place
+        # update is order-sensitive, so this is a sharp anti-drift check: the
+        # two runtimes must walk the loci in exactly the same order.
+        core = process_program.execute_process(
+            ECOSYSTEM_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(ECOSYSTEM_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ecosystem.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_field(path, STEPS)
+        py = [
+            [list(cell) for cell in process_core.field_cells(frame, "species")]
+            for frame in process_core.run(core, STEPS)
+        ]
+        self.assertEqual(len(js), STEPS + 1)
+        self.assertEqual(js, py)
+        # And the field genuinely evolved (async is not a no-op here).
+        self.assertNotEqual(js[0], js[-1])
 
 
 if __name__ == "__main__":

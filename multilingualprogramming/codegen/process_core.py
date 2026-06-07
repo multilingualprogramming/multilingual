@@ -42,13 +42,17 @@ cross-modal equivalence would die the instant the program animates.
 Modality runtimes must call this stepper (or a faithful port of it driven
 by the same rule data), never hand-write their own ``step()``.
 
-This first step implements the cheapest falsifiable slice of each axis --
+This started from the cheapest falsifiable slice of each axis --
 ``Topology = lattice``, ``Rule = rewrite`` with totalistic neighbour-count
 matching, ``Schedule = synchronous`` -- enough to run any outer-totalistic
 program (Game of Life among them) through one engine. Each axis dispatches
-on a ``kind`` tag, so further kinds (graph topology, positional match
-clauses, asynchronous schedules, generative/open-population rewriting)
-land as new interpreters without disturbing the ones below.
+on a ``kind`` tag, so further kinds land as new interpreters without
+disturbing the ones below: generative/open-population rewriting (L-systems,
+unbounded automata), a sequence topology, and an **asynchronous** schedule
+(sequential in-place update -- ecological / excitable-media models) have
+since joined; graph topology and positional/continuous-time kinds remain
+open. The lattice ``Rule`` is unchanged across schedules -- only the
+schedule's reading of it (parallel vs. sequential vs. generative) differs.
 
 A ``semantic-core-v0`` program is, in this framing, just a v1 program with
 an empty rule set and a single-step schedule; that migration is left for a
@@ -108,6 +112,15 @@ SCHEDULE_STATIC = "static"
 # fractal strings, and other recursive/generative programs fall out of the one
 # rewrite primitive (see the research doc, "generativity/recursion for free").
 SCHEDULE_GENERATIVE = "generative"
+# An asynchronous schedule updates loci one at a time in a deterministic scan
+# order, each locus reading the *already-updated* state of earlier loci in the
+# same sweep (in-place sequential update). This is a genuinely different
+# dynamics from synchronous -- sequential and parallel updates of the same rule
+# diverge -- so it is the schedule that lets ecological / excitable-media models
+# (predators reacting to neighbours that already moved this tick) be expressed.
+# The order is fixed (sorted loci) so the result is reproducible and identical
+# in every runtime: a different order is a different schedule, not randomness.
+SCHEDULE_ASYNCHRONOUS = "asynchronous"
 
 
 # --------------------------------------------------------------------------
@@ -405,6 +418,21 @@ def generative_schedule() -> dict[str, Any]:
     return {"kind": SCHEDULE_GENERATIVE}
 
 
+def asynchronous_schedule() -> dict[str, Any]:
+    """Declare an asynchronous schedule (sequential in-place update).
+
+    Loci are visited one at a time in a deterministic scan order, and each
+    sees the *already-updated* state of the loci visited before it this
+    sweep. Unlike :func:`synchronous_schedule` -- where every locus reads the
+    previous frame -- here an update propagates within a single step, so the
+    same rule produces a different trajectory. This is the schedule for
+    sequential ecological models (an organism reacts to neighbours that have
+    already acted this tick). The scan order is fixed, so the result is
+    reproducible and identical across runtimes.
+    """
+    return {"kind": SCHEDULE_ASYNCHRONOUS}
+
+
 def build_process_core(
     state: dict[str, Any],
     topology: dict[str, Any],
@@ -502,9 +530,17 @@ def _produce_for(
     nbs: list[tuple[int, int]],
     grid: dict[tuple[int, int], dict[str, Any]],
     clauses: list[dict[str, Any]],
-    default: dict[str, Any],
-) -> dict[str, Any]:
-    """Return the produce dict for a locus: first matching clause, else default."""
+    default: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return the produce dict for a locus: first matching clause, else default.
+
+    ``default`` may be ``None`` (a rule with no ``fallback``), in which case a
+    locus matching no clause produces ``None`` -- read by the steppers below as
+    "leave this locus unchanged." That identity-on-no-match is what lets a rule
+    rewrite only the loci it has something to say about (a cyclic ecology rule
+    advances a cell only when its successor surrounds it; every other cell
+    stays put), without inventing a catch-all state for the rest.
+    """
     for clause in clauses:
         if _clause_matches(rec, nbs, grid, clause.get("match", {})):
             return clause["produce"]
@@ -529,10 +565,42 @@ def _step_fixed(
         locus = (rec["locus"][0], rec["locus"][1])
         nbs = neighbors(topology, locus)
         next_rec = dict(rec)
-        next_rec.update(_produce_for(rec, nbs, grid, clauses, default))
+        produce = _produce_for(rec, nbs, grid, clauses, default)
+        if produce is not None:
+            next_rec.update(produce)
         next_rec["locus"] = [locus[0], locus[1]]
         next_loci.append(next_rec)
     return next_loci
+
+
+def _step_async(
+    core: dict[str, Any],
+    topology: dict[str, Any],
+    clauses: list[dict[str, Any]],
+    default: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Asynchronous population: sequential in-place update in a fixed order.
+
+    Loci are visited in sorted coordinate order; each is rewritten against the
+    *current* grid, which already holds the new state of every locus visited
+    earlier this sweep. The input records are never mutated -- an updated locus
+    is a fresh dict written back into the working grid -- so neighbours see new
+    values while ``core`` stays untouched. The emitted list keeps the original
+    loci order so the manifest's ``loci`` sequence is stable frame to frame.
+    """
+    grid = _grid(core)
+    for locus in sorted(grid):
+        rec = grid[locus]
+        nbs = neighbors(topology, locus)
+        produce = _produce_for(rec, nbs, grid, clauses, default)
+        if produce is None:
+            continue
+        updated = dict(rec)
+        updated.update(produce)
+        updated["locus"] = [locus[0], locus[1]]
+        grid[locus] = updated
+    # Fresh copies so an unchanged locus never aliases the input record.
+    return [dict(grid[(rec["locus"][0], rec["locus"][1])]) for rec in core["state"]["loci"]]
 
 
 def _step_open(
@@ -563,7 +631,9 @@ def _step_open(
         rec = grid.get(locus, {"locus": [locus[0], locus[1]], **empty})
         nbs = neighbors(topology, locus)
         produced = dict(rec)
-        produced.update(_produce_for(rec, nbs, grid, clauses, default))
+        produce = _produce_for(rec, nbs, grid, clauses, default)
+        if produce is not None:
+            produced.update(produce)
         produced["locus"] = [locus[0], locus[1]]
         if not _is_empty(produced, empty):
             next_loci.append(produced)
@@ -617,7 +687,7 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
         # this path touches neither topology nor loci shape, so a migrated v0
         # core (no coordinates, no lattice) steps cleanly as a no-op.
         return {**core, "state": {**core["state"]}}
-    if schedule_kind != SCHEDULE_SYNCHRONOUS:
+    if schedule_kind not in (SCHEDULE_SYNCHRONOUS, SCHEDULE_ASYNCHRONOUS):
         raise NotImplementedError(f"schedule kind {schedule_kind!r} not yet supported")
 
     rule = core["rule"]
@@ -629,7 +699,15 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
     default = rule["default"]
     population = core["state"].get("population", POPULATION_FIXED)
 
-    if population == POPULATION_FIXED:
+    if schedule_kind == SCHEDULE_ASYNCHRONOUS:
+        # Sequential update is defined on a fixed population (the loci a sweep
+        # walks); open-population async is not yet specified.
+        if population != POPULATION_FIXED:
+            raise NotImplementedError(
+                f"asynchronous schedule with population {population!r} not yet supported"
+            )
+        next_loci = _step_async(core, topology, clauses, default)
+    elif population == POPULATION_FIXED:
         next_loci = _step_fixed(core, topology, clauses, default)
     elif population == POPULATION_OPEN:
         next_loci = _step_open(core, topology, clauses, default)
@@ -667,6 +745,21 @@ def active_cells(core: dict[str, Any], field: str = "alive") -> list[tuple[int, 
         (rec["locus"][0], rec["locus"][1])
         for rec in core["state"]["loci"]
         if rec.get(field)
+    )
+
+
+def field_cells(core: dict[str, Any], field: str = "state") -> list[tuple[int, int, Any]]:
+    """Return sorted ``(x, y, value)`` triples of each locus's ``field``.
+
+    Where :func:`active_cells` collapses a lattice to a boolean mask (a cell is
+    on or off), this preserves the *value* each locus carries -- the readout a
+    multi-state field (a several-species ecology, a reaction-diffusion lattice)
+    needs to project losslessly. It still names no specific system: the caller
+    chooses which field is the cell's value.
+    """
+    return sorted(
+        (rec["locus"][0], rec["locus"][1], rec.get(field))
+        for rec in core["state"]["loci"]
     )
 
 

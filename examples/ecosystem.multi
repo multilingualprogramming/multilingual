@@ -1,0 +1,51 @@
+# A cyclic-dominance ecosystem as a semantic-core-v1 polymodal program,
+# authored entirely in the Multilingual language -- no Python. Build with:
+#
+#     python -m multilingualprogramming process-build examples/ecosystem.multi
+#
+# This is the spatial "rock-paper-scissors" ecology: three species in a
+# cycle, each invaded by the next. Species 0 is overrun by 1, 1 by 2, 2 by 0.
+# A cell flips to its invader when enough of its neighbours already are that
+# invader; otherwise it holds. Run sequentially (each cell reacting to
+# neighbours that have already moved this tick), the model self-organises into
+# rotating spiral waves -- the canonical model of coexistence through cyclic
+# competition (side-blotched lizards, colicin-producing E. coli strains).
+#
+# It exercises the two axes Game of Life and the L-system did not: a
+# *heterogeneous* per-locus state (a `species` value, not a boolean) and an
+# *asynchronous* schedule (sequential in-place update). The engine in
+# `process_core` knows nothing of ecology -- the cyclic rule lives here, as
+# data, exactly as the research doc requires.
+
+# The cyclic invasion rule. A cell of species k is taken over by species
+# (k+1) mod 3 when at least `threshold` of its eight neighbours are that
+# successor. `becomes` sets the new species; a cell that meets no threshold
+# matches no clause and is left unchanged (there is no `fallback`), so the
+# rule speaks only about invasion. `neighbor_count` counts neighbours of a
+# given species, and the allowed tallies are "threshold or more" up to the
+# eight Moore neighbours.
+def cyclic_rule():
+    let threshold = 3
+    let enough = [c for c in range(threshold, 9)]
+    return rewrite(
+        clause(when(species=0), neighbor_count("species", 1, enough), becomes(species=1)),
+        clause(when(species=1), neighbor_count("species", 2, enough), becomes(species=2)),
+        clause(when(species=2), neighbor_count("species", 0, enough), becomes(species=0))
+    )
+
+# A fixed lattice fully populated with the three species. Every cell exists for
+# all time (fixed population); only its `species` changes. The seed is a smooth
+# diagonal mix of the three species so invasion fronts form immediately.
+let width = 12
+let height = 12
+let loci = [{"locus": [x, y], "species": (x + y) % 3} for x in range(width) for y in range(height)]
+let state = {"loci": loci}
+
+# Assemble the four modality-free axes: a bounded toroidal lattice rewritten by
+# the cyclic rule under an asynchronous (sequential) schedule.
+let process = build_process_core(
+    state,
+    lattice_topology(width, height),
+    cyclic_rule(),
+    asynchronous_schedule()
+)

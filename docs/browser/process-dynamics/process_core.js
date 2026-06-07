@@ -26,6 +26,7 @@ export const RULE_REWRITE = "rewrite";
 export const SCHEDULE_SYNCHRONOUS = "synchronous";
 export const SCHEDULE_STATIC = "static";
 export const SCHEDULE_GENERATIVE = "generative";
+export const SCHEDULE_ASYNCHRONOUS = "asynchronous";
 export const POPULATION_FIXED = "fixed";
 export const POPULATION_OPEN = "open";
 
@@ -149,6 +150,32 @@ function stepOpen(core, topology, clauses, fallback) {
   return next;
 }
 
+// Asynchronous population: sequential in-place update in a fixed scan order.
+// Loci are visited in sorted coordinate order; each reads the *already-updated*
+// grid (so it sees neighbours that have acted earlier this sweep) and writes a
+// fresh record back. The input is never mutated. produceFor may return the
+// rule's null default (no fallback), and spreading null is a no-op -- so a
+// locus matching no clause is left unchanged, the identity-on-no-match a cyclic
+// ecology rule relies on. The emitted list keeps the original loci order.
+function stepAsync(core, topology, clauses, fallback) {
+  const grid = gridOf(core);
+  const keys = [...grid.keys()].sort((a, b) => {
+    const [ax, ay] = a.split(",").map(Number);
+    const [bx, by] = b.split(",").map(Number);
+    return (ax - bx) || (ay - by);
+  });
+  for (const key of keys) {
+    const rec = grid.get(key);
+    const locus = [rec.locus[0], rec.locus[1]];
+    const nbs = neighbors(topology, locus);
+    grid.set(key, { ...rec, ...produceFor(rec, nbs, grid, clauses, fallback), locus });
+  }
+  return core.state.loci.map((rec) => {
+    const updated = grid.get(`${rec.locus[0]},${rec.locus[1]}`);
+    return { ...updated };
+  });
+}
+
 // Generative rewriting: rewrite every symbol of a sequence in parallel and
 // concatenate the productions. A clause's `produce` is a *list* of records
 // that replaces the matched symbol, so a production longer than one symbol
@@ -194,7 +221,10 @@ export function step(core) {
     // neither topology nor loci shape, so a migrated v0 core steps cleanly.
     return { ...core, state: { ...core.state } };
   }
-  if (core.schedule.kind !== SCHEDULE_SYNCHRONOUS) {
+  if (
+    core.schedule.kind !== SCHEDULE_SYNCHRONOUS &&
+    core.schedule.kind !== SCHEDULE_ASYNCHRONOUS
+  ) {
     throw new Error(`schedule kind ${core.schedule.kind} not yet supported`);
   }
   if (core.rule.kind !== RULE_REWRITE) {
@@ -205,7 +235,14 @@ export function step(core) {
   const population = core.state.population ?? POPULATION_FIXED;
 
   let nextLoci;
-  if (population === POPULATION_FIXED) {
+  if (core.schedule.kind === SCHEDULE_ASYNCHRONOUS) {
+    if (population !== POPULATION_FIXED) {
+      throw new Error(
+        `asynchronous schedule with population ${population} not yet supported`
+      );
+    }
+    nextLoci = stepAsync(core, topology, clauses, fallback);
+  } else if (population === POPULATION_FIXED) {
     nextLoci = stepFixed(core, topology, clauses, fallback);
   } else if (population === POPULATION_OPEN) {
     nextLoci = stepOpen(core, topology, clauses, fallback);
@@ -235,6 +272,15 @@ export function activeCells(core, field = "alive") {
   return core.state.loci
     .filter((rec) => rec[field])
     .map((rec) => [rec.locus[0], rec.locus[1]])
+    .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+}
+
+// Sorted [x, y, value] of each locus's `field` -- preserves the value a
+// multi-state field carries (vs activeCells' boolean mask), the readout a
+// several-species ecology projects from. Names no specific system.
+export function fieldCells(core, field = "state") {
+  return core.state.loci
+    .map((rec) => [rec.locus[0], rec.locus[1], rec[field]])
     .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
 }
 

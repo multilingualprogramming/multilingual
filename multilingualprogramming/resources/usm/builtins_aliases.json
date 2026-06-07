@@ -1500,6 +1500,24 @@
       "da": ["generativ_tidsplan"],
       "fi": ["generatiivinen_aikataulu"]
     },
+    "asynchronous_schedule": {
+      "fr": ["ordonnancement_asynchrone"],
+      "es": ["planificacion_asincrona"],
+      "de": ["asynchroner_zeitplan"],
+      "it": ["pianificazione_asincrona"],
+      "pt": ["agendamento_assincrono"],
+      "hi": ["असमकालिक_अनुसूची"],
+      "ar": ["غير_متزامن_جدولة"],
+      "bn": ["অসমলয়_সময়সূচি"],
+      "ta": ["ஒத்திசைவற்ற_அட்டவணை"],
+      "zh": ["异步_调度"],
+      "ja": ["非同期_スケジュール"],
+      "pl": ["asynchroniczny_harmonogram"],
+      "nl": ["asynchroon_planning"],
+      "sv": ["asynkron_schema"],
+      "da": ["asynkron_tidsplan"],
+      "fi": ["asynkroninen_aikataulu"]
+    },
     "when": {
       "fr": ["quand"],
       "es": ["cuando"],

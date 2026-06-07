@@ -167,7 +167,7 @@ class ProcessCoreEngineTestSuite(unittest.TestCase):
 
     def test_unknown_schedule_kind_raises(self):
         core = _single_field_lattice(3, 3, [(1, 1)])
-        core = {**core, "schedule": {"kind": "asynchronous"}}
+        core = {**core, "schedule": {"kind": "continuous-dt"}}
         with self.assertRaises(NotImplementedError):
             step(core)
 
