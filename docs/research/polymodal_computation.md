@@ -667,7 +667,16 @@ polymodal claim stronger:
    over the node set — a concrete demonstration that the tier (the expressive
    *class* ceiling) and the per-instance invertibility are orthogonal. A browser
    page renders it as a node-link diagram + chord and shows the tier in the
-   status line via the shared classifier (`tierOf`). Still open on the topology
+   status line via the shared classifier (`tierOf`) — as do the Game-of-Life,
+   L-system and ecosystem pages, so every browser surface now names its program's
+   expressiveness class. *v0 closes the loop:* a migrated (Tier-0) v0 core now
+   projects through the v1 path too — `process_static_projection` places each v0
+   entity by the two integer fields it already carries (its `index` and
+   `channel`) and carries the rest of the record verbatim, so spatial == sonic ==
+   the migrated core's loci and the round-trip recovers the original v0 entities
+   exactly (Tier 0, "invertible everywhere"). So even a static v0 structure
+   travels the one shared stepper and the one projection discipline as every
+   dynamic program does — no special engine path. Still open on the topology
    axis: positional / multiset match clauses, continuous-`dt` schedules, and
    *structure-changing* graph rewriting (creating and destroying nodes/edges),
    which is the genuinely view-only end of Tier 4.

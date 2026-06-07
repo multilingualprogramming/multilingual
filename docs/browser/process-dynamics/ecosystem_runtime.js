@@ -16,7 +16,7 @@
 // the voice -- exact bijections, so the picture and the sound are the same
 // field. Neither surface steps the program.
 
-import { run, fieldCells, SCHEDULE_ASYNCHRONOUS } from "./process_core.js";
+import { run, fieldCells, tierOf, TIER_NAMES, SCHEDULE_ASYNCHRONOUS } from "./process_core.js";
 
 const FIELD = "species";
 const STEP_MS = 700;
@@ -139,6 +139,7 @@ export async function boot(opts = {}) {
   const trajectory = run(core, steps);
   const extent = extentOf(core);
   const values = speciesValues(trajectory);
+  const tier = tierOf(core);
   const colourOf = (v) => PALETTE[values.indexOf(v) % PALETTE.length];
 
   const sonic = makeSonic(values);
@@ -163,7 +164,8 @@ export async function boot(opts = {}) {
       }
       const census = values.map((v) => `${v}:${counts.get(v)}`).join("  ");
       status.textContent =
-        `tick ${i % trajectory.length} / ${trajectory.length - 1} — species ${census}`;
+        `tick ${i % trajectory.length} / ${trajectory.length - 1} — species ${census}` +
+        ` — Tier ${tier} (${TIER_NAMES[tier]})`;
     }
     i += 1;
   }

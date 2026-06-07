@@ -14,7 +14,7 @@
 // maps to a mark/voice at (i, alphabet-row) -- an exact bijection, so the grid
 // and the melody represent the identical string.
 
-import { run, sequenceSymbols, SCHEDULE_GENERATIVE } from "./process_core.js";
+import { run, sequenceSymbols, tierOf, TIER_NAMES, SCHEDULE_GENERATIVE } from "./process_core.js";
 
 const SYMBOL_FIELD = "symbol";
 const STEP_MS = 900;
@@ -151,6 +151,7 @@ export async function boot(opts = {}) {
     ...trajectory.map((f) => sequenceSymbols(f, SYMBOL_FIELD).length),
     1,
   );
+  const tier = tierOf(core);
   const sonic = makeSonic();
   let soundOn = false;
   if (soundToggle) {
@@ -171,7 +172,8 @@ export async function boot(opts = {}) {
       const word = sequenceSymbols(frame, SYMBOL_FIELD).join("");
       status.textContent =
         `generation ${i % trajectory.length} / ${trajectory.length - 1} — ` +
-        `${word.length} symbols: ${word}`;
+        `${word.length} symbols: ${word}` +
+        ` — Tier ${tier} (${TIER_NAMES[tier]})`;
     }
     i += 1;
   }

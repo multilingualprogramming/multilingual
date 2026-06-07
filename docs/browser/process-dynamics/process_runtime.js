@@ -11,7 +11,7 @@
 // the sounding voices ever disagreed, a modality would be evolving the
 // program on its own -- exactly what the shared stepper forbids.
 
-import { run, activeCells, LATTICE_EXTENT_INFINITE } from "./process_core.js";
+import { run, activeCells, tierOf, TIER_NAMES, LATTICE_EXTENT_INFINITE } from "./process_core.js";
 
 const ACTIVE_FIELD = "alive";
 const STEP_MS = 220;
@@ -162,6 +162,7 @@ export async function boot(opts = {}) {
   // bounded lattice, a stable bounding box for an unbounded one).
   const trajectory = run(core, steps);
   const viewport = resolveViewport(trajectory);
+  const tier = tierOf(core);
   const sonic = makeSonic();
   let soundOn = false;
   if (soundToggle) {
@@ -182,7 +183,8 @@ export async function boot(opts = {}) {
       status.textContent =
         `frame ${i % trajectory.length} / ${trajectory.length - 1} — ` +
         `${spatialMarks(frame, viewport).length} live cells (spatial) / ` +
-        `${voices.length} voices (sonic)`;
+        `${voices.length} voices (sonic)` +
+        ` — Tier ${tier} (${TIER_NAMES[tier]})`;
     }
     i += 1;
   }

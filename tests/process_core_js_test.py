@@ -285,6 +285,7 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         # The runtime must import motion from the shared core, not roll its own.
         self.assertIn('from "./process_core.js"', source)
         self.assertIn("./program.v1.json", source)
+        self.assertIn("tierOf", source)  # the tier shown in the status line
         self.assertNotIn("function step", source)  # no private stepper
 
     def test_runtime_is_viewport_aware(self):
@@ -309,6 +310,7 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         self.assertIn('from "./process_core.js"', source)
         self.assertIn("sequenceSymbols", source)
         self.assertIn("./program.lsystem.v1.json", source)
+        self.assertIn("tierOf", source)  # the tier shown in the status line
         self.assertNotIn("function step", source)  # no private stepper
 
     def test_lsystem_page_loads_sequence_runtime_as_module(self):
@@ -324,6 +326,7 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         self.assertIn("fieldCells", source)
         self.assertIn("SCHEDULE_ASYNCHRONOUS", source)
         self.assertIn("./program.ecosystem.v1.json", source)
+        self.assertIn("tierOf", source)  # the tier shown in the status line
         self.assertNotIn("function step", source)  # no private stepper
 
     def test_ecosystem_page_loads_ecosystem_runtime_as_module(self):
