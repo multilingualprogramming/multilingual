@@ -150,7 +150,10 @@ def to_sonic_animation(trajectory: list[dict[str, Any]]) -> list[dict[str, Any]]
 def entities_from_sonic_frame(frame: dict[str, Any]) -> list[dict[str, Any]]:
     """Inverse: recover the entity records a sonic frame represents."""
     return sorted(
-        (_entity_of(voice["step"], voice["pitch_row"], voice["payload"]) for voice in frame["voices"]),
+        (
+            _entity_of(voice["step"], voice["pitch_row"], voice["payload"])
+            for voice in frame["voices"]
+        ),
         key=lambda rec: rec[_PLACEMENT_X],
     )
 

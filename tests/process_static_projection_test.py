@@ -156,7 +156,10 @@ class StaticValidationTestSuite(unittest.TestCase):
 
     def test_non_v1_manifest_is_rejected(self):
         with self.assertRaises(ValueError):
-            sp.to_spatial_frame({"kind": "semantic-core-v0", "schedule": {}, "state": {"loci": []}}, 0)
+            sp.to_spatial_frame(
+                {"kind": "semantic-core-v0", "schedule": {}, "state": {"loci": []}},
+                0,
+            )
 
 
 if __name__ == "__main__":
