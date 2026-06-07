@@ -54,6 +54,7 @@ theme:
 docs_dir: docs
 exclude_docs: |
   _generated/README.md
+  browser/process-dynamics/README.md
 
 nav:
   - Home: index.md
