@@ -18,12 +18,14 @@
 
 export const CORE_KIND = "semantic-core-v1";
 export const TOPOLOGY_LATTICE = "lattice";
+export const TOPOLOGY_SEQUENCE = "sequence";
 export const LATTICE_EXTENT_INFINITE = "infinite";
 export const NEIGHBORHOOD_MOORE8 = "moore8";
 export const NEIGHBORHOOD_VONNEUMANN4 = "von-neumann4";
 export const RULE_REWRITE = "rewrite";
 export const SCHEDULE_SYNCHRONOUS = "synchronous";
 export const SCHEDULE_STATIC = "static";
+export const SCHEDULE_GENERATIVE = "generative";
 export const POPULATION_FIXED = "fixed";
 export const POPULATION_OPEN = "open";
 
@@ -147,9 +149,46 @@ function stepOpen(core, topology, clauses, fallback) {
   return next;
 }
 
+// Generative rewriting: rewrite every symbol of a sequence in parallel and
+// concatenate the productions. A clause's `produce` is a *list* of records
+// that replaces the matched symbol, so a production longer than one symbol
+// grows the sequence -- the "generativity for free" the rewrite primitive
+// gives (L-systems, fractal strings). Matching is context-free (self fields
+// only), so neighbours/grid are empty. A symbol matching no clause maps to
+// itself. The same rewrite primitive as the lattice path; only the schedule's
+// reading of `produce` (a sequence, not a single state) differs.
+function stepGenerative(core, clauses) {
+  const emptyGrid = new Map();
+  const next = [];
+  for (const rec of core.state.sequence) {
+    let production = null;
+    for (const clause of clauses) {
+      if (clauseMatches(rec, [], emptyGrid, clause.match ?? {})) {
+        production = clause.produce;
+        break;
+      }
+    }
+    if (production === null) {
+      next.push({ ...rec });
+    } else {
+      for (const symbol of production) {
+        next.push({ ...symbol });
+      }
+    }
+  }
+  return next;
+}
+
 // Advance the process core by one step, returning a new core. The input is
 // never mutated; topology/rule/schedule pass through unchanged.
 export function step(core) {
+  if (core.schedule.kind === SCHEDULE_GENERATIVE) {
+    if (core.rule.kind !== RULE_REWRITE) {
+      throw new Error(`rule kind ${core.rule.kind} not yet supported`);
+    }
+    const nextSequence = stepGenerative(core, core.rule.clauses);
+    return { ...core, state: { ...core.state, sequence: nextSequence } };
+  }
   if (core.schedule.kind === SCHEDULE_STATIC) {
     // A static snapshot does not evolve; stepping is identity. Touches
     // neither topology nor loci shape, so a migrated v0 core steps cleanly.
@@ -197,4 +236,10 @@ export function activeCells(core, field = "alive") {
     .filter((rec) => rec[field])
     .map((rec) => [rec.locus[0], rec.locus[1]])
     .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+}
+
+// Ordered `field` values of a sequence-topology core -- the produced word as
+// a list of symbols. The generative analogue of activeCells; names no system.
+export function sequenceSymbols(core, field = "symbol") {
+  return core.state.sequence.map((rec) => rec[field]);
 }

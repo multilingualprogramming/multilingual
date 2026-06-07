@@ -27,6 +27,7 @@ from pathlib import Path
 
 from examples.game_of_life_polymodal import GLIDER, game_of_life, game_of_life_open
 from multilingualprogramming.codegen import process_core
+from multilingualprogramming.codegen import process_program
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESS_DIR = ROOT / "docs" / "browser" / "process-dynamics"
@@ -34,12 +35,17 @@ CORE_JS = PROCESS_DIR / "process_core.js"
 RUNTIME_JS = PROCESS_DIR / "process_runtime.js"
 MANIFEST = PROCESS_DIR / "program.v1.json"
 OPEN_MANIFEST = PROCESS_DIR / "program.open.v1.json"
+LSYSTEM_MANIFEST = PROCESS_DIR / "program.lsystem.v1.json"
 # The relative source paths baked into the checked-in manifests, so
 # regeneration is reproducible regardless of where the repo is cloned.
 MANIFEST_SOURCE = "docs/browser/process-dynamics/program.v1.json"
 OPEN_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.open.v1.json"
+LSYSTEM_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.lsystem.v1.json"
 INDEX_HTML = PROCESS_DIR / "index.html"
+LSYSTEM_HTML = PROCESS_DIR / "lsystem.html"
+SEQUENCE_RUNTIME_JS = PROCESS_DIR / "sequence_runtime.js"
 PACKAGE_JSON = PROCESS_DIR / "package.json"
+LSYSTEM_SOURCE = ROOT / "examples" / "lindenmayer.multi"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -54,11 +60,23 @@ const trajectory = run(core, Number(steps));
 process.stdout.write(JSON.stringify(trajectory.map((f) => activeCells(f))));
 """
 
+# The generative path reads the produced word out of each frame instead of the
+# active cells -- otherwise identical (the one shared `run` drives both).
+_SEQUENCE_DRIVER = """\
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+const [, , corePath, manifestPath, steps] = process.argv;
+const { run, sequenceSymbols } = await import(pathToFileURL(corePath).href);
+const core = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+const trajectory = run(core, Number(steps));
+process.stdout.write(JSON.stringify(trajectory.map((f) => sequenceSymbols(f).join(''))));
+"""
 
-def _js_trajectory(manifest_path: Path, steps: int) -> list[list[list[int]]]:
+
+def _run_driver(driver_src: str, manifest_path: Path, steps: int):
     with tempfile.TemporaryDirectory() as tmp:
         driver = Path(tmp) / "driver.mjs"
-        driver.write_text(_DRIVER, encoding="utf-8")
+        driver.write_text(driver_src, encoding="utf-8")
         out = subprocess.run(
             [NODE, str(driver), str(CORE_JS), str(manifest_path), str(steps)],
             capture_output=True,
@@ -66,6 +84,14 @@ def _js_trajectory(manifest_path: Path, steps: int) -> list[list[list[int]]]:
             check=True,
         )
     return json.loads(out.stdout)
+
+
+def _js_trajectory(manifest_path: Path, steps: int) -> list[list[list[int]]]:
+    return _run_driver(_DRIVER, manifest_path, steps)
+
+
+def _js_words(manifest_path: Path, steps: int) -> list[str]:
+    return _run_driver(_SEQUENCE_DRIVER, manifest_path, steps)
 
 
 def _py_trajectory(core: dict, steps: int) -> list[list[list[int]]]:
@@ -103,6 +129,23 @@ class ManifestStabilityTestSuite(unittest.TestCase):
         bounded = json.loads(MANIFEST.read_text(encoding="utf-8"))
         self.assertEqual(on_disk["rule"], bounded["rule"])
 
+    def test_checked_in_lsystem_manifest_matches_multi_build(self):
+        # The browser L-system manifest is the .multi program built to JSON;
+        # it must not drift from examples/lindenmayer.multi.
+        regenerated = process_program.execute_process(
+            LSYSTEM_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=LSYSTEM_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(LSYSTEM_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_lsystem_manifest_is_sequence_generative(self):
+        on_disk = json.loads(LSYSTEM_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["kind"], "semantic-core-v1")
+        self.assertEqual(on_disk["topology"]["kind"], "sequence")
+        self.assertEqual(on_disk["schedule"]["kind"], "generative")
+
 
 class JsStepperSourceTestSuite(unittest.TestCase):
     """Structural guards mirroring the repo's other JS peers."""
@@ -114,6 +157,15 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         source = CORE_JS.read_text(encoding="utf-8")
         for symbol in ("export function step", "export function run",
                        "export function neighbors", "export function activeCells"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
+    def test_core_js_ports_the_generative_axis(self):
+        # The generative (L-system) axis must exist in the browser engine too,
+        # so the sequence runtime shares the one stepper rather than rolling
+        # its own string rewriting.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("SCHEDULE_GENERATIVE", "TOPOLOGY_SEQUENCE",
+                       "export function sequenceSymbols"):
             self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
 
     def test_core_js_defines_no_specific_system(self):
@@ -148,6 +200,20 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         self.assertIn("./process_runtime.js", html)
         # The page can switch to the unbounded program.
         self.assertIn("program.open.v1.json", html)
+
+    def test_sequence_runtime_uses_shared_stepper(self):
+        source = SEQUENCE_RUNTIME_JS.read_text(encoding="utf-8")
+        # The generative runtime must import motion from the one shared core --
+        # the same engine as the lattice runtime, not its own string rewriter.
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("sequenceSymbols", source)
+        self.assertIn("./program.lsystem.v1.json", source)
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_lsystem_page_loads_sequence_runtime_as_module(self):
+        html = LSYSTEM_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./sequence_runtime.js", html)
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -184,6 +250,27 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
         self.assertEqual(js, py)
         # And it genuinely travelled past the initial bound.
         self.assertTrue(max(x for x, _ in js[-1]) >= 3)
+
+    def test_generative_lsystem_trajectory_agrees(self):
+        # The generative axis: a string-rewriting (L-system) core authored in
+        # .multi must grow identically in JS and Python, word for word -- the
+        # textual front door and the browser engine add no drift to each other.
+        core = process_program.execute_process(
+            LSYSTEM_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(LSYSTEM_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "lsystem.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_words(path, 5)
+        py = [
+            "".join(process_core.sequence_symbols(frame))
+            for frame in process_core.run(core, 5)
+        ]
+        self.assertEqual(js, py)
+        # Canonical algae generations, so the agreement is on real growth.
+        self.assertEqual(js, ["A", "AB", "ABA", "ABAAB", "ABAABABA", "ABAABABAABAAB"])
 
 
 if __name__ == "__main__":
