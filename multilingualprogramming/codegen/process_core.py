@@ -427,6 +427,22 @@ def fallback(**fields: Any) -> dict[str, Any]:
     return {_DSL_TAG: "default", "value": dict(fields)}
 
 
+def chance(probability: float, salt: int = 0) -> dict[str, Any]:
+    """A clause predicate that fires only with a given probability.
+
+    ``chance(0.1)`` makes a clause match a tenth of the time -- the stochastic
+    counterpart of the deterministic ``when``/``neighbor_count`` predicates. The
+    randomness is a *deterministic* function of the locus coordinate, the step
+    index, and ``salt`` (so two clauses in one rule can roll independently): see
+    :func:`_hash01`. It is therefore reproducible and byte-identical across the
+    Python and JS runtimes -- no PRNG state, no seed plumbing. This is what
+    lets a rule express stochastic growth (Eden clusters, percolation, noisy
+    cellular automata) while the engine stays pure and the trajectory stays a
+    deterministic function of the manifest. Pass it to :func:`clause`.
+    """
+    return {_DSL_TAG: "chance", "probability": probability, "salt": salt}
+
+
 def clause(*parts: dict[str, Any]) -> dict[str, Any]:
     """Assemble one canonical ``match -> produce`` clause from its parts.
 
@@ -438,6 +454,7 @@ def clause(*parts: dict[str, Any]) -> dict[str, Any]:
     """
     self_fields: dict[str, Any] | None = None
     predicates: list[dict[str, Any]] = []
+    chance_spec: dict[str, Any] | None = None
     produce_value: Any = None
     have_produce = False
     for part in parts:
@@ -448,13 +465,17 @@ def clause(*parts: dict[str, Any]) -> dict[str, Any]:
             self_fields = part["fields"]
         elif tag == "neighbor_count":
             predicates.append(part["predicate"])
+        elif tag == "chance":
+            if chance_spec is not None:
+                raise ValueError("clause takes at most one chance(...)")
+            chance_spec = {"p": part["probability"], "salt": part["salt"]}
         elif tag == "produce":
             if have_produce:
                 raise ValueError("clause takes exactly one becomes(...)")
             produce_value = part["value"]
             have_produce = True
         else:
-            raise ValueError(f"clause parts must be when/neighbor_count/becomes, got {part!r}")
+            raise ValueError(f"clause parts must be when/neighbor_count/chance/becomes, got {part!r}")
     if not have_produce:
         raise ValueError("clause needs a becomes(...)")
     match: dict[str, Any] = {}
@@ -462,6 +483,8 @@ def clause(*parts: dict[str, Any]) -> dict[str, Any]:
         match["self"] = self_fields
     if predicates:
         match["neighbor_count"] = predicates
+    if chance_spec is not None:
+        match["chance"] = chance_spec
     return {"match": match, "produce": produce_value}
 
 
@@ -662,13 +685,45 @@ def _grid(core: dict[str, Any]) -> dict[Any, dict[str, Any]]:
     return {_locus_key(rec, topology): rec for rec in core["state"]["loci"]}
 
 
+def _hash01(x: int, y: int, step: int, salt: int) -> float:
+    """A deterministic pseudo-random value in [0, 1) keyed by (x, y, step, salt).
+
+    The backbone of the stochastic :func:`chance` predicate. It must produce the
+    same float in CPython and the JS port, so it is built entirely from exact
+    32-bit integer arithmetic (a MurmurHash3-style mix and finalizer): every
+    multiply is taken mod 2**32 (the JS port uses ``Math.imul`` / ``>>> 0`` to
+    match), every shift is on a non-negative 32-bit word, and the final divide by
+    2**32 is the one floating-point op -- exact and identical on both sides. No
+    PRNG state lives anywhere; randomness is a pure function of the coordinates
+    and time, which is exactly what keeps a stochastic trajectory reproducible.
+    """
+    mask = 0xFFFFFFFF
+    h = (x & mask) * 0x9E3779B1 & mask
+    h = (h ^ ((y + 0x85EBCA77) & mask)) & mask
+    h = (h * 0xC2B2AE3D) & mask
+    h = (h ^ ((step & mask) * 0x27D4EB2F & mask)) & mask
+    h = (h ^ (salt & mask)) & mask
+    # MurmurHash3 fmix32 finalizer -- avalanche the bits.
+    h ^= h >> 16
+    h = (h * 0x85EBCA6B) & mask
+    h ^= h >> 13
+    h = (h * 0xC2B2AE35) & mask
+    h ^= h >> 16
+    return h / 4294967296.0
+
+
 def _clause_matches(
     rec: dict[str, Any],
     nbs: list[tuple[int, int]],
     grid: dict[tuple[int, int], dict[str, Any]],
     match: dict[str, Any],
+    step_index: int = 0,
 ) -> bool:
-    """Test one clause's ``match`` against a locus and its neighbours."""
+    """Test one clause's ``match`` against a locus and its neighbours.
+
+    ``step_index`` is the index of the step being computed; it feeds the
+    optional stochastic ``chance`` predicate so randomness varies over time.
+    """
     for field, value in match.get("self", {}).items():
         if rec.get(field) != value:
             return False
@@ -681,6 +736,11 @@ def _clause_matches(
         )
         if tally not in allowed:
             return False
+    chance_spec = match.get("chance")
+    if chance_spec is not None and "locus" in rec:
+        roll = _hash01(rec["locus"][0], rec["locus"][1], step_index, chance_spec["salt"])
+        if roll >= chance_spec["p"]:
+            return False
     return True
 
 
@@ -690,6 +750,7 @@ def _produce_for(
     grid: dict[tuple[int, int], dict[str, Any]],
     clauses: list[dict[str, Any]],
     default: dict[str, Any] | None,
+    step_index: int = 0,
 ) -> dict[str, Any] | None:
     """Return the produce dict for a locus: first matching clause, else default.
 
@@ -701,7 +762,7 @@ def _produce_for(
     stays put), without inventing a catch-all state for the rest.
     """
     for rule_clause in clauses:
-        if _clause_matches(rec, nbs, grid, rule_clause.get("match", {})):
+        if _clause_matches(rec, nbs, grid, rule_clause.get("match", {}), step_index):
             return rule_clause["produce"]
     return default
 
@@ -716,6 +777,7 @@ def _step_fixed(
     topology: dict[str, Any],
     clauses: list[dict[str, Any]],
     default: dict[str, Any],
+    step_index: int = 0,
 ) -> list[dict[str, Any]]:
     """Fixed population: every declared locus persists, only its state moves."""
     grid = _grid(core)
@@ -725,7 +787,7 @@ def _step_fixed(
         key = _locus_key(rec, topology)
         nbs = neighbors(topology, key)
         next_rec = dict(rec)
-        produce = _produce_for(rec, nbs, grid, clauses, default)
+        produce = _produce_for(rec, nbs, grid, clauses, default, step_index)
         if produce is not None:
             next_rec.update(produce)
         if is_lattice:
@@ -741,6 +803,7 @@ def _step_async(
     topology: dict[str, Any],
     clauses: list[dict[str, Any]],
     default: dict[str, Any] | None,
+    step_index: int = 0,
 ) -> list[dict[str, Any]]:
     """Asynchronous population: sequential in-place update in a fixed order.
 
@@ -756,7 +819,7 @@ def _step_async(
     for key in sorted(grid):
         rec = grid[key]
         nbs = neighbors(topology, key)
-        produce = _produce_for(rec, nbs, grid, clauses, default)
+        produce = _produce_for(rec, nbs, grid, clauses, default, step_index)
         if produce is None:
             continue
         updated = dict(rec)
@@ -860,6 +923,7 @@ def _step_open(
     topology: dict[str, Any],
     clauses: list[dict[str, Any]],
     default: dict[str, Any],
+    step_index: int = 0,
 ) -> list[dict[str, Any]]:
     """Open population: rules may create and destroy loci.
 
@@ -883,7 +947,7 @@ def _step_open(
         rec = grid.get(locus, {"locus": [locus[0], locus[1]], **empty})
         nbs = neighbors(topology, locus)
         produced = dict(rec)
-        produce = _produce_for(rec, nbs, grid, clauses, default)
+        produce = _produce_for(rec, nbs, grid, clauses, default, step_index)
         if produce is not None:
             produced.update(produce)
         produced["locus"] = [locus[0], locus[1]]
@@ -921,13 +985,18 @@ def _step_generative(core: dict[str, Any]) -> list[dict[str, Any]]:
     return next_sequence
 
 
-def step(core: dict[str, Any]) -> dict[str, Any]:
+def step(core: dict[str, Any], step_index: int = 0) -> dict[str, Any]:
     """Advance the process core by one step, returning a new core.
 
     Dispatches on the schedule, rule ``kind``, and population mode. The
     input core is never mutated; the topology, rule, and schedule pass
     through unchanged and only the state advances -- so a trajectory is a
     sequence of full, independently projectable manifests.
+
+    ``step_index`` is the 0-based index of this step within a run; it is
+    threaded to the stochastic ``chance`` predicate so a rule's randomness
+    varies from one step to the next. A deterministic rule ignores it, so
+    every existing program steps exactly as before.
     """
     schedule_kind = core["schedule"].get("kind")
     if schedule_kind == SCHEDULE_GENERATIVE:
@@ -975,9 +1044,9 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
             raise NotImplementedError(
                 f"asynchronous schedule with population {population!r} not yet supported"
             )
-        next_loci = _step_async(core, topology, clauses, default)
+        next_loci = _step_async(core, topology, clauses, default, step_index)
     elif population == POPULATION_FIXED:
-        next_loci = _step_fixed(core, topology, clauses, default)
+        next_loci = _step_fixed(core, topology, clauses, default, step_index)
     elif population == POPULATION_OPEN:
         # Open population grows and prunes loci by coordinate frontier, so it is
         # defined on a lattice; an open graph would mean creating and destroying
@@ -986,7 +1055,7 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
             raise NotImplementedError(
                 f"open population with topology {topology.get('kind')!r} not yet supported"
             )
-        next_loci = _step_open(core, topology, clauses, default)
+        next_loci = _step_open(core, topology, clauses, default, step_index)
     else:
         raise NotImplementedError(f"population mode {population!r} not yet supported")
 
@@ -1004,8 +1073,8 @@ def run(core: dict[str, Any], steps: int) -> list[dict[str, Any]]:
         raise ValueError("steps must be nonnegative")
     trajectory = [core]
     current = core
-    for _ in range(steps):
-        current = step(current)
+    for i in range(steps):
+        current = step(current, i)
         trajectory.append(current)
     return trajectory
 
