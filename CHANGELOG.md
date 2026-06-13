@@ -6,6 +6,35 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+### Added
+
+#### Nonlinear rate rules — reaction-diffusion on the continuous axis
+- **`rate_rule` gains a `constant` source/sink and `products` (nonlinear
+  monomials) term.** A field's time-derivative was previously a *linear*
+  combination of the locus's own fields (`self`) and the mean over its
+  neighbours (`neighbor_mean`) — enough for diffusion and decay, but not for
+  any reaction. A rate now sums four optional contributions in a fixed order:
+  `self`, `neighbor_mean`, a scalar `constant`, and `products` — a list of
+  monomials `{"coeff": c, "factors": [f, ...]}` each contributing
+  `c · own[f0] · own[f1] · …` (factors repeat to raise a power). This reaches
+  the nonlinear continuous systems the linear slice could not express:
+  Gray-Scott, Lotka-Volterra predator-prey, FitzHugh-Nagumo. The terms are
+  pure data — the engine still names no system. A rule that omits `constant`
+  and `products` integrates **byte-for-byte** as before (they are appended only
+  when present, so no existing manifest drifts).
+- **Bit-identical across runtimes.** The new terms are mirrored in the JS port
+  (`docs/browser/process-dynamics/process_core.js`), folding the monomial in
+  the same factor order so the Python and JS continuous steppers stay
+  byte-identical. `tests/process_core_js_test.py` runs Gray-Scott under Node and
+  asserts both reagent fields agree float-for-float across the trajectory.
+- **Gray-Scott example, authored in `.multi` (en + fr).**
+  `examples/gray_scott.{multi,fr.multi}` express the canonical pattern-forming
+  reaction `U + 2V -> 3V` end-to-end through the language — the first
+  *nonlinear* program on the continuous axis. Both lower to a byte-identical
+  core; new engine tests in `tests/process_continuous_test.py` cover the
+  constant term, product monomials, term composition order, and the
+  autocatalysis igniting while the field stays bounded (still Tier 1).
+
 ## [0.8.0] - 2026-06-13
 
 ### Added

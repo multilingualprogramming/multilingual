@@ -111,14 +111,15 @@ _VONNEUMANN4_OFFSETS = ((0, -1), (-1, 0), (1, 0), (0, 1))
 # Rule kinds
 RULE_REWRITE = "rewrite"
 # A rate rule describes a *continuous* dynamics: instead of a discrete
-# match -> produce replacement, it gives each field's rate of change as a linear
-# combination of the locus's own fields and an aggregate (the mean) over its
-# neighbours. The continuous-dt schedule integrates it one explicit-Euler step.
-# This is the second general rule kind (it names no system, just as
-# ``rewrite`` does): diffusion, decay, and linear reaction-diffusion are
-# particular coefficient sets, not engine branches. Nonlinear terms (products of
-# fields) are a future rate-rule shape, the continuous analogue of the
-# positional/multiset predicates still open for ``rewrite``.
+# match -> produce replacement, it gives each field's rate of change as data.
+# The continuous-dt schedule integrates it one explicit-Euler step. This is the
+# second general rule kind (it names no system, just as ``rewrite`` does): every
+# system is a particular set of coefficients, not an engine branch. A field's
+# rate sums four optional contributions -- linear ``self`` coefficients, linear
+# ``neighbor_mean`` coefficients, a ``constant`` source/sink, and nonlinear
+# ``products`` (monomials over the locus's own fields). Diffusion and linear
+# reaction-diffusion use only the first two; the products term reaches the
+# nonlinear continuous systems (Gray-Scott, predator-prey, FitzHugh-Nagumo).
 RULE_RATE = "rate"
 
 # Schedule kinds
@@ -295,26 +296,34 @@ def rate_rule(rates: dict[str, Any]) -> dict[str, Any]:
     """Declare a continuous rate rule: each field's time-derivative as data.
 
     The continuous counterpart of :func:`rewrite_rule`. ``rates`` maps a state
-    field to a description of its rate of change::
+    field to a description of its rate of change, a sum of four optional terms::
 
         {
           "u": {
-            "self": {"u": -0.2},           # coefficients on the locus's own fields
-            "neighbor_mean": {"u": 0.2}     # coefficients on the mean over neighbours
+            "self": {"u": -0.2},               # linear, on the locus's own fields
+            "neighbor_mean": {"u": 0.2},        # linear, on the mean over neighbours
+            "constant": 0.04,                   # a scalar source/sink (optional)
+            "products": [                       # nonlinear monomials (optional)
+              {"coeff": -1.0, "factors": ["u", "v", "v"]}  # -u*v*v
+            ]
           }
         }
 
     For each locus the rate of a field is the sum of ``self`` coefficients times
-    the locus's own field values plus ``neighbor_mean`` coefficients times the
-    mean of that field over the locus's existing neighbours. The
-    :data:`SCHEDULE_CONTINUOUS` schedule integrates one explicit-Euler step,
-    ``next[field] = field + dt * rate``.
+    the locus's own field values, plus ``neighbor_mean`` coefficients times the
+    mean of that field over the locus's existing neighbours, plus the
+    ``constant`` source/sink, plus each ``products`` monomial (its ``coeff``
+    times the product of the locus's own ``factors`` values, factors repeating
+    to raise a power). The :data:`SCHEDULE_CONTINUOUS` schedule integrates one
+    explicit-Euler step, ``next[field] = field + dt * rate``.
 
-    This is enough for diffusion (``du/dt = D*(mean_nbr(u) - u)`` is
+    The first two terms give diffusion (``du/dt = D*(mean_nbr(u) - u)`` is
     ``self={"u": -D}, neighbor_mean={"u": D}``), linear decay, and linear
-    reaction-diffusion -- all as pure data, no system named in the engine.
-    Like the rewrite rule it is deliberately the cheapest expressive slice:
-    nonlinear terms (products of fields) are a future rate shape.
+    reaction-diffusion. ``constant`` and ``products`` reach the nonlinear
+    continuous systems -- Gray-Scott, Lotka-Volterra predator-prey,
+    FitzHugh-Nagumo -- all as pure data, no system named in the engine. A rule
+    that omits ``constant`` and ``products`` integrates exactly as before they
+    were added.
     """
     if not isinstance(rates, dict):
         raise ValueError("rates must be a dict of field -> contributions")
@@ -767,12 +776,22 @@ def _rate_for(
 ) -> dict[str, float]:
     """Evaluate a rate rule at one locus: each field's time-derivative.
 
-    A field's rate is ``sum(self_coeff * own_field)`` plus
-    ``sum(neighbor_coeff * mean_over_neighbours(field))``. The mean is taken
-    over the locus's *existing* neighbours (so it is well-defined at a bounded
-    lattice's edge); with no neighbours the neighbour term is zero. Neighbours
-    are summed in :func:`neighbors` order, which is identical in every runtime,
-    so the floating-point result is reproducible across ports.
+    A field's rate is the sum of four optional contributions, evaluated in this
+    fixed order so the floating-point result is reproducible across ports:
+
+    1. ``self``          -- ``sum(coeff * own_field)`` (linear, own values);
+    2. ``neighbor_mean`` -- ``sum(coeff * mean_over_neighbours(field))``;
+    3. ``constant``      -- a scalar source/sink term;
+    4. ``products``      -- nonlinear monomials over the locus's own fields,
+       each ``{"coeff": c, "factors": [f, ...]}`` contributing
+       ``c * own[f0] * own[f1] * ...`` (factors repeat to raise a power).
+
+    The neighbour mean is taken over the locus's *existing* neighbours (so it is
+    well-defined at a bounded lattice's edge); with no neighbours that term is
+    zero. Neighbours are summed in :func:`neighbors` order, which is identical in
+    every runtime. ``constant`` and ``products`` are appended only when present,
+    so a rule that uses neither integrates byte-identically to before they
+    existed.
     """
     present = [grid[nb] for nb in nbs if nb in grid]
     count = len(present)
@@ -792,6 +811,19 @@ def _rate_for(
                 for p in present:
                     total += p.get(src, 0)
                 rate += coeff * (total / count)
+        # A constant source/sink (e.g. Gray-Scott's feed F). Only added when the
+        # key is present so existing linear rules are bit-for-bit unchanged
+        # (``rate + 0.0`` would flip a -0.0 result and drift a manifest).
+        if "constant" in terms:
+            rate += terms["constant"]
+        # Nonlinear monomials over the locus's own fields -- the reaction terms
+        # diffusion and decay cannot express (Gray-Scott's -u·v², predator-prey
+        # coupling). Evaluated as a left-fold in factor order, identical in JS.
+        for monomial in terms.get("products", ()):
+            term = monomial.get("coeff", 1.0)
+            for factor in monomial.get("factors", ()):
+                term *= rec.get(factor, 0)
+            rate += term
         out[field] = rate
     return out
 

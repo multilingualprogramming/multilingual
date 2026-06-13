@@ -61,6 +61,7 @@ DIFFUSION_RUNTIME_JS = PROCESS_DIR / "diffusion_runtime.js"
 DIFFUSION_MANIFEST = PROCESS_DIR / "program.diffusion.v1.json"
 DIFFUSION_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.diffusion.v1.json"
 DIFFUSION_SOURCE = ROOT / "examples" / "diffusion.multi"
+GRAY_SCOTT_SOURCE = ROOT / "examples" / "gray_scott.multi"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -116,6 +117,21 @@ process.stdout.write(JSON.stringify(trajectory.map((f) => fieldCells(f, 'u'))));
 """
 
 
+# The nonlinear continuous path reads both reagent fields (u and v) out of every
+# frame. Gray-Scott's rate has a product term (u*v*v) and a constant feed, so
+# this is the sharpest float check of all: the reaction couples the two fields
+# every step, and any divergence in how the ports fold the monomial compounds.
+_GRAY_SCOTT_DRIVER = """\
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+const [, , corePath, manifestPath, steps] = process.argv;
+const { run, fieldCells } = await import(pathToFileURL(corePath).href);
+const core = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+const trajectory = run(core, Number(steps));
+process.stdout.write(JSON.stringify(trajectory.map((f) => [fieldCells(f, 'u'), fieldCells(f, 'v')])));
+"""
+
+
 # The graph path reads each node's value out of every frame (via the shared
 # nodeCells) -- otherwise identical (the one shared `run` drives it too).
 _NODE_DRIVER = """\
@@ -160,6 +176,10 @@ def _js_nodes(manifest_path: Path, steps: int):
 
 def _js_diffusion(manifest_path: Path, steps: int):
     return _run_driver(_DIFFUSION_DRIVER, manifest_path, steps)
+
+
+def _js_gray_scott(manifest_path: Path, steps: int):
+    return _run_driver(_GRAY_SCOTT_DRIVER, manifest_path, steps)
 
 
 def _py_trajectory(core: dict, steps: int) -> list[list[list[int]]]:
@@ -320,6 +340,15 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         # rather than rolling its own integrator.
         source = CORE_JS.read_text(encoding="utf-8")
         for symbol in ("SCHEDULE_CONTINUOUS", "RULE_RATE"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
+    def test_core_js_ports_the_nonlinear_rate_terms(self):
+        # The nonlinear rate shape (a constant source/sink and product
+        # monomials) must exist in the browser engine too, so reaction-diffusion
+        # systems like Gray-Scott integrate with the one shared stepper rather
+        # than a runtime rolling its own reaction term.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("terms.constant", "terms.products", "monomial.factors"):
             self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
 
     def test_core_js_defines_no_specific_system(self):
@@ -546,6 +575,34 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
         self.assertEqual(js, py)
         # And the field genuinely diffused (the continuous step is not a no-op).
         self.assertNotEqual(js[0], js[-1])
+
+    def test_nonlinear_gray_scott_trajectory_agrees(self):
+        # The nonlinear continuous axis: a Gray-Scott reaction-diffusion field
+        # authored in .multi must integrate identically in JS and Python, float
+        # for float, across both coupled reagent fields. The rate carries a
+        # product term (u*v*v) and a constant feed, so this proves the ports
+        # fold the new nonlinear monomial in the same order to the same bits --
+        # the sharpest cross-runtime float check, the reaction firing each step.
+        core = process_program.execute_process(
+            GRAY_SCOTT_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(GRAY_SCOTT_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "gray_scott.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_gray_scott(path, STEPS)
+        py = [
+            [
+                [list(cell) for cell in process_core.field_cells(frame, "u")],
+                [list(cell) for cell in process_core.field_cells(frame, "v")],
+            ]
+            for frame in process_core.run(core, STEPS)
+        ]
+        self.assertEqual(len(js), STEPS + 1)
+        self.assertEqual(js, py)
+        # And the reaction genuinely fired (v changed where it was seeded).
+        self.assertNotEqual(js[0][1], js[-1][1])
 
 
 if __name__ == "__main__":

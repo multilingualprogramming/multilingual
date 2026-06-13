@@ -230,10 +230,13 @@ function stepAsync(core, topology, clauses, fallback) {
 }
 
 // Evaluate a rate rule at one locus: each field's time-derivative is the sum of
-// `self` coefficients times the locus's own fields plus `neighbor_mean`
-// coefficients times the mean of that field over its existing neighbours.
-// Neighbours are summed in neighbors() order -- identical in Python -- so the
-// floating-point result is byte-identical across ports.
+// four optional contributions, in a fixed order so the result is byte-identical
+// to Python: linear `self` coefficients on the locus's own fields, linear
+// `neighbor_mean` coefficients on the mean over its existing neighbours, a
+// `constant` source/sink, and nonlinear `products` (monomials over the locus's
+// own fields). Neighbours are summed in neighbors() order -- identical in
+// Python. `constant` and `products` are appended only when present, so a rule
+// using neither integrates exactly as before they were added.
 function rateFor(rec, nbs, grid, rates, topology) {
   const present = [];
   for (const nb of nbs) {
@@ -256,6 +259,20 @@ function rateFor(rec, nbs, grid, rates, topology) {
         for (const p of present) total += p[src] ?? 0;
         rate += neighborMean[src] * (total / count);
       }
+    }
+    // A constant source/sink (e.g. Gray-Scott's feed F), added only when the
+    // key is present so existing linear rules stay bit-for-bit unchanged.
+    if ("constant" in terms) {
+      rate += terms.constant;
+    }
+    // Nonlinear monomials over the locus's own fields -- the reaction terms
+    // diffusion and decay cannot express. Left-fold in factor order, as Python.
+    for (const monomial of terms.products ?? []) {
+      let term = monomial.coeff ?? 1.0;
+      for (const factor of monomial.factors ?? []) {
+        term *= rec[factor] ?? 0;
+      }
+      rate += term;
     }
     out[field] = rate;
   }
