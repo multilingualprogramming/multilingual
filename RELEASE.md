@@ -1,5 +1,29 @@
 # Release Notes
 
+## v0.8.1 - 2026-06-13
+
+### Stochastic And Nonlinear Process Dynamics
+
+This patch release extends the process-dynamics slice introduced in v0.8.0 with deterministic
+stochastic rewrites and nonlinear continuous-rate rules, keeping the Python and browser runtimes
+byte-identical for the new examples.
+
+#### Process Calculus
+- Added `chance(p, salt)` rewrite predicates for deterministic stochastic rules. Probability rolls
+  are pure hashes of `(locus, step, salt)`, so stochastic trajectories are reproducible without
+  mutable PRNG state or seed plumbing.
+- Added `rate_rule` support for scalar `constant` terms and nonlinear `products` monomials, making
+  reaction-diffusion and other nonlinear continuous systems expressible as data.
+- Mirrored the new stochastic and nonlinear semantics in the browser JS process core, with tests
+  asserting Python/JS parity.
+
+#### Examples
+- Added English and French Eden-growth examples for stochastic accretion.
+- Added English and French Gray-Scott examples for nonlinear reaction-diffusion.
+
+#### Packaging
+- Bumped package version to `0.8.1`.
+
 ## v0.8.0 - 2026-06-13
 
 ### Polymodal Platform And WAT/WASM Backend Expansion

@@ -6,6 +6,8 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-06-13
+
 ### Added
 
 #### Stochastic rewriting — the `chance` clause predicate

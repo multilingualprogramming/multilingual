@@ -32,7 +32,7 @@
 | **Package name** | `multilingualprogramming` |
 | **CLI commands** | `multilingual`, `multilg` (alias) |
 | **Tagline** | "One programming model. Many human languages." |
-| **Version** | `0.7.0` (see `multilingualprogramming/version.py`) |
+| **Version** | `0.8.1` (see `multilingualprogramming/version.py`) |
 | **Status** | Beta (Development Status :: 4) |
 | **Python requirement** | ≥ 3.12 |
 | **License** | GPL-3.0-or-later (code), CC BY-SA 4.0 (docs) |
@@ -136,7 +136,7 @@ multilingual/
 ├── multilingualprogramming/            ← main package
 │   ├── __init__.py                     ← public API exports (88 items)
 │   ├── __main__.py                     ← CLI entry point (argparse)
-│   ├── version.py                      ← version = "0.7.0"
+│   ├── version.py                      ← version = "0.8.1"
 │   ├── exceptions.py                   ← custom exceptions
 │   ├── imports.py                      ← multilingual .multi/.ml import support
 │   ├── unicode_string.py               ← Unicode string utilities
@@ -220,7 +220,7 @@ multilingual/
 │       ├── tuple_abi.py                ← tuple serialization
 │       └── tuple_memory.py             ← memory management
 │
-├── tests/                              ← 92 pytest files, ~31,344 lines
+├── tests/                              ← 118 pytest files, ~37,901 lines
 ├── examples/                           ← 33 .multi example files (17 languages, .ml also supported)
 ├── docs/                               ← 29+ markdown files + French docs
 └── tools/                              ← development utilities
@@ -638,9 +638,9 @@ CI gates before merge: `pythonpackage`, `pylint`, `package-artifacts`, `compatib
 ### Test Suite Overview
 
 - **Location**: `tests/`
-- **Files**: 92 pytest files, ~31,344 lines of test code
+- **Files**: 118 pytest files, ~37,901 lines of test code
 - **Discovery**: `test_*.py` and `*_test.py`
-- **Latest local release pass**: 2602 passed, 14 skipped, 417 subtests passed
+- **Latest local release pass**: 3019 passed, 14 skipped, 2 warnings, 417 subtests passed
 
 ### Running Tests
 
@@ -884,7 +884,7 @@ Both forms must appear in the language's array for reliable lexer matching.
 
 ## 15. Version & Release Info
 
-### Current Version: `0.7.0`
+### Current Version: `0.8.1`
 
 Defined in `multilingualprogramming/version.py`.
 
@@ -892,6 +892,8 @@ Defined in `multilingualprogramming/version.py`.
 
 | Version | Highlights |
 |---|---|
+| `0.8.1` | Deterministic stochastic process rewrites via `chance(p, salt)`; nonlinear `rate_rule` constant/product terms; Eden growth and Gray-Scott examples mirrored across Python and browser JS runtimes |
+| `0.8.0` | Polymodal v1 process calculus; five peer modality projections; browser process dynamics pages; WAT/WASM math, formatting, list ABI, i32, pow, and SIMD-oriented backend expansion |
 | `0.7.0` | Core 1 semantic runtime expansion; AI, multimodal, retrieval, memory, tools, agents/swarm, reactive UI, structured concurrency, model registry, prompt optimization, and provider adapters; WAT/WASM string/list/math/DOM/JSON/generator improvements; browser/UI bundle commands and ABI/shim tooling |
 | `0.6.0` | WAT/WASM OOP object model, inheritance, `with`/`try`/`match`/`lambda`/`async` lowering, bytes support, WAT backend reorganization; real `try/except/finally` with numeric exception codes; `input()` / `argc()` / `argv()` builtins; DOM bridge (`"env"` host imports + WAT wrappers); source location comments in WAT |
 | `0.5.1` | Documentation updates |
