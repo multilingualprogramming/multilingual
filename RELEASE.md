@@ -1,5 +1,32 @@
 # Release Notes
 
+## v0.8.0 - 2026-06-13
+
+### Polymodal Platform And WAT/WASM Backend Expansion
+
+This release promotes the post-0.7.0 backend and polymodal work into a packaged release. It is
+intended to unblock downstream users that depend on the latest WAT runtime helpers, list ABI
+helpers, numeric formatting builtins, unsigned i32 helpers, and SIMD-oriented Mandelbrot support.
+
+#### Polymodal Computation
+- Added five peer projections of a shared semantic core: linear, spatial, volumetric, sonic, and
+  MIDI.
+- Added generated ontology sidecars and equivalence tests so Python and browser projections stay
+  aligned.
+- Added containment relations in the semantic core and propagated them through projection outputs.
+- Added sonic capture and round-trip reconstruction support, including browser microphone capture.
+
+#### WAT/WASM Backend
+- Improved `math.atan` and `math.atan2` precision with stronger range reduction.
+- Added i32 wraparound and unsigned helpers: `imul32`, `iadd32`, `shr_u32`, and `u32_to_f64`.
+- Fixed negative integer exponent handling in `pow_f64`.
+- Added multi-value returns, dynamic fixed/exponential/precision formatting helpers, list ABI host
+  helpers, richer string concatenation, and general real-exponent `pow_f64`.
+- Added Mandelbrot pair SIMD support for downstream renderers that batch two pixels at a time.
+
+#### Packaging
+- Bumped package version to `0.8.0`.
+
 ## v0.7.0 - 2026-05-23
 
 ### Core 1 Runtime, AI, And Backend Expansion
