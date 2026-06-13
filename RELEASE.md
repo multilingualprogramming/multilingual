@@ -8,6 +8,23 @@ This release promotes the post-0.7.0 backend and polymodal work into a packaged 
 intended to unblock downstream users that depend on the latest WAT runtime helpers, list ABI
 helpers, numeric formatting builtins, unsigned i32 helpers, and SIMD-oriented Mandelbrot support.
 
+#### Polymodal v1 — Process Calculus
+- Added `semantic-core-v1` = ⟨State, Topology, Rule, Schedule⟩ with a single rewrite
+  meta-primitive and a modality-free stepper that is bit-identical across Python and JS. The
+  frozen `semantic-core-v0` migrates into a Tier-0 v1 core that round-trips its entities exactly.
+- Process programs are authored in `.multi` (a `process` variable compiled by the new
+  `multilingual process-build` CLI), with process-vocabulary builtin aliases in all 16 languages.
+- Added a free-function rule DSL (`when` / `neighbor_count` / `becomes` / `fallback` / `symbol` /
+  `clause` / `rewrite`) lowering to `rewrite_rule`, plus `rate_rule` for derivatives-as-data.
+- Added three topologies (grid, open-population, graph) and three schedules (synchronous,
+  asynchronous in-place, and continuous-time Euler integration via `continuous_schedule(dt)`),
+  completing the schedule axis.
+- Added a Tier 0–4 capability classifier (`tierOf` / `TIER_NAMES`), shown on every browser
+  dynamics page; tier is orthogonal to invertibility.
+- Added five example process programs in English and French — Game of Life, L-systems, a
+  cyclic-dominance ecosystem, a network SIR epidemic, and heat diffusion — each with a value-aware
+  projection and a browser runtime under `docs/browser/process-dynamics/`.
+
 #### Polymodal Computation
 - Added five peer projections of a shared semantic core: linear, spatial, volumetric, sonic, and
   MIDI.

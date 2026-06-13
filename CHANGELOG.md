@@ -10,6 +10,51 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ### Added
 
+#### Polymodal v1 — process calculus (dynamics over the semantic core)
+- **`semantic-core-v1` = ⟨State, Topology, Rule, Schedule⟩ with one rewrite
+  meta-primitive.** Where v0 described a static scene, v1 describes how a
+  scene *evolves*. The stepper is modality-free and has bit-identical Python
+  and JS implementations. `semantic-core-v0` remains frozen; a v0→v1
+  migration projects any v0 core into a Tier-0 v1 core that round-trips the
+  original entities exactly (`process_migration.py`,
+  `process_static_projection.py`).
+- **Process programs are authored in `.multi`, not Python.** A program
+  defines a `process` variable and is compiled with the new
+  `multilingual process-build` CLI — the v1 layer is a first-class citizen
+  of the multilingual language rather than a set of host scripts. Builtin
+  aliases for the process vocabulary ship in all 16 languages.
+- **Rule surface syntax is a free-function combinator DSL.**
+  `when` / `neighbor_count` / `becomes` / `fallback` / `symbol` / `clause` /
+  `rewrite` lower to `rewrite_rule` (`RULE_REWRITE`). A second rule kind,
+  `rate_rule` (`RULE_RATE`), carries derivatives-as-data for continuous
+  dynamics.
+- **Three topologies and three schedules.** Topologies: implicit grid
+  (spatial), open-population, and `graph_topology` (arbitrary node/edge
+  loci via a generalized `_locus_key`). Schedules: synchronous,
+  `asynchronous_schedule` (sequential in-place, identity-on-no-match), and
+  `continuous_schedule(dt)` which integrates `rate_rule`s with an explicit
+  Euler step (`next = field + dt·rate`). The continuous path uses a naive
+  left-fold sum so CPython and JS stay bit-identical (the compensated-`sum`
+  path diverged). This completes the schedule axis.
+- **Tier 0–4 capability classifier.** `tierOf` / `TIER_NAMES` (Python and JS)
+  grade a process by expressive power. Tier is orthogonal to invertibility:
+  the SIR `network_epidemic` core classifies as Tier 4 yet
+  `process_graph_projection.py` round-trips every node exactly. The tier
+  line is shown on all five browser dynamics pages.
+- **Example process programs (en + fr), each end-to-end through the v1
+  path with a value-aware projection and a browser page.** Conway's Game of
+  Life (`game_of_life.multi`), Lindenmayer L-systems
+  (`lindenmayer.multi`, generative sequence rewriting), a cyclic-dominance
+  ecosystem (`ecosystem.multi`, heterogeneous state + async schedule), a
+  network SIR epidemic (`network_epidemic.multi`, graph topology), and heat
+  diffusion (`diffusion.multi`, continuous-time, mass-conserved). Browser
+  runtimes: `docs/browser/process-dynamics/` Life, L-system, ecosystem,
+  graph, and diffusion pages.
+- **A checked-in golden `semantic-core` fixture** plus value-aware field,
+  sequence, and graph projections (`process_field_projection.py`,
+  `process_sequence_projection.py`, `process_graph_projection.py`) and
+  per-projection capability contracts (`process_capabilities.py`).
+
 #### Polymodal computation — five peer modalities, relations, capture
 - **Five peer modality projections of the same semantic core.** The
   polymodal architecture introduced after v0.7.0 now has five live
