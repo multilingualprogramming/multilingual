@@ -539,7 +539,7 @@ class _JSExpressionGenerator:
         return node.name
 
     def visit_LambdaExpr(self, node):
-        params = ", ".join(self._expr(param) for param in node.params)
+        params = ", ".join(param if isinstance(param, str) else self._expr(param) for param in node.params)
         return f"(({params}) => {self._expr(node.body)})"
 
     def visit_SliceExpr(self, node):
