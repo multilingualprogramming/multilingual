@@ -100,6 +100,7 @@ class JavaScriptCodeGenerator:
         self._emit("float: (value) => Number.parseFloat(value),")
         self._emit("list: (value) => Array.isArray(value) ? [...value] : Array.from(value),")
         self._emit("dict: (value = {}) => ({ ...value }),")
+        self._emit("set: (value = []) => new Set(value),")
         self._emit("range: (start, stop, step = 1) => {")
         self._indent()
         self._emit("if (stop === undefined) { stop = start; start = 0; }")
@@ -371,6 +372,7 @@ class _JSExpressionGenerator:
             "float": "__ml.float",
             "list": "__ml.list",
             "dict": "__ml.dict",
+            "set": "__ml.set",
             "range": "__ml.range",
             "max": "__ml.max",
             "min": "__ml.min",
@@ -382,6 +384,8 @@ class _JSExpressionGenerator:
 
     def visit_BinaryOp(self, node):
         op = {"//": "/", "and": "&&", "or": "||"}.get(node.op, node.op)
+        if node.op == "|":
+            return f"new Set([...{self._expr(node.left)}, ...{self._expr(node.right)}])"
         if node.op == "//":
             return f"Math.trunc(({self._expr(node.left)}) / ({self._expr(node.right)}))"
         if node.op == "**":
@@ -453,6 +457,10 @@ class _JSExpressionGenerator:
                 return f"__ml.get({obj}, {', '.join(args)})"
             if attr == "items":
                 return f"__ml.items({obj})"
+            if attr == "keys":
+                return f"Object.keys({obj} ?? {{}})"
+            if attr == "values":
+                return f"Object.values({obj} ?? {{}})"
             if attr == "append":
                 return f"__ml.append({obj}, {args[0] if args else 'undefined'})"
             if attr == "replace":
@@ -466,9 +474,13 @@ class _JSExpressionGenerator:
             if attr == "is_integer":
                 return f"Number.isInteger({obj})"
             if attr == "choice":
-                return f"__ml.choice({args[0] if args else '[]'})"
+                if isinstance(node.func.obj, Identifier) and node.func.obj.name == "random":
+                    return f"__ml.choice({args[0] if args else '[]'})"
+                return f"{obj}.choice({args[0] if args else '[]'})"
             if attr == "random":
-                return "__ml.random()"
+                if isinstance(node.func.obj, Identifier) and node.func.obj.name == "random":
+                    return "__ml.random()"
+                return f"{obj}.random()"
         return f"{func}({', '.join(args)})"
 
     def visit_AttributeAccess(self, node):
