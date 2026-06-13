@@ -49,24 +49,24 @@ class HashTestSuite(unittest.TestCase):
     def test_values_are_in_unit_interval(self):
         for x in range(0, 50, 7):
             for y in range(0, 50, 5):
-                v = process_core._hash01(x, y, 3, 0)
+                v = process_core.hash01(x, y, 3, 0)
                 self.assertGreaterEqual(v, 0.0)
                 self.assertLess(v, 1.0)
 
     def test_is_pure_and_repeatable(self):
         self.assertEqual(
-            process_core._hash01(13, 27, 5, 9), process_core._hash01(13, 27, 5, 9)
+            process_core.hash01(13, 27, 5, 9), process_core.hash01(13, 27, 5, 9)
         )
 
     def test_varies_with_each_input(self):
-        base = process_core._hash01(3, 4, 5, 6)
-        self.assertNotEqual(base, process_core._hash01(4, 4, 5, 6))  # x
-        self.assertNotEqual(base, process_core._hash01(3, 5, 5, 6))  # y
-        self.assertNotEqual(base, process_core._hash01(3, 4, 6, 6))  # step
-        self.assertNotEqual(base, process_core._hash01(3, 4, 5, 7))  # salt
+        base = process_core.hash01(3, 4, 5, 6)
+        self.assertNotEqual(base, process_core.hash01(4, 4, 5, 6))  # x
+        self.assertNotEqual(base, process_core.hash01(3, 5, 5, 6))  # y
+        self.assertNotEqual(base, process_core.hash01(3, 4, 6, 6))  # step
+        self.assertNotEqual(base, process_core.hash01(3, 4, 5, 7))  # salt
 
     def test_distribution_is_roughly_uniform(self):
-        vals = [process_core._hash01(x, y, 1, 0) for x in range(64) for y in range(64)]
+        vals = [process_core.hash01(x, y, 1, 0) for x in range(64) for y in range(64)]
         mean = sum(vals) / len(vals)
         self.assertTrue(0.45 < mean < 0.55, f"mean {mean} not near 0.5")
 

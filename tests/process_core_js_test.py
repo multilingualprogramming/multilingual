@@ -63,6 +63,14 @@ DIFFUSION_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.diffusion.v1.
 DIFFUSION_SOURCE = ROOT / "examples" / "diffusion.multi"
 GRAY_SCOTT_SOURCE = ROOT / "examples" / "gray_scott.multi"
 EDEN_SOURCE = ROOT / "examples" / "eden_growth.multi"
+GRAY_SCOTT_HTML = PROCESS_DIR / "gray_scott.html"
+GRAY_SCOTT_RUNTIME_JS = PROCESS_DIR / "gray_scott_runtime.js"
+GRAY_SCOTT_DEMO_MANIFEST = PROCESS_DIR / "program.gray_scott.v1.json"
+GRAY_SCOTT_DEMO_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.gray_scott.v1.json"
+EDEN_HTML = PROCESS_DIR / "eden.html"
+EDEN_RUNTIME_JS = PROCESS_DIR / "eden_runtime.js"
+EDEN_DEMO_MANIFEST = PROCESS_DIR / "program.eden.v1.json"
+EDEN_DEMO_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.eden.v1.json"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -296,6 +304,39 @@ class ManifestStabilityTestSuite(unittest.TestCase):
         # Continuous per-cell value: loci carry a float field, not a boolean.
         self.assertIn("u", on_disk["state"]["loci"][0])
 
+    def test_checked_in_gray_scott_manifest_matches_multi_build(self):
+        regenerated = process_program.execute_process(
+            GRAY_SCOTT_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=GRAY_SCOTT_DEMO_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(GRAY_SCOTT_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_gray_scott_manifest_is_nonlinear_continuous(self):
+        on_disk = json.loads(GRAY_SCOTT_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["schedule"]["kind"], "continuous-dt")
+        self.assertEqual(on_disk["rule"]["kind"], "rate")
+        # The nonlinear reaction term is present as data.
+        self.assertIn("products", on_disk["rule"]["rates"]["u"])
+        self.assertIn("v", on_disk["state"]["loci"][0])
+
+    def test_checked_in_eden_manifest_matches_multi_build(self):
+        regenerated = process_program.execute_process(
+            EDEN_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=EDEN_DEMO_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(EDEN_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_eden_manifest_is_stochastic_synchronous(self):
+        on_disk = json.loads(EDEN_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["topology"]["kind"], "lattice")
+        self.assertEqual(on_disk["schedule"]["kind"], "synchronous")
+        # The stochastic predicate is present as data on the growth clause.
+        self.assertIn("chance", on_disk["rule"]["clauses"][0]["match"])
+
 
 class JsStepperSourceTestSuite(unittest.TestCase):
     """Structural guards mirroring the repo's other JS peers."""
@@ -456,6 +497,32 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         html = DIFFUSION_HTML.read_text(encoding="utf-8")
         self.assertIn('type="module"', html)
         self.assertIn("./diffusion_runtime.js", html)
+
+    def test_gray_scott_runtime_uses_shared_stepper(self):
+        source = GRAY_SCOTT_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("SCHEDULE_CONTINUOUS", source)
+        self.assertIn("./program.gray_scott.v1.json", source)
+        self.assertIn("tierOf", source)
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_gray_scott_page_loads_runtime_as_module(self):
+        html = GRAY_SCOTT_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./gray_scott_runtime.js", html)
+
+    def test_eden_runtime_uses_shared_stepper(self):
+        source = EDEN_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("SCHEDULE_SYNCHRONOUS", source)
+        self.assertIn("./program.eden.v1.json", source)
+        self.assertIn("tierOf", source)
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_eden_page_loads_runtime_as_module(self):
+        html = EDEN_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./eden_runtime.js", html)
 
 
 @unittest.skipUnless(NODE, "node is not installed")

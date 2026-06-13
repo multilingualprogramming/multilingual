@@ -434,7 +434,7 @@ def chance(probability: float, salt: int = 0) -> dict[str, Any]:
     counterpart of the deterministic ``when``/``neighbor_count`` predicates. The
     randomness is a *deterministic* function of the locus coordinate, the step
     index, and ``salt`` (so two clauses in one rule can roll independently): see
-    :func:`_hash01`. It is therefore reproducible and byte-identical across the
+    :func:`hash01`. It is therefore reproducible and byte-identical across the
     Python and JS runtimes -- no PRNG state, no seed plumbing. This is what
     lets a rule express stochastic growth (Eden clusters, percolation, noisy
     cellular automata) while the engine stays pure and the trajectory stays a
@@ -688,7 +688,7 @@ def _grid(core: dict[str, Any]) -> dict[Any, dict[str, Any]]:
     return {_locus_key(rec, topology): rec for rec in core["state"]["loci"]}
 
 
-def _hash01(x: int, y: int, step_index: int, salt: int) -> float:
+def hash01(x: int, y: int, step_index: int, salt: int) -> float:
     """A deterministic pseudo-random value in [0, 1) keyed by (x, y, step, salt).
 
     The backbone of the stochastic :func:`chance` predicate. It must produce the
@@ -741,7 +741,7 @@ def _clause_matches(
             return False
     chance_spec = match.get("chance")
     if chance_spec is not None and "locus" in rec:
-        roll = _hash01(rec["locus"][0], rec["locus"][1], step_index, chance_spec["salt"])
+        roll = hash01(rec["locus"][0], rec["locus"][1], step_index, chance_spec["salt"])
         if roll >= chance_spec["p"]:
             return False
     return True
