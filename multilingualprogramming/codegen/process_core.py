@@ -475,7 +475,10 @@ def clause(*parts: dict[str, Any]) -> dict[str, Any]:
             produce_value = part["value"]
             have_produce = True
         else:
-            raise ValueError(f"clause parts must be when/neighbor_count/chance/becomes, got {part!r}")
+            raise ValueError(
+                "clause parts must be when/neighbor_count/chance/becomes, "
+                f"got {part!r}"
+            )
     if not have_produce:
         raise ValueError("clause needs a becomes(...)")
     match: dict[str, Any] = {}
@@ -685,7 +688,7 @@ def _grid(core: dict[str, Any]) -> dict[Any, dict[str, Any]]:
     return {_locus_key(rec, topology): rec for rec in core["state"]["loci"]}
 
 
-def _hash01(x: int, y: int, step: int, salt: int) -> float:
+def _hash01(x: int, y: int, step_index: int, salt: int) -> float:
     """A deterministic pseudo-random value in [0, 1) keyed by (x, y, step, salt).
 
     The backbone of the stochastic :func:`chance` predicate. It must produce the
@@ -701,7 +704,7 @@ def _hash01(x: int, y: int, step: int, salt: int) -> float:
     h = (x & mask) * 0x9E3779B1 & mask
     h = (h ^ ((y + 0x85EBCA77) & mask)) & mask
     h = (h * 0xC2B2AE3D) & mask
-    h = (h ^ ((step & mask) * 0x27D4EB2F & mask)) & mask
+    h = (h ^ ((step_index & mask) * 0x27D4EB2F & mask)) & mask
     h = (h ^ (salt & mask)) & mask
     # MurmurHash3 fmix32 finalizer -- avalanche the bits.
     h ^= h >> 16

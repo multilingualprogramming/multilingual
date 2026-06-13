@@ -15,7 +15,6 @@ from multilingualprogramming.numeral.mp_numeral import MPNumeral
 from multilingualprogramming.parser.ast_nodes import (
     AttributeAccess,
     Identifier,
-    IndexAccess,
     StringLiteral,
 )
 
@@ -52,10 +51,13 @@ class JavaScriptCodeGenerator:
         self._function_names: set[str] = set()
 
     def generate(self, node) -> str:
+        """Generate JavaScript source for a parsed program node."""
         self._depth = 0
         self._lines = []
         self._function_names = {
-            stmt.name for stmt in getattr(node, "body", []) if type(stmt).__name__ == "FunctionDef"
+            stmt.name
+            for stmt in getattr(node, "body", [])
+            if type(stmt).__name__ == "FunctionDef"
         }
         self._emit_runtime()
         node.accept(self)
@@ -100,29 +102,49 @@ class JavaScriptCodeGenerator:
         self._emit("return out;")
         self._dedent()
         self._emit("},")
-        self._emit("max: (...args) => Math.max(...(args.length === 1 && Array.isArray(args[0]) ? args[0] : args)),")
-        self._emit("min: (...args) => Math.min(...(args.length === 1 && Array.isArray(args[0]) ? args[0] : args)),")
+        self._emit(
+            "max: (...args) => "
+            "Math.max(...(args.length === 1 && Array.isArray(args[0]) ? args[0] : args)),"
+        )
+        self._emit(
+            "min: (...args) => "
+            "Math.min(...(args.length === 1 && Array.isArray(args[0]) ? args[0] : args)),"
+        )
         self._emit("sum: (values) => values.reduce((acc, value) => acc + value, 0),")
         self._emit("abs: (value) => Math.abs(value),")
         self._emit("isinstance: (value, type) => {")
         self._indent()
         self._emit("if (type === Array || type === 'list') return Array.isArray(value);")
-        self._emit("if (type === Object || type === 'dict') return value !== null && typeof value === 'object' && !Array.isArray(value);")
+        self._emit(
+            "if (type === Object || type === 'dict') "
+            "return value !== null && typeof value === 'object' && !Array.isArray(value);"
+        )
         self._emit("return value instanceof type;")
         self._dedent()
         self._emit("},")
         self._emit("json_dumps: (value) => JSON.stringify(value),")
         self._emit("json_loads: (value) => JSON.parse(value),")
-        self._emit("get: (obj, key, fallback = undefined) => Object.prototype.hasOwnProperty.call(obj ?? {}, key) ? obj[key] : fallback,")
+        self._emit(
+            "get: (obj, key, fallback = undefined) => "
+            "Object.prototype.hasOwnProperty.call(obj ?? {}, key) ? obj[key] : fallback,"
+        )
         self._emit("items: (obj) => Object.entries(obj ?? {}),")
         self._emit("append: (arr, value) => { arr.push(value); return undefined; },")
-        self._emit("contains: (container, value) => Array.isArray(container) || typeof container === 'string' ? container.includes(value) : Object.prototype.hasOwnProperty.call(container ?? {}, value),")
+        self._emit(
+            "contains: (container, value) => "
+            "Array.isArray(container) || typeof container === 'string' "
+            "? container.includes(value) "
+            ": Object.prototype.hasOwnProperty.call(container ?? {}, value),"
+        )
         self._emit("choice: (arr) => arr[Math.floor(Math.random() * arr.length)],")
         self._emit("random: () => Math.random(),")
         self._dedent()
         self._emit("};")
         self._emit("const json = { dumps: __ml.json_dumps, loads: __ml.json_loads };")
-        self._emit("const random = { random: __ml.random, choice: __ml.choice, Random: () => random };")
+        self._emit(
+            "const random = { random: __ml.random, choice: __ml.choice, "
+            "Random: () => random };"
+        )
         self._emit("const __ml_contains = __ml.contains;")
         self._emit("")
 
@@ -246,10 +268,15 @@ class JavaScriptCodeGenerator:
         self._emit("}")
 
     def visit_AssertStatement(self, node) -> None:
-        message = self._expr(node.message) if getattr(node, "message", None) else '"assertion failed"'
+        message = (
+            self._expr(node.message)
+            if getattr(node, "message", None)
+            else '"assertion failed"'
+        )
         self._emit(f"if (!({self._expr(node.condition)})) throw new Error(String({message}));")
 
     def generic_visit(self, node) -> None:
+        """Raise for unsupported statement nodes."""
         self._error(f"Unsupported JavaScript generation node: {type(node).__name__}", node)
 
 
@@ -293,7 +320,8 @@ class _JSExpressionGenerator:
             if isinstance(entry, tuple):
                 key, value = entry
                 if isinstance(key, StringLiteral):
-                    parts.append(f"{json.dumps(key.value, ensure_ascii=False)}: {self._expr(value)}")
+                    rendered_key = json.dumps(key.value, ensure_ascii=False)
+                    parts.append(f"{rendered_key}: {self._expr(value)}")
                 else:
                     parts.append(f"[{self._expr(key)}]: {self._expr(value)}")
             else:
@@ -368,6 +396,17 @@ class _JSExpressionGenerator:
 
     def visit_CallExpr(self, node):
         func = self._expr(node.func)
+        if (
+            isinstance(node.func, Identifier)
+            and node.func.name == "isinstance"
+            and len(node.args) >= 2
+        ):
+            value = self._expr(node.args[0])
+            type_arg = node.args[1]
+            if isinstance(type_arg, Identifier) and type_arg.name == "list":
+                return f"__ml.isinstance({value}, Array)"
+            if isinstance(type_arg, Identifier) and type_arg.name == "dict":
+                return f"__ml.isinstance({value}, Object)"
         args = [self._expr(arg) for arg in node.args]
         if isinstance(node.func, AttributeAccess):
             obj = self._expr(node.func.obj)
@@ -381,7 +420,7 @@ class _JSExpressionGenerator:
             if attr == "replace":
                 return f"{obj}.replaceAll({', '.join(args)})"
             if attr == "join":
-                return f"{obj}.join({args[0] if args else '[]'})"
+                return f"({args[0] if args else '[]'}).join({obj})"
             if attr == "split":
                 return f"{obj}.split({args[0] if args else 'undefined'})"
             if attr == "strip":
@@ -397,7 +436,8 @@ class _JSExpressionGenerator:
     def visit_AttributeAccess(self, node):
         obj = self._expr(node.obj)
         if isinstance(node.obj, Identifier) and node.obj.name == "json":
-            return {"dumps": "__ml.json_dumps", "loads": "__ml.json_loads"}.get(node.attr, f"json.{node.attr}")
+            json_attrs = {"dumps": "__ml.json_dumps", "loads": "__ml.json_loads"}
+            return json_attrs.get(node.attr, f"json.{node.attr}")
         return f"{obj}.{node.attr}"
 
     def visit_IndexAccess(self, node):
@@ -411,7 +451,10 @@ class _JSExpressionGenerator:
         return f"{self._expr(node.obj)}[{self._expr(node.index)}]"
 
     def visit_ConditionalExpr(self, node):
-        return f"({self._expr(node.condition)} ? {self._expr(node.true_expr)} : {self._expr(node.false_expr)})"
+        return (
+            f"({self._expr(node.condition)} ? "
+            f"{self._expr(node.true_expr)} : {self._expr(node.false_expr)})"
+        )
 
     def visit_ListComprehension(self, node):
         return self._array_comprehension(self._expr(node.element), node)
@@ -464,4 +507,5 @@ class _JSExpressionGenerator:
         return f"{start}:{stop}"
 
     def generic_visit(self, node):
+        """Raise for unsupported expression nodes."""
         self._error(f"Unsupported JavaScript expression node: {type(node).__name__}", node)
