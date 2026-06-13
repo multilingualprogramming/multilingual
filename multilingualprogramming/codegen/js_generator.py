@@ -149,10 +149,28 @@ class JavaScriptCodeGenerator:
         self._dedent()
         self._emit("};")
         self._emit("const json = { dumps: __ml.json_dumps, loads: __ml.json_loads };")
-        self._emit(
-            "const random = { random: __ml.random, choice: __ml.choice, "
-            "Random: () => random };"
-        )
+        self._emit("function __mlRandom(seed = Date.now()) {")
+        self._indent()
+        self._emit("let value = Number(seed) >>> 0;")
+        self._emit("const next = () => {")
+        self._indent()
+        self._emit("value = (value + 0x6D2B79F5) >>> 0;")
+        self._emit("let t = value;")
+        self._emit("t = Math.imul(t ^ (t >>> 15), t | 1);")
+        self._emit("t ^= t + Math.imul(t ^ (t >>> 7), t | 61);")
+        self._emit("return ((t ^ (t >>> 14)) >>> 0) / 4294967296;")
+        self._dedent()
+        self._emit("};")
+        self._emit("return {")
+        self._indent()
+        self._emit("random: next,")
+        self._emit("choice: (arr) => arr[Math.floor(next() * arr.length)],")
+        self._emit("randint: (a, b) => Math.floor(next() * (b - a + 1)) + a,")
+        self._dedent()
+        self._emit("};")
+        self._dedent()
+        self._emit("}")
+        self._emit("const random = { random: __ml.random, choice: __ml.choice, Random: __mlRandom };")
         self._emit("const __ml_contains = __ml.contains;")
         self._emit("")
 
@@ -415,6 +433,18 @@ class _JSExpressionGenerator:
                 return f"__ml.isinstance({value}, Array)"
             if isinstance(type_arg, Identifier) and type_arg.name == "dict":
                 return f"__ml.isinstance({value}, Object)"
+        if isinstance(node.func, Identifier) and node.func.name in {"max", "min"}:
+            key_expr = None
+            for name, value in node.keywords:
+                if name == "key":
+                    key_expr = self._expr(value)
+            if key_expr and node.args:
+                iterable = self._expr(node.args[0])
+                compare = ">" if node.func.name == "max" else "<"
+                return (
+                    f"Array.from({iterable}).reduce((best, item) => "
+                    f"{key_expr}(item) {compare} {key_expr}(best) ? item : best)"
+                )
         args = [self._expr(arg) for arg in node.args]
         if isinstance(node.func, AttributeAccess):
             obj = self._expr(node.func.obj)
