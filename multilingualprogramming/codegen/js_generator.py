@@ -138,6 +138,14 @@ class JavaScriptCodeGenerator:
             "Object.prototype.hasOwnProperty.call(obj ?? {}, key) ? obj[key] : fallback,"
         )
         self._emit("items: (obj) => Object.entries(obj ?? {}),")
+        self._emit("iter: (value) => {")
+        self._indent()
+        self._emit("if (value == null) return [];")
+        self._emit("if (Array.isArray(value) || typeof value === 'string' || value instanceof Set) return value;")
+        self._emit("if (typeof value === 'object') return Object.keys(value);")
+        self._emit("return [];")
+        self._dedent()
+        self._emit("},")
         self._emit("append: (arr, value) => { arr.push(value); return undefined; },")
         self._emit(
             "contains: (container, value) => "
@@ -150,6 +158,7 @@ class JavaScriptCodeGenerator:
         self._dedent()
         self._emit("};")
         self._emit("const json = { dumps: __ml.json_dumps, loads: __ml.json_loads };")
+        self._emit("const math = Math;")
         self._emit("function __mlRandom(seed = Date.now()) {")
         self._indent()
         self._emit("let value = Number(seed) >>> 0;")
@@ -249,7 +258,7 @@ class JavaScriptCodeGenerator:
         self._emit("}")
 
     def visit_ForLoop(self, node) -> None:
-        self._emit(f"for (const {self._target(node.target)} of {self._expr(node.iterable)}) {{")
+        self._emit(f"for (const {self._target(node.target)} of __ml.iter({self._expr(node.iterable)})) {{")
         self._emit_body(node.body)
         self._emit("}")
 
