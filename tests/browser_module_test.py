@@ -35,6 +35,44 @@ def test_generate_browser_module_exports_named_function():
     assert "return {\"value\": x, \"items\": [x, (x + 1)]};" in module_source
 
 
+def test_generate_browser_module_uses_python_modulo_semantics():
+    program = _parse(
+        "def wrap(index, width):\n"
+        "    return index % width\n",
+        "en",
+    )
+
+    module_source = JavaScriptCodeGenerator(exports=["wrap"]).generate(program)
+
+    assert "mod: (left, right) => ((left % right) + right) % right," in module_source
+    assert "return __ml.mod(index, width);" in module_source
+
+
+def test_generate_browser_module_maps_list_index():
+    program = _parse(
+        "def find(items, value):\n"
+        "    return items.index(value)\n",
+        "en",
+    )
+
+    module_source = JavaScriptCodeGenerator(exports=["find"]).generate(program)
+
+    assert "return items.indexOf(value);" in module_source
+
+
+def test_generate_browser_module_maps_reversed():
+    program = _parse(
+        "def mirror(items):\n"
+        "    return list(reversed(items))\n",
+        "en",
+    )
+
+    module_source = JavaScriptCodeGenerator(exports=["mirror"]).generate(program)
+
+    assert "reversed: (value) => Array.from(value).reverse()," in module_source
+    assert "return __ml.list(__ml.reversed(items));" in module_source
+
+
 def test_build_browser_module_cli_writes_esm(tmp_path):
     source = tmp_path / "program.multi"
     output = tmp_path / "program.browser.mjs"

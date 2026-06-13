@@ -62,6 +62,7 @@ DIFFUSION_MANIFEST = PROCESS_DIR / "program.diffusion.v1.json"
 DIFFUSION_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.diffusion.v1.json"
 DIFFUSION_SOURCE = ROOT / "examples" / "diffusion.multi"
 GRAY_SCOTT_SOURCE = ROOT / "examples" / "gray_scott.multi"
+EDEN_SOURCE = ROOT / "examples" / "eden_growth.multi"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -342,6 +343,15 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         for symbol in ("SCHEDULE_CONTINUOUS", "RULE_RATE"):
             self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
 
+    def test_core_js_ports_the_stochastic_predicate(self):
+        # The stochastic `chance` predicate and its deterministic hash must exist
+        # in the browser engine too, so stochastic programs (Eden growth,
+        # percolation, noisy CA) roll identically in JS and Python rather than a
+        # runtime inventing its own RNG.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("function hash01", "match.chance", "Math.imul"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
     def test_core_js_ports_the_nonlinear_rate_terms(self):
         # The nonlinear rate shape (a constant source/sink and product
         # monomials) must exist in the browser engine too, so reaction-diffusion
@@ -603,6 +613,28 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
         self.assertEqual(js, py)
         # And the reaction genuinely fired (v changed where it was seeded).
         self.assertNotEqual(js[0][1], js[-1][1])
+
+    def test_stochastic_eden_trajectory_agrees(self):
+        # The stochastic axis: a probabilistic Eden-growth cluster authored in
+        # .multi must grow identically in JS and Python, cell for cell, across
+        # the whole trajectory. The growth is gated by the `chance` predicate, so
+        # this proves the two runtimes compute the same deterministic hash and
+        # roll the same cells -- the sharpest test of the new stochastic path
+        # (one diverging bit in the 32-bit hash would fork the cluster).
+        core = process_program.execute_process(
+            EDEN_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(EDEN_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "eden.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_trajectory(path, STEPS)
+        py = _py_trajectory(core, STEPS)
+        self.assertEqual(len(js), STEPS + 1)
+        self.assertEqual(js, py)
+        # And the cluster genuinely grew (the stochastic step is not a no-op).
+        self.assertGreater(len(js[-1]), len(js[0]))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,33 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ### Added
 
+#### Stochastic rewriting — the `chance` clause predicate
+- **A rewrite clause can now fire probabilistically, via a new `chance(p, salt)`
+  predicate** alongside `when` and `neighbor_count`. This adds the one ingredient
+  the deterministic rewrite/rate rules lacked — randomness — so stochastic
+  programs (Eden growth, percolation, noisy cellular automata) are expressible
+  for the first time. A clause carrying `chance(p)` matches only a fraction `p`
+  of the time.
+- **The randomness is deterministic and byte-identical across runtimes.** There
+  is no PRNG state and no seed plumbing: a roll is a pure hash of
+  `(locus, step, salt)` (`_hash01`, a MurmurHash3-style 32-bit mix built from
+  exact `& 0xFFFFFFFF` / `Math.imul` arithmetic so CPython and the JS port agree
+  to the bit). A stochastic trajectory is therefore a reproducible function of
+  the manifest, and two clauses decorrelate via different `salt`. The step index
+  is threaded through `step`/`run` to the predicate so randomness varies over
+  time; a deterministic rule ignores it and steps exactly as before.
+- **Mirrored in the JS port** (`docs/browser/process-dynamics/process_core.js`):
+  `hash01` + the `chance` branch in `clauseMatches`, with `stepIndex` threaded
+  through every rewrite stepper. `tests/process_core_js_test.py` grows an Eden
+  cluster under Node and asserts it matches Python cell-for-cell across the run.
+- **Eden-growth example, authored in `.multi` (en + fr).**
+  `examples/eden_growth.{multi,fr.multi}` grow a stochastic accretion cluster
+  with a rough fractal boundary from a single seed — the first *stochastic*
+  program on any axis. New `tests/process_stochastic_test.py` covers the hash
+  (range, purity, uniformity, per-input sensitivity), the predicate's gating
+  (`p=0` never fires, `p=1` always, `~p` on average, salt decorrelation), and
+  the example (monotone growth, determinism, Tier 2, en≡fr).
+
 #### Nonlinear rate rules — reaction-diffusion on the continuous axis
 - **`rate_rule` gains a `constant` source/sink and `products` (nonlinear
   monomials) term.** A field's time-derivative was previously a *linear*

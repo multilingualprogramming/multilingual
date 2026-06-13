@@ -435,7 +435,7 @@ export function run(core, steps) {
   const trajectory = [core];
   let current = core;
   for (let i = 0; i < steps; i += 1) {
-    current = step(current);
+    current = step(current, i);
     trajectory.push(current);
   }
   return trajectory;

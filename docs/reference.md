@@ -390,6 +390,23 @@ from multilingualprogramming.core.semantic_analyzer import SemanticAnalyzer
 
 ## CLI and REPL
 
+Build a browser-native ES module from a `.multi` file:
+
+```bash
+python -m multilingualprogramming build-browser-module program.multi \
+  --lang en \
+  --export describe,build_manifest \
+  --out public/generated/program/browser_module.mjs
+```
+
+`build-browser-module` is designed for rich JSON-compatible browser output:
+dictionaries, lists, strings, booleans, numbers, comprehensions, deterministic
+seeded random helpers, sets, slices, and exported functions. The output is an
+ES module, so browser applications can load it with dynamic `import()` and call
+the exported Multilingual functions directly. Use the packed WASM bundle for
+narrow scalar ABI calls; use the browser module when the browser needs full
+JSON-shaped manifests or configuration objects.
+
 Run interactive mode:
 
 ```bash

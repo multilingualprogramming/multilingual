@@ -101,6 +101,7 @@ class JavaScriptCodeGenerator:
         self._emit("list: (value) => Array.isArray(value) ? [...value] : Array.from(value),")
         self._emit("dict: (value = {}) => ({ ...value }),")
         self._emit("set: (value = []) => new Set(value),")
+        self._emit("reversed: (value) => Array.from(value).reverse(),")
         self._emit("range: (start, stop, step = 1) => {")
         self._indent()
         self._emit("if (stop === undefined) { stop = start; start = 0; }")
@@ -121,6 +122,7 @@ class JavaScriptCodeGenerator:
         )
         self._emit("sum: (values) => values.reduce((acc, value) => acc + value, 0),")
         self._emit("abs: (value) => Math.abs(value),")
+        self._emit("mod: (left, right) => ((left % right) + right) % right,")
         self._emit("isinstance: (value, type) => {")
         self._indent()
         self._emit("if (type === Array || type === 'list') return Array.isArray(value);")
@@ -382,6 +384,7 @@ class _JSExpressionGenerator:
             "list": "__ml.list",
             "dict": "__ml.dict",
             "set": "__ml.set",
+            "reversed": "__ml.reversed",
             "range": "__ml.range",
             "max": "__ml.max",
             "min": "__ml.min",
@@ -397,6 +400,8 @@ class _JSExpressionGenerator:
             return f"new Set([...{self._expr(node.left)}, ...{self._expr(node.right)}])"
         if node.op == "//":
             return f"Math.trunc(({self._expr(node.left)}) / ({self._expr(node.right)}))"
+        if node.op == "%":
+            return f"__ml.mod({self._expr(node.left)}, {self._expr(node.right)})"
         if node.op == "**":
             return f"(({self._expr(node.left)}) ** ({self._expr(node.right)}))"
         return f"({self._expr(node.left)} {op} {self._expr(node.right)})"
@@ -472,6 +477,8 @@ class _JSExpressionGenerator:
                 return f"Object.values({obj} ?? {{}})"
             if attr == "append":
                 return f"__ml.append({obj}, {args[0] if args else 'undefined'})"
+            if attr == "index":
+                return f"{obj}.indexOf({args[0] if args else 'undefined'})"
             if attr == "replace":
                 return f"{obj}.replaceAll({', '.join(args)})"
             if attr == "join":
