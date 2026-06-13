@@ -401,6 +401,13 @@ class _JSExpressionGenerator:
         return f"{obj}.{node.attr}"
 
     def visit_IndexAccess(self, node):
+        if type(node.index).__name__ == "SliceExpr":
+            start = self._expr(node.index.start) if node.index.start else ""
+            stop = self._expr(node.index.stop) if node.index.stop else ""
+            if node.index.step is not None:
+                self._error("JavaScript generator does not support slice steps yet", node.index)
+            args = ", ".join(part for part in [start, stop] if part != "")
+            return f"{self._expr(node.obj)}.slice({args})"
         return f"{self._expr(node.obj)}[{self._expr(node.index)}]"
 
     def visit_ConditionalExpr(self, node):
