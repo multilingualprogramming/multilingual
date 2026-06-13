@@ -4,12 +4,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 
-"""Tests for the rich browser ESM module bridge."""
+"""Tests for browser-native JavaScript module generation."""
 
 import subprocess
 import sys
 
-from multilingualprogramming.codegen.browser_module import generate_browser_module
+from multilingualprogramming.codegen.js_generator import JavaScriptCodeGenerator
 from multilingualprogramming.lexer.lexer import Lexer
 from multilingualprogramming.parser.parser import Parser
 
@@ -27,17 +27,12 @@ def test_generate_browser_module_exports_named_function():
         "en",
     )
 
-    module_source = generate_browser_module(
-        program,
-        exports=["describe"],
-        stub_modules=["helpers"],
-    )
+    module_source = JavaScriptCodeGenerator(exports=["describe"]).generate(program)
 
-    assert "const PYTHON_SOURCE =" in module_source
-    assert "export async function describe(...args)" in module_source
-    assert "loadPyodide" in module_source
-    assert "dict_converter: Object.fromEntries" in module_source
-    assert 'const STUB_MODULES = ["helpers"];' in module_source
+    assert "function describe(x)" in module_source
+    assert "export { describe };" in module_source
+    assert "loadPyodide" not in module_source
+    assert "return {\"value\": x, \"items\": [x, (x + 1)]};" in module_source
 
 
 def test_build_browser_module_cli_writes_esm(tmp_path):
@@ -72,6 +67,6 @@ def test_build_browser_module_cli_writes_esm(tmp_path):
 
     assert "[PASS]" in result.stdout
     module_source = output.read_text(encoding="utf-8")
-    assert "export async function describe(...args)" in module_source
-    assert 'const STUB_MODULES = ["helpers"];' in module_source
-    assert "return {'value': x, 'items': [x, (x + 1)]}" in module_source
+    assert "export { describe };" in module_source
+    assert "loadPyodide" not in module_source
+    assert "return {\"value\": x, \"items\": [x, (x + 1)]};" in module_source
