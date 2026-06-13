@@ -148,15 +148,17 @@ class RuleDslMultilingualTestSuite(unittest.TestCase):
         "fr": {
             "when": "quand", "neighbor_count": "nombre_voisins", "becomes": "devient",
             "fallback": "repli", "symbol": "symbole", "clause": "clause", "rewrite": "reecrire",
+            "chance": "probabilite",
         },
         "ja": {
             "when": "時", "neighbor_count": "隣接_数", "becomes": "結果",
             "fallback": "予備", "symbol": "記号", "clause": "節", "rewrite": "書き換え",
+            "chance": "確率",
         },
         "de": {
             "when": "sobald", "neighbor_count": "nachbarn_anzahl", "becomes": "ergibt",
             "fallback": "rueckfall", "symbol": "symbol", "clause": "klausel",
-            "rewrite": "umschreiben",
+            "rewrite": "umschreiben", "chance": "wahrscheinlichkeit",
         },
     }
 

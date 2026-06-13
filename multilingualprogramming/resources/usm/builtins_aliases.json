@@ -1608,6 +1608,24 @@
       "da": ["antal_naboer"],
       "fi": ["naapurien_lukumaara"]
     },
+    "chance": {
+      "fr": ["probabilite"],
+      "es": ["probabilidad"],
+      "de": ["wahrscheinlichkeit"],
+      "it": ["probabilita"],
+      "pt": ["probabilidade"],
+      "hi": ["संभावना"],
+      "ar": ["احتمال"],
+      "bn": ["সম্ভাবনা"],
+      "ta": ["வாய்ப்பு"],
+      "zh": ["概率"],
+      "ja": ["確率"],
+      "pl": ["prawdopodobienstwo"],
+      "nl": ["kans"],
+      "sv": ["sannolikhet"],
+      "da": ["sandsynlighed"],
+      "fi": ["todennakoisyys"]
+    },
     "becomes": {
       "fr": ["devient"],
       "es": ["resulta"],
