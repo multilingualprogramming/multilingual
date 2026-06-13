@@ -79,6 +79,14 @@ class JavaScriptCodeGenerator:
     def _target(self, node) -> str:
         return self._expr(node)
 
+    def _param(self, node) -> str:
+        if isinstance(node, str):
+            return node
+        name = getattr(node, "name", str(node))
+        if getattr(node, "default", None) is not None:
+            return f"{name} = {self._expr(node.default)}"
+        return name
+
     def _error(self, message: str, node) -> None:
         raise CodeGenerationError(message, getattr(node, "line", 0), getattr(node, "column", 0))
 
@@ -174,7 +182,7 @@ class JavaScriptCodeGenerator:
         self._emit(f"// from {node.module} import ... handled by generated runtime or host")
 
     def visit_FunctionDef(self, node) -> None:
-        params = ", ".join(getattr(param, "name", str(param)) for param in node.params)
+        params = ", ".join(self._param(param) for param in node.params)
         self._emit(f"function {node.name}({params}) {{")
         self._emit_body(node.body)
         self._emit("}")
@@ -446,7 +454,10 @@ class _JSExpressionGenerator:
             stop = self._expr(node.index.stop) if node.index.stop else ""
             if node.index.step is not None:
                 self._error("JavaScript generator does not support slice steps yet", node.index)
-            args = ", ".join(part for part in [start, stop] if part != "")
+            if start == "" and stop != "":
+                args = f"0, {stop}"
+            else:
+                args = ", ".join(part for part in [start, stop] if part != "")
             return f"{self._expr(node.obj)}.slice({args})"
         return f"{self._expr(node.obj)}[{self._expr(node.index)}]"
 
