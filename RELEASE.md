@@ -1,5 +1,29 @@
 # Release Notes
 
+## v0.8.2 - 2026-06-14
+
+### WAT/WASM Host ABI Alignment
+
+This patch release tightens the host↔wasm list ABI so JavaScript hosts can pass numeric arrays
+into list-parameter exports and read list results through zero-copy `Float64Array` views without
+alignment hazards.
+
+#### WAT/WASM Runtime
+- Added `__ml_list_alloc(n)`, the host-side dual of the existing wasm→host list readers. Hosts can
+  allocate a list block, fill the item region through a `Float64Array` view, and pass the pointer
+  directly to a list-parameter export.
+- Made `$ml_alloc` round the bump cursor to an 8-byte boundary before every fresh allocation, so
+  string allocations can no longer leave following list headers/items misaligned.
+- Kept class-recycled blocks aligned because they originate from the aligned bump allocator path.
+
+#### Docs
+- Corrected the documented `math.log` accuracy to the measured ~2e-10 range.
+- Clarified that WAT `round(x)` follows Python / IEEE-754 round-half-to-even semantics via
+  `f64.nearest`, rather than JavaScript `Math.round` semantics.
+
+#### Packaging
+- Bumped package version to `0.8.2`.
+
 ## v0.8.1 - 2026-06-13
 
 ### Stochastic And Nonlinear Process Dynamics

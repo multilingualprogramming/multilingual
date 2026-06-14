@@ -4,8 +4,8 @@ This matrix defines the current compatibility baseline for `multilingual`.
 
 Baseline source of truth:
 - `examples/complete_features_en.multi` (`.ml` also supported)
-- `tests/` (3019 passing tests, 14 skipped, plus 417 passing subtests in the
-  latest local 0.8.1 release pass)
+- `tests/` (3021 passing tests, 14 skipped, plus 417 passing subtests in the
+  latest local 0.8.2 release pass)
 
 Target runtime:
 - CPython `3.12+` (CI covers Python 3.12, 3.13, and 3.14)
@@ -229,7 +229,7 @@ See [docs/wat_oop_model.md](wat_oop_model.md) for the full object model referenc
 
 ## Test Coverage
 
-The latest local 0.8.1 release pass reported `3019 passed, 14 skipped,
+The latest local 0.8.2 release pass reported `3021 passed, 14 skipped,
 2 warnings, 417 subtests passed`. The suite currently includes 118 pytest files
 and about 38k lines of tests covering:
 

@@ -6,6 +6,8 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-06-14
+
 ### Added
 
 - **`__ml_list_alloc(n)` host→wasm list allocator.** The runtime exposed
