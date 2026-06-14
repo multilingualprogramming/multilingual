@@ -778,6 +778,18 @@ class WATGeneratorCoreMixin:
         return
       end
     end
+    ;; Align the bump cursor up to 8 bytes before carving a fresh block so every
+    ;; heap allocation is 8-aligned. This keeps list headers/items at 8-aligned
+    ;; addresses (a prior __ml_str_alloc of len+4 can otherwise leave the cursor
+    ;; odd), so host callers may use zero-copy Float64Array views at base+8 in
+    ;; both directions. Class-recycled blocks stay 8-aligned since they originate
+    ;; from this aligned bump.
+    global.get $__heap_ptr
+    i32.const 7
+    i32.add
+    i32.const -8
+    i32.and
+    global.set $__heap_ptr
     global.get $__heap_ptr
     local.set $ptr
     local.get $ptr
@@ -860,6 +872,29 @@ class WATGeneratorCoreMixin:
     local.get $base
     i32.const 4
     i32.add
+  )
+  ;; Allocate a multilingual list buffer for host->wasm numeric-array passing.
+  ;; Reserves a header f64 (count) plus `n` f64 items, writes the count into the
+  ;; header, and returns the base pointer as f64 (the list ABI value). The base is
+  ;; 8-aligned (see $ml_alloc), so JS callers may fill items through a zero-copy
+  ;; Float64Array view at base+8 and then pass the pointer straight to a
+  ;; list-parameter export. Host-side dual of $__ml_str_alloc; complements the
+  ;; read-only $__ml_list_item / $__ml_list_count helpers below.
+  (func $__ml_list_alloc (export "__ml_list_alloc") (param $n i32) (result f64)
+    (local $base i32)
+    local.get $n
+    i32.const 8
+    i32.mul
+    i32.const 8
+    i32.add
+    call $ml_alloc
+    local.set $base
+    local.get $base
+    local.get $n
+    f64.convert_i32_s
+    f64.store
+    local.get $base
+    f64.convert_i32_s
   )
   ;; Layout des listes multilingual (heap-backed) :
   ;;   ptr+0  : header f64 = nombre d'éléments

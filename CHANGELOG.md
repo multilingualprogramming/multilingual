@@ -6,6 +6,43 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+### Added
+
+- **`__ml_list_alloc(n)` host→wasm list allocator.** The runtime exposed
+  `__ml_str_alloc` (host→wasm string bytes) and `__ml_list_count` /
+  `__ml_list_item` (read-only wasm→host), but there was **no way for a JS host to
+  pass a numeric array *into* a list-parameter function** — callers had to
+  repurpose `__ml_str_alloc` and hand-write the list layout. `__ml_list_alloc(n)`
+  is the missing dual: it reserves a header f64 (count) plus `n` f64 items, writes
+  the count, and returns the 8-aligned base as the list ABI pointer. The host
+  fills items through a zero-copy `Float64Array` view at `base+8` and passes the
+  pointer straight to a list-parameter export. Regression:
+  `test_ml_list_alloc_host_to_wasm_array`.
+
+### Changed
+
+- **Heap allocations are now 8-aligned.** `$ml_alloc` rounds the bump cursor up to
+  8 bytes before carving a fresh block, so every allocation (and therefore every
+  list header/items region) is 8-aligned. Previously a `__ml_str_alloc(len)` of a
+  non-`(8k−4)` length could leave the cursor odd, which forced JS hosts to read
+  returned lists with `DataView` instead of zero-copy `Float64Array` views. Now
+  both directions are zero-copy-safe. Class-recycled blocks stay aligned since they
+  originate from the aligned bump. Regression:
+  `test_ml_alloc_returns_8_aligned_after_str_alloc`.
+
+### Docs
+
+- **`math.log` accuracy corrected.** Earlier notes conservatively cited ~1e-6; the
+  implementation actually measures **~2e-10** max absolute/relative error across
+  `log(0.5)` → `log(1e10)` (verified via wasmtime vs CPython `math.log`).
+- **Rounding semantics clarified.** `round(x)` lowers to `f64.nearest`, i.e.
+  **round-half-to-even** (Python / IEEE-754 default) — `round(2.5) == 2`. This
+  differs from JavaScript's `Math.round`, which is round-half-up toward +∞
+  (`Math.round(2.5) === 3`). Code porting JS `Math.round` should use
+  `trunc(x + 0.5)` (bit-identical to `Math.round` for finite values), **not**
+  `round`. No new builtin is added: a second JS-flavoured round would be
+  ambiguous next to the Python-semantics `round`.
+
 ## [0.8.1] - 2026-06-13
 
 ### Added
@@ -206,7 +243,7 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
   non-integer exponent outside `{0, 0.5, 1, -0.5}`. Now falls back to
   `exp(b · ln(a))` for `base > 0` ; negative base with non-integer exp still
   returns NaN (no real value). Precision is bounded by `math.exp`/`math.log`
-  (~1e-6 with the 2026-05-22 log fix and the new exp range reduction below).
+  (`math.log` measures ~2e-10; see its entry below).
   Regression: `test_pow_f64_general_real_exponents`.
 
 - **`math.exp` range reduction.** Previously a 10-term Taylor applied
@@ -277,8 +314,9 @@ typed-IR pass :
   `log(10)` returned ~2.255 instead of 2.302585 (~2% error for arguments far from 1). Now uses
   IEEE-754 bit manipulation (`i64.reinterpret_f64`) to split `x = m·2^e`, reduces `m` further to
   `[sqrt(0.5), sqrt(2))`, and computes `log(m) + e·log(2)`. The atanh argument stays in
-  `[-0.172, 0.172]` so the 5-term series converges to ~2.2e-8. Verified to ~1e-6 accuracy across
-  `log(0.5)` → `log(1e10)`.
+  `[-0.172, 0.172]` so the 5-term series converges to ~2.2e-8. Verified to **~2e-10** max
+  absolute/relative error across `log(0.5)` → `log(1e10)` (measured via wasmtime against
+  CPython `math.log`; earlier notes conservatively cited ~1e-6).
 
 #### WAT/WASM backend — list-return propagation
 - **User functions returning lists are now tracked at the call site.** A function whose body
