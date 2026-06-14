@@ -1,0 +1,48 @@
+# Eden growth -- a stochastic accretion cluster as a semantic-core-v1 polymodal
+# program, authored entirely in the Multilingual language -- no Python. Build:
+#
+#     python -m multilingualprogramming process-build examples/eden_growth.multi
+#
+# This is the first *stochastic* program. Game of Life, the ecology and the
+# L-system are deterministic rewriting; diffusion and Gray-Scott are
+# deterministic dynamics. Eden growth adds the one ingredient they all lack --
+# chance. A cluster grows by accretion: each step, an empty cell touching the
+# cluster joins it *with probability p*. From a single seed this grows a blob
+# with a characteristically rough, fractal boundary (the Eden model of tumour /
+# colony / deposition growth, KPZ-class surface roughening).
+#
+# The randomness is the new `chance` predicate: a clause fires only a fraction
+# of the time, the fraction set by a *deterministic* hash of the cell, the step,
+# and a salt -- so the trajectory is reproducible and byte-identical in Python
+# and JS, no PRNG state anywhere. The engine still names no system; chance is
+# just another clause predicate alongside `when` and `neighbor_count`.
+
+# The growth rule. An empty cell (alive = 0) that touches at least one cluster
+# cell (von-Neumann neighbour count 1..4) joins the cluster with probability p.
+# There is no `fallback`: a cell matching no clause is left unchanged, so a
+# cluster cell stays alive forever and an empty cell that does not (yet) catch
+# stays empty -- growth is monotone, exactly the Eden model.
+def eden_rule():
+    let p = 0.5
+    return rewrite(
+        clause(when(alive=0), neighbor_count("alive", 1, [1, 2, 3, 4]), chance(p), becomes(alive=1))
+    )
+
+# A bounded (non-wrapping) lattice seeded with a single live cell at the centre.
+# Walls, not a torus, so the cluster grows outward into open space.
+let width = 41
+let height = 41
+let cx = width // 2
+let cy = height // 2
+let loci = [{"locus": [x, y], "alive": 1 if x == cx and y == cy else 0} for x in range(width) for y in range(height)]
+let state = {"loci": loci}
+
+# Assemble the four axes: a bounded von-Neumann-4 lattice, rewritten by the
+# stochastic growth rule under a synchronous schedule (every frontier cell rolls
+# once per step). Fixed population: cells never leave, they only switch on.
+let process = build_process_core(
+    state,
+    lattice_topology(width, height, False, "von-neumann4"),
+    eden_rule(),
+    synchronous_schedule()
+)

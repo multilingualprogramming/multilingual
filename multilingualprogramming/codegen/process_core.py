@@ -111,14 +111,15 @@ _VONNEUMANN4_OFFSETS = ((0, -1), (-1, 0), (1, 0), (0, 1))
 # Rule kinds
 RULE_REWRITE = "rewrite"
 # A rate rule describes a *continuous* dynamics: instead of a discrete
-# match -> produce replacement, it gives each field's rate of change as a linear
-# combination of the locus's own fields and an aggregate (the mean) over its
-# neighbours. The continuous-dt schedule integrates it one explicit-Euler step.
-# This is the second general rule kind (it names no system, just as
-# ``rewrite`` does): diffusion, decay, and linear reaction-diffusion are
-# particular coefficient sets, not engine branches. Nonlinear terms (products of
-# fields) are a future rate-rule shape, the continuous analogue of the
-# positional/multiset predicates still open for ``rewrite``.
+# match -> produce replacement, it gives each field's rate of change as data.
+# The continuous-dt schedule integrates it one explicit-Euler step. This is the
+# second general rule kind (it names no system, just as ``rewrite`` does): every
+# system is a particular set of coefficients, not an engine branch. A field's
+# rate sums four optional contributions -- linear ``self`` coefficients, linear
+# ``neighbor_mean`` coefficients, a ``constant`` source/sink, and nonlinear
+# ``products`` (monomials over the locus's own fields). Diffusion and linear
+# reaction-diffusion use only the first two; the products term reaches the
+# nonlinear continuous systems (Gray-Scott, predator-prey, FitzHugh-Nagumo).
 RULE_RATE = "rate"
 
 # Schedule kinds
@@ -295,26 +296,34 @@ def rate_rule(rates: dict[str, Any]) -> dict[str, Any]:
     """Declare a continuous rate rule: each field's time-derivative as data.
 
     The continuous counterpart of :func:`rewrite_rule`. ``rates`` maps a state
-    field to a description of its rate of change::
+    field to a description of its rate of change, a sum of four optional terms::
 
         {
           "u": {
-            "self": {"u": -0.2},           # coefficients on the locus's own fields
-            "neighbor_mean": {"u": 0.2}     # coefficients on the mean over neighbours
+            "self": {"u": -0.2},               # linear, on the locus's own fields
+            "neighbor_mean": {"u": 0.2},        # linear, on the mean over neighbours
+            "constant": 0.04,                   # a scalar source/sink (optional)
+            "products": [                       # nonlinear monomials (optional)
+              {"coeff": -1.0, "factors": ["u", "v", "v"]}  # -u*v*v
+            ]
           }
         }
 
     For each locus the rate of a field is the sum of ``self`` coefficients times
-    the locus's own field values plus ``neighbor_mean`` coefficients times the
-    mean of that field over the locus's existing neighbours. The
-    :data:`SCHEDULE_CONTINUOUS` schedule integrates one explicit-Euler step,
-    ``next[field] = field + dt * rate``.
+    the locus's own field values, plus ``neighbor_mean`` coefficients times the
+    mean of that field over the locus's existing neighbours, plus the
+    ``constant`` source/sink, plus each ``products`` monomial (its ``coeff``
+    times the product of the locus's own ``factors`` values, factors repeating
+    to raise a power). The :data:`SCHEDULE_CONTINUOUS` schedule integrates one
+    explicit-Euler step, ``next[field] = field + dt * rate``.
 
-    This is enough for diffusion (``du/dt = D*(mean_nbr(u) - u)`` is
+    The first two terms give diffusion (``du/dt = D*(mean_nbr(u) - u)`` is
     ``self={"u": -D}, neighbor_mean={"u": D}``), linear decay, and linear
-    reaction-diffusion -- all as pure data, no system named in the engine.
-    Like the rewrite rule it is deliberately the cheapest expressive slice:
-    nonlinear terms (products of fields) are a future rate shape.
+    reaction-diffusion. ``constant`` and ``products`` reach the nonlinear
+    continuous systems -- Gray-Scott, Lotka-Volterra predator-prey,
+    FitzHugh-Nagumo -- all as pure data, no system named in the engine. A rule
+    that omits ``constant`` and ``products`` integrates exactly as before they
+    were added.
     """
     if not isinstance(rates, dict):
         raise ValueError("rates must be a dict of field -> contributions")
@@ -418,6 +427,22 @@ def fallback(**fields: Any) -> dict[str, Any]:
     return {_DSL_TAG: "default", "value": dict(fields)}
 
 
+def chance(probability: float, salt: int = 0) -> dict[str, Any]:
+    """A clause predicate that fires only with a given probability.
+
+    ``chance(0.1)`` makes a clause match a tenth of the time -- the stochastic
+    counterpart of the deterministic ``when``/``neighbor_count`` predicates. The
+    randomness is a *deterministic* function of the locus coordinate, the step
+    index, and ``salt`` (so two clauses in one rule can roll independently): see
+    :func:`hash01`. It is therefore reproducible and byte-identical across the
+    Python and JS runtimes -- no PRNG state, no seed plumbing. This is what
+    lets a rule express stochastic growth (Eden clusters, percolation, noisy
+    cellular automata) while the engine stays pure and the trajectory stays a
+    deterministic function of the manifest. Pass it to :func:`clause`.
+    """
+    return {_DSL_TAG: "chance", "probability": probability, "salt": salt}
+
+
 def clause(*parts: dict[str, Any]) -> dict[str, Any]:
     """Assemble one canonical ``match -> produce`` clause from its parts.
 
@@ -429,6 +454,7 @@ def clause(*parts: dict[str, Any]) -> dict[str, Any]:
     """
     self_fields: dict[str, Any] | None = None
     predicates: list[dict[str, Any]] = []
+    chance_spec: dict[str, Any] | None = None
     produce_value: Any = None
     have_produce = False
     for part in parts:
@@ -439,13 +465,20 @@ def clause(*parts: dict[str, Any]) -> dict[str, Any]:
             self_fields = part["fields"]
         elif tag == "neighbor_count":
             predicates.append(part["predicate"])
+        elif tag == "chance":
+            if chance_spec is not None:
+                raise ValueError("clause takes at most one chance(...)")
+            chance_spec = {"p": part["probability"], "salt": part["salt"]}
         elif tag == "produce":
             if have_produce:
                 raise ValueError("clause takes exactly one becomes(...)")
             produce_value = part["value"]
             have_produce = True
         else:
-            raise ValueError(f"clause parts must be when/neighbor_count/becomes, got {part!r}")
+            raise ValueError(
+                "clause parts must be when/neighbor_count/chance/becomes, "
+                f"got {part!r}"
+            )
     if not have_produce:
         raise ValueError("clause needs a becomes(...)")
     match: dict[str, Any] = {}
@@ -453,6 +486,8 @@ def clause(*parts: dict[str, Any]) -> dict[str, Any]:
         match["self"] = self_fields
     if predicates:
         match["neighbor_count"] = predicates
+    if chance_spec is not None:
+        match["chance"] = chance_spec
     return {"match": match, "produce": produce_value}
 
 
@@ -653,13 +688,45 @@ def _grid(core: dict[str, Any]) -> dict[Any, dict[str, Any]]:
     return {_locus_key(rec, topology): rec for rec in core["state"]["loci"]}
 
 
+def hash01(x: int, y: int, step_index: int, salt: int) -> float:
+    """A deterministic pseudo-random value in [0, 1) keyed by (x, y, step, salt).
+
+    The backbone of the stochastic :func:`chance` predicate. It must produce the
+    same float in CPython and the JS port, so it is built entirely from exact
+    32-bit integer arithmetic (a MurmurHash3-style mix and finalizer): every
+    multiply is taken mod 2**32 (the JS port uses ``Math.imul`` / ``>>> 0`` to
+    match), every shift is on a non-negative 32-bit word, and the final divide by
+    2**32 is the one floating-point op -- exact and identical on both sides. No
+    PRNG state lives anywhere; randomness is a pure function of the coordinates
+    and time, which is exactly what keeps a stochastic trajectory reproducible.
+    """
+    mask = 0xFFFFFFFF
+    h = (x & mask) * 0x9E3779B1 & mask
+    h = (h ^ ((y + 0x85EBCA77) & mask)) & mask
+    h = (h * 0xC2B2AE3D) & mask
+    h = (h ^ ((step_index & mask) * 0x27D4EB2F & mask)) & mask
+    h = (h ^ (salt & mask)) & mask
+    # MurmurHash3 fmix32 finalizer -- avalanche the bits.
+    h ^= h >> 16
+    h = (h * 0x85EBCA6B) & mask
+    h ^= h >> 13
+    h = (h * 0xC2B2AE35) & mask
+    h ^= h >> 16
+    return h / 4294967296.0
+
+
 def _clause_matches(
     rec: dict[str, Any],
     nbs: list[tuple[int, int]],
     grid: dict[tuple[int, int], dict[str, Any]],
     match: dict[str, Any],
+    step_index: int = 0,
 ) -> bool:
-    """Test one clause's ``match`` against a locus and its neighbours."""
+    """Test one clause's ``match`` against a locus and its neighbours.
+
+    ``step_index`` is the index of the step being computed; it feeds the
+    optional stochastic ``chance`` predicate so randomness varies over time.
+    """
     for field, value in match.get("self", {}).items():
         if rec.get(field) != value:
             return False
@@ -672,6 +739,11 @@ def _clause_matches(
         )
         if tally not in allowed:
             return False
+    chance_spec = match.get("chance")
+    if chance_spec is not None and "locus" in rec:
+        roll = hash01(rec["locus"][0], rec["locus"][1], step_index, chance_spec["salt"])
+        if roll >= chance_spec["p"]:
+            return False
     return True
 
 
@@ -681,6 +753,7 @@ def _produce_for(
     grid: dict[tuple[int, int], dict[str, Any]],
     clauses: list[dict[str, Any]],
     default: dict[str, Any] | None,
+    step_index: int = 0,
 ) -> dict[str, Any] | None:
     """Return the produce dict for a locus: first matching clause, else default.
 
@@ -692,7 +765,7 @@ def _produce_for(
     stays put), without inventing a catch-all state for the rest.
     """
     for rule_clause in clauses:
-        if _clause_matches(rec, nbs, grid, rule_clause.get("match", {})):
+        if _clause_matches(rec, nbs, grid, rule_clause.get("match", {}), step_index):
             return rule_clause["produce"]
     return default
 
@@ -707,6 +780,7 @@ def _step_fixed(
     topology: dict[str, Any],
     clauses: list[dict[str, Any]],
     default: dict[str, Any],
+    step_index: int = 0,
 ) -> list[dict[str, Any]]:
     """Fixed population: every declared locus persists, only its state moves."""
     grid = _grid(core)
@@ -716,7 +790,7 @@ def _step_fixed(
         key = _locus_key(rec, topology)
         nbs = neighbors(topology, key)
         next_rec = dict(rec)
-        produce = _produce_for(rec, nbs, grid, clauses, default)
+        produce = _produce_for(rec, nbs, grid, clauses, default, step_index)
         if produce is not None:
             next_rec.update(produce)
         if is_lattice:
@@ -732,6 +806,7 @@ def _step_async(
     topology: dict[str, Any],
     clauses: list[dict[str, Any]],
     default: dict[str, Any] | None,
+    step_index: int = 0,
 ) -> list[dict[str, Any]]:
     """Asynchronous population: sequential in-place update in a fixed order.
 
@@ -747,7 +822,7 @@ def _step_async(
     for key in sorted(grid):
         rec = grid[key]
         nbs = neighbors(topology, key)
-        produce = _produce_for(rec, nbs, grid, clauses, default)
+        produce = _produce_for(rec, nbs, grid, clauses, default, step_index)
         if produce is None:
             continue
         updated = dict(rec)
@@ -767,12 +842,22 @@ def _rate_for(
 ) -> dict[str, float]:
     """Evaluate a rate rule at one locus: each field's time-derivative.
 
-    A field's rate is ``sum(self_coeff * own_field)`` plus
-    ``sum(neighbor_coeff * mean_over_neighbours(field))``. The mean is taken
-    over the locus's *existing* neighbours (so it is well-defined at a bounded
-    lattice's edge); with no neighbours the neighbour term is zero. Neighbours
-    are summed in :func:`neighbors` order, which is identical in every runtime,
-    so the floating-point result is reproducible across ports.
+    A field's rate is the sum of four optional contributions, evaluated in this
+    fixed order so the floating-point result is reproducible across ports:
+
+    1. ``self``          -- ``sum(coeff * own_field)`` (linear, own values);
+    2. ``neighbor_mean`` -- ``sum(coeff * mean_over_neighbours(field))``;
+    3. ``constant``      -- a scalar source/sink term;
+    4. ``products``      -- nonlinear monomials over the locus's own fields,
+       each ``{"coeff": c, "factors": [f, ...]}`` contributing
+       ``c * own[f0] * own[f1] * ...`` (factors repeat to raise a power).
+
+    The neighbour mean is taken over the locus's *existing* neighbours (so it is
+    well-defined at a bounded lattice's edge); with no neighbours that term is
+    zero. Neighbours are summed in :func:`neighbors` order, which is identical in
+    every runtime. ``constant`` and ``products`` are appended only when present,
+    so a rule that uses neither integrates byte-identically to before they
+    existed.
     """
     present = [grid[nb] for nb in nbs if nb in grid]
     count = len(present)
@@ -792,6 +877,19 @@ def _rate_for(
                 for p in present:
                     total += p.get(src, 0)
                 rate += coeff * (total / count)
+        # A constant source/sink (e.g. Gray-Scott's feed F). Only added when the
+        # key is present so existing linear rules are bit-for-bit unchanged
+        # (``rate + 0.0`` would flip a -0.0 result and drift a manifest).
+        if "constant" in terms:
+            rate += terms["constant"]
+        # Nonlinear monomials over the locus's own fields -- the reaction terms
+        # diffusion and decay cannot express (Gray-Scott's -u·v², predator-prey
+        # coupling). Evaluated as a left-fold in factor order, identical in JS.
+        for monomial in terms.get("products", ()):
+            term = monomial.get("coeff", 1.0)
+            for factor in monomial.get("factors", ()):
+                term *= rec.get(factor, 0)
+            rate += term
         out[field] = rate
     return out
 
@@ -828,6 +926,7 @@ def _step_open(
     topology: dict[str, Any],
     clauses: list[dict[str, Any]],
     default: dict[str, Any],
+    step_index: int = 0,
 ) -> list[dict[str, Any]]:
     """Open population: rules may create and destroy loci.
 
@@ -851,7 +950,7 @@ def _step_open(
         rec = grid.get(locus, {"locus": [locus[0], locus[1]], **empty})
         nbs = neighbors(topology, locus)
         produced = dict(rec)
-        produce = _produce_for(rec, nbs, grid, clauses, default)
+        produce = _produce_for(rec, nbs, grid, clauses, default, step_index)
         if produce is not None:
             produced.update(produce)
         produced["locus"] = [locus[0], locus[1]]
@@ -889,13 +988,18 @@ def _step_generative(core: dict[str, Any]) -> list[dict[str, Any]]:
     return next_sequence
 
 
-def step(core: dict[str, Any]) -> dict[str, Any]:
+def step(core: dict[str, Any], step_index: int = 0) -> dict[str, Any]:
     """Advance the process core by one step, returning a new core.
 
     Dispatches on the schedule, rule ``kind``, and population mode. The
     input core is never mutated; the topology, rule, and schedule pass
     through unchanged and only the state advances -- so a trajectory is a
     sequence of full, independently projectable manifests.
+
+    ``step_index`` is the 0-based index of this step within a run; it is
+    threaded to the stochastic ``chance`` predicate so a rule's randomness
+    varies from one step to the next. A deterministic rule ignores it, so
+    every existing program steps exactly as before.
     """
     schedule_kind = core["schedule"].get("kind")
     if schedule_kind == SCHEDULE_GENERATIVE:
@@ -943,9 +1047,9 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
             raise NotImplementedError(
                 f"asynchronous schedule with population {population!r} not yet supported"
             )
-        next_loci = _step_async(core, topology, clauses, default)
+        next_loci = _step_async(core, topology, clauses, default, step_index)
     elif population == POPULATION_FIXED:
-        next_loci = _step_fixed(core, topology, clauses, default)
+        next_loci = _step_fixed(core, topology, clauses, default, step_index)
     elif population == POPULATION_OPEN:
         # Open population grows and prunes loci by coordinate frontier, so it is
         # defined on a lattice; an open graph would mean creating and destroying
@@ -954,7 +1058,7 @@ def step(core: dict[str, Any]) -> dict[str, Any]:
             raise NotImplementedError(
                 f"open population with topology {topology.get('kind')!r} not yet supported"
             )
-        next_loci = _step_open(core, topology, clauses, default)
+        next_loci = _step_open(core, topology, clauses, default, step_index)
     else:
         raise NotImplementedError(f"population mode {population!r} not yet supported")
 
@@ -972,8 +1076,8 @@ def run(core: dict[str, Any], steps: int) -> list[dict[str, Any]]:
         raise ValueError("steps must be nonnegative")
     trajectory = [core]
     current = core
-    for _ in range(steps):
-        current = step(current)
+    for i in range(steps):
+        current = step(current, i)
         trajectory.append(current)
     return trajectory
 

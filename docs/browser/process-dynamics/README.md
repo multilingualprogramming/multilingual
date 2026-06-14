@@ -14,6 +14,8 @@ program's expressiveness tier, read straight from the manifest's axes.
 | [ecosystem.html](ecosystem.html) — cyclic-dominance ecology | asynchronous multi-state field | 1 |
 | [graph.html](graph.html) — SIR network contagion | graph topology | 4 |
 | [diffusion.html](diffusion.html) — heat equation | continuous-time rate rule | 1 |
+| [gray_scott.html](gray_scott.html) — Gray-Scott reaction-diffusion | nonlinear continuous rate rule (`products`) | 1 |
+| [eden.html](eden.html) — Eden growth | stochastic synchronous rewriting (`chance`) | 2 |
 
 Each `program.*.v1.json` is generated from the matching program in
 [`examples/`](../../../examples) (`*.multi`) via the build CLI; they are checked

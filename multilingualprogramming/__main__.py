@@ -30,6 +30,7 @@ from multilingualprogramming.codegen.encoding_guard import (
 )
 from multilingualprogramming.codegen.build_orchestrator import BuildOrchestrator
 from multilingualprogramming.codegen.executor import ProgramExecutor
+from multilingualprogramming.codegen.js_generator import JavaScriptCodeGenerator
 from multilingualprogramming.codegen.python_generator import PythonCodeGenerator
 from multilingualprogramming.codegen.repl import REPL
 from multilingualprogramming.codegen.wat_generator import WATCodeGenerator
@@ -348,6 +349,19 @@ def cmd_build_wasm_bundle(args):
     print(f"[PASS] {outputs.renderer_template_js}")
     print(f"[PASS] {outputs.build_graph}")
     print(f"[PASS] {outputs.build_lockfile}")
+
+
+def cmd_build_browser_module(args):
+    """Build a browser-native ESM module for rich JSON-compatible output."""
+    program = _parse_program_from_file(args.file, args.lang)
+    exports = []
+    for item in getattr(args, "export", []) or []:
+        exports.extend(name.strip() for name in item.split(",") if name.strip())
+    module_source = JavaScriptCodeGenerator(exports=exports).generate(program)
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(module_source, encoding="utf-8")
+    print(f"[PASS] {out_path}")
 
 
 def cmd_build_ui_bundle(args):
@@ -829,6 +843,35 @@ def main():  # pylint: disable=too-many-statements,too-many-locals,too-many-bran
         ),
     )
 
+    build_browser_module_parser = subparsers.add_parser(
+        "build-browser-module",
+        help="Build a browser-native ESM module for rich JSON-compatible functions",
+    )
+    build_browser_module_parser.add_argument("file", help="Path to the source file")
+    build_browser_module_parser.add_argument(
+        "--lang", default=None,
+        help="Source language code (e.g., en, fr, hi). Auto-detect if omitted.",
+    )
+    build_browser_module_parser.add_argument(
+        "--out", default="program.browser.mjs",
+        help="Output ESM module path (default: program.browser.mjs)",
+    )
+    build_browser_module_parser.add_argument(
+        "--export",
+        action="append",
+        default=[],
+        help=(
+            "Function to export. May be repeated or comma-separated. "
+            "If omitted, the module exposes call(name, ...args)."
+        ),
+    )
+    build_browser_module_parser.add_argument(
+        "--stub-module",
+        action="append",
+        default=[],
+        help="Deprecated compatibility flag; native JS generation does not load Python modules.",
+    )
+
     # build-ui-bundle subcommand
     build_ui_bundle_parser = subparsers.add_parser(
         "build-ui-bundle",
@@ -1015,6 +1058,8 @@ def main():  # pylint: disable=too-many-statements,too-many-locals,too-many-bran
         cmd_encoding_check_generated(args)
     elif args.command == "build-wasm-bundle":
         cmd_build_wasm_bundle(args)
+    elif args.command == "build-browser-module":
+        cmd_build_browser_module(args)
     elif args.command == "build-ui-bundle":
         cmd_build_ui_bundle(args)
     elif args.command == "spatial-build":

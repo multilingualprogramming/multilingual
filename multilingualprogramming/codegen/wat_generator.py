@@ -1340,7 +1340,11 @@ class WATCodeGenerator(
                 self._gen_expr(node.args[0], indent)
                 self._emit(f"{indent}f64.sqrt")
             elif fname in _ROUND_NAMES and len(node.args) == 1:
-                # round(x) → f64.nearest (IEEE 754 round-half-to-even)
+                # round(x) → f64.nearest (IEEE 754 round-half-to-even, Python's
+                # round): round(2.5) == 2. NOTE: this is NOT JavaScript Math.round
+                # (round-half-up toward +inf, Math.round(2.5) === 3). Port JS
+                # rounding with trunc(x + 0.5), not round. See CHANGELOG "Rounding
+                # semantics clarified".
                 self._gen_expr(node.args[0], indent)
                 self._emit(f"{indent}f64.nearest")
             elif resolved_fname in {"math.floor", "floor"} and len(node.args) == 1:

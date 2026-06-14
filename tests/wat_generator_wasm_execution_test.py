@@ -829,6 +829,72 @@ class WATExpressionSemanticsWasmExecutionTestSuite(unittest.TestCase):
         self.assertEqual(ex["__ml_list_item"](store, ptr, 1.0), 22.0)
         self.assertEqual(ex["__ml_list_item"](store, ptr, 4.0), 55.0)
 
+    def test_ml_list_alloc_host_to_wasm_array(self):
+        # Host->wasm numeric-array passing : __ml_list_alloc(n) réserve un header
+        # (count) + n items f64 et renvoie une base 8-alignée. Le caller hôte écrit
+        # les items via une vue Float64Array à base+8, puis passe le pointeur à une
+        # fonction à paramètre liste. Dual host de __ml_str_alloc.
+        prog = _parse_source(
+            "déf somme_liste(valeurs):\n"
+            "    soit n = longueur(valeurs)\n"
+            "    soit s = 0.0\n"
+            "    soit k = 0\n"
+            "    tantque k < n:\n"
+            "        s = s + valeurs[k]\n"
+            "        k = k + 1\n"
+            "    retour s\n",
+            language="fr",
+        )
+        wat = WATCodeGenerator().generate(prog)
+        import struct  # pylint: disable=import-outside-toplevel
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        memory = ex["memory"]
+        items = [3.5, -2.0, 7.25, 0.0, 1.25]
+        ptr = ex["__ml_list_alloc"](store, len(items))
+        base = int(ptr)
+        # La base doit être 8-alignée pour permettre les vues Float64Array.
+        self.assertEqual(base % 8, 0)
+        # Le header (count) est écrit par __ml_list_alloc.
+        self.assertEqual(ex["__ml_list_count"](store, ptr), float(len(items)))
+        # Écriture des items à base+8 (comme une vue Float64Array côté hôte).
+        data = memory.data_ptr(store)
+        for i, v in enumerate(items):
+            for j, byte in enumerate(struct.pack("<d", v)):
+                data[base + 8 + i * 8 + j] = byte
+        # __ml_list_item relit ce que l'hôte a écrit.
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 0.0), 3.5)
+        self.assertEqual(ex["__ml_list_item"](store, ptr, 2.0), 7.25)
+        # La liste construite côté hôte est consommée par une fonction .multi.
+        self.assertAlmostEqual(ex["somme_liste"](store, ptr), sum(items), places=12)
+
+    def test_ml_alloc_returns_8_aligned_after_str_alloc(self):
+        # Régression alignement : un __ml_str_alloc(len+4) non multiple de 8 ne doit
+        # plus laisser le curseur de tas désaligné — l'allocation suivante reste
+        # 8-alignée (condition des vues Float64Array zéro-copie dans les deux sens).
+        prog = _parse_source("déf rien():\n    retour 0.0\n", language="fr")
+        wat = WATCodeGenerator().generate(prog)
+        import wasmtime  # pylint: disable=import-outside-toplevel,import-error
+        wasm = wasmtime.wat2wasm(wat)
+        engine = wasmtime.Engine()
+        store = wasmtime.Store(engine)
+        store.set_wasi(wasmtime.WasiConfig())
+        linker = wasmtime.Linker(engine)
+        linker.define_wasi()
+        inst = linker.instantiate(store, wasmtime.Module(engine, wasm))
+        ex = inst.exports(store)
+        # str_alloc(5) -> bloc de 9 octets (5+4) : casserait l'alignement sans le fix.
+        ex["__ml_str_alloc"](store, 5)
+        base = int(ex["__ml_list_alloc"](store, 3))
+        self.assertEqual(base % 8, 0)
+
     def test_format_fixed_dynamic_n(self):
         # B4 : `format_fixed(v, n)` builtin avec n variable au runtime
         # (clampé à [0, 9]). Remplace les formatter_fixe_2/3/5/6 dans fractales.

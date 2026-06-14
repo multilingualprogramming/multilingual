@@ -1,0 +1,74 @@
+# La réaction-diffusion de Gray-Scott comme programme polymodal
+# semantic-core-v1, écrit entièrement dans le langage Multilingual -- sans
+# Python. Construire avec :
+#
+#     python -m multilingualprogramming process-build examples/gray_scott.fr.multi --lang fr
+#
+# C'est le même programme que examples/gray_scott.multi, mais en français : il se
+# réduit à un noyau de processus identique. Les clés du manifeste ("self",
+# "neighbor_mean", "constant", "products", "coeff", "factors", "u", "v") restent
+# en anglais car ce sont des noms de schéma, neutres vis-à-vis de la langue.
+#
+# C'est le premier programme continu *non linéaire*. La diffusion thermique est
+# linéaire : le taux de chaque champ est une combinaison linéaire de sa valeur et
+# de la moyenne sur ses voisines. Gray-Scott ajoute le terme que la diffusion
+# seule ne peut exprimer -- une réaction autocatalytique U + 2V -> 3V, un
+# *produit* de champs (u*v*v). Deux composés sur un treillis torique :
+#
+#     du/dt = Du*(moyenne_voisines(u) - u) - u*v^2 + F*(1 - u)
+#     dv/dt = Dv*(moyenne_voisines(v) - v) + u*v^2 - (F + k)*v
+#
+# V consomme U de façon autocatalytique (la paire -u*v^2 / +u*v^2), U est
+# alimenté par un réservoir au taux F, V se vide au taux F+k. Avec Du > Dv c'est
+# le système formateur de motifs canonique : des taches qui croissent, se
+# divisent et se répliquent -- la démonstration de la morphogenèse.
+
+# La règle de taux de Gray-Scott. Les termes linéaires `self`/`neighbor_mean`
+# portent la diffusion et la décroissance ; `constant` porte l'alimentation ;
+# `products` porte la réaction non linéaire. Algèbre (laplacien par moyenne =
+# moyenne_voisines - self) :
+#   du/dt = Du*moyenne_voisines(u) - (Du + F)*u + F      - 1*u*v*v
+#   dv/dt = Dv*moyenne_voisines(v) - (Dv + F + k)*v      + 1*u*v*v
+déf regle_gray_scott():
+    soit feed = 0.04
+    soit kill = 0.06
+    soit du = 0.16
+    soit dv = 0.08
+    retour regle_taux({
+        "u": {
+            "self": {"u": -du - feed},
+            "neighbor_mean": {"u": du},
+            "constant": feed,
+            "products": [{"coeff": -1.0, "factors": ["u", "v", "v"]}]
+        },
+        "v": {
+            "self": {"v": -dv - feed - kill},
+            "neighbor_mean": {"v": dv},
+            "products": [{"coeff": 1.0, "factors": ["u", "v", "v"]}]
+        }
+    })
+
+# Indique si une coordonnée est dans le carré d'amorce central. Un test de
+# coordonnées déterministe (sans aléa) pour que Python et JS s'accordent au bit.
+déf seeded(x, y, cx, cy):
+    retour cx - 3 <= x et x <= cx + 3 et cy - 3 <= y et y <= cy + 3
+
+# Un treillis torique inondé de substrat U (u = 1, v = 0) et amorcé d'un petit
+# carré central où V est présent (u = 0.5, v = 0.25). À partir de cette seule
+# perturbation l'autocatalyse s'amorce et le motif s'étend.
+soit largeur = 32
+soit hauteur = 32
+soit cx = largeur // 2
+soit cy = hauteur // 2
+soit cellules = [{"locus": [x, y], "u": 0.5 si seeded(x, y, cx, cy) sinon 1.0, "v": 0.25 si seeded(x, y, cx, cy) sinon 0.0} pour x dans range(largeur) pour y dans range(hauteur)]
+soit etat = {"loci": cellules}
+
+# Assembler les quatre axes : un treillis torique avec le voisinage von-Neumann-4,
+# intégré par la règle de taux non linéaire de Gray-Scott sous un ordonnancement
+# continu (un pas d'Euler explicite par image).
+soit process = construire_noyau_processus(
+    etat,
+    topologie_treillis(largeur, hauteur, True, "von-neumann4"),
+    regle_gray_scott(),
+    ordonnancement_continu(1.0)
+)

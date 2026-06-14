@@ -83,8 +83,27 @@ multilingual wat-abi hello.multi --lang en
 multilingual wat-host-shim hello.multi --lang en
 multilingual wat-renderer-template hello.multi --lang en
 multilingual build-wasm-bundle hello.multi --out-dir build/wasm
+multilingual build-browser-module hello.multi --lang en --export describe,build_manifest --out build/browser_module.mjs
 multilingual build-ui-bundle examples/memory_game_en.multi --out-dir build/ui
 multilingual ui-preview examples/memory_game_en.multi --html
+```
+
+`build-browser-module` emits a browser-native ES module for JSON-compatible
+Multilingual programs. It is intended for rich dictionaries/lists/strings that
+do not fit the narrow scalar WASM ABI yet:
+
+```bash
+python -m multilingualprogramming build-browser-module app.multi \
+  --lang en \
+  --export describe,build_manifest \
+  --out public/generated/app/browser_module.mjs
+```
+
+The generated module can be loaded with a normal browser dynamic import:
+
+```js
+const app = await import("./generated/app/browser_module.mjs");
+const manifest = app.build_manifest({ name: "demo", items: [1, 2, 3] });
 ```
 
 ## Optional Extras
@@ -157,4 +176,3 @@ python -m examples.multilingual_codegen_example
 python -m examples.semantic_example
 python -m examples.executor_example
 ```
-

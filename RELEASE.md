@@ -1,5 +1,97 @@
 # Release Notes
 
+## v0.8.2 - 2026-06-14
+
+### WAT/WASM Host ABI Alignment
+
+This patch release tightens the host↔wasm list ABI so JavaScript hosts can pass numeric arrays
+into list-parameter exports and read list results through zero-copy `Float64Array` views without
+alignment hazards.
+
+#### WAT/WASM Runtime
+- Added `__ml_list_alloc(n)`, the host-side dual of the existing wasm→host list readers. Hosts can
+  allocate a list block, fill the item region through a `Float64Array` view, and pass the pointer
+  directly to a list-parameter export.
+- Made `$ml_alloc` round the bump cursor to an 8-byte boundary before every fresh allocation, so
+  string allocations can no longer leave following list headers/items misaligned.
+- Kept class-recycled blocks aligned because they originate from the aligned bump allocator path.
+
+#### Docs
+- Corrected the documented `math.log` accuracy to the measured ~2e-10 range.
+- Clarified that WAT `round(x)` follows Python / IEEE-754 round-half-to-even semantics via
+  `f64.nearest`, rather than JavaScript `Math.round` semantics.
+
+#### Packaging
+- Bumped package version to `0.8.2`.
+
+## v0.8.1 - 2026-06-13
+
+### Stochastic And Nonlinear Process Dynamics
+
+This patch release extends the process-dynamics slice introduced in v0.8.0 with deterministic
+stochastic rewrites and nonlinear continuous-rate rules, keeping the Python and browser runtimes
+byte-identical for the new examples.
+
+#### Process Calculus
+- Added `chance(p, salt)` rewrite predicates for deterministic stochastic rules. Probability rolls
+  are pure hashes of `(locus, step, salt)`, so stochastic trajectories are reproducible without
+  mutable PRNG state or seed plumbing.
+- Added `rate_rule` support for scalar `constant` terms and nonlinear `products` monomials, making
+  reaction-diffusion and other nonlinear continuous systems expressible as data.
+- Mirrored the new stochastic and nonlinear semantics in the browser JS process core, with tests
+  asserting Python/JS parity.
+
+#### Examples
+- Added English and French Eden-growth examples for stochastic accretion.
+- Added English and French Gray-Scott examples for nonlinear reaction-diffusion.
+
+#### Packaging
+- Bumped package version to `0.8.1`.
+
+## v0.8.0 - 2026-06-13
+
+### Polymodal Platform And WAT/WASM Backend Expansion
+
+This release promotes the post-0.7.0 backend and polymodal work into a packaged release. It is
+intended to unblock downstream users that depend on the latest WAT runtime helpers, list ABI
+helpers, numeric formatting builtins, unsigned i32 helpers, and SIMD-oriented Mandelbrot support.
+
+#### Polymodal v1 — Process Calculus
+- Added `semantic-core-v1` = ⟨State, Topology, Rule, Schedule⟩ with a single rewrite
+  meta-primitive and a modality-free stepper that is bit-identical across Python and JS. The
+  frozen `semantic-core-v0` migrates into a Tier-0 v1 core that round-trips its entities exactly.
+- Process programs are authored in `.multi` (a `process` variable compiled by the new
+  `multilingual process-build` CLI), with process-vocabulary builtin aliases in all 16 languages.
+- Added a free-function rule DSL (`when` / `neighbor_count` / `becomes` / `fallback` / `symbol` /
+  `clause` / `rewrite`) lowering to `rewrite_rule`, plus `rate_rule` for derivatives-as-data.
+- Added three topologies (grid, open-population, graph) and three schedules (synchronous,
+  asynchronous in-place, and continuous-time Euler integration via `continuous_schedule(dt)`),
+  completing the schedule axis.
+- Added a Tier 0–4 capability classifier (`tierOf` / `TIER_NAMES`), shown on every browser
+  dynamics page; tier is orthogonal to invertibility.
+- Added five example process programs in English and French — Game of Life, L-systems, a
+  cyclic-dominance ecosystem, a network SIR epidemic, and heat diffusion — each with a value-aware
+  projection and a browser runtime under `docs/browser/process-dynamics/`.
+
+#### Polymodal Computation
+- Added five peer projections of a shared semantic core: linear, spatial, volumetric, sonic, and
+  MIDI.
+- Added generated ontology sidecars and equivalence tests so Python and browser projections stay
+  aligned.
+- Added containment relations in the semantic core and propagated them through projection outputs.
+- Added sonic capture and round-trip reconstruction support, including browser microphone capture.
+
+#### WAT/WASM Backend
+- Improved `math.atan` and `math.atan2` precision with stronger range reduction.
+- Added i32 wraparound and unsigned helpers: `imul32`, `iadd32`, `shr_u32`, and `u32_to_f64`.
+- Fixed negative integer exponent handling in `pow_f64`.
+- Added multi-value returns, dynamic fixed/exponential/precision formatting helpers, list ABI host
+  helpers, richer string concatenation, and general real-exponent `pow_f64`.
+- Added Mandelbrot pair SIMD support for downstream renderers that batch two pixels at a time.
+
+#### Packaging
+- Bumped package version to `0.8.0`.
+
 ## v0.7.0 - 2026-05-23
 
 ### Core 1 Runtime, AI, And Backend Expansion

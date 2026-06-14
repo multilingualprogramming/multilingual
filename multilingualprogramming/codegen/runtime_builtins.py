@@ -62,6 +62,7 @@ from multilingualprogramming.runtime.memory_store import ml_memory
 from multilingualprogramming.codegen.process_core import (
     becomes,
     build_process_core,
+    chance,
     clause,
     fallback,
     generative_schedule,
@@ -696,6 +697,7 @@ class RuntimeBuiltins:
         # these also live in the shared builtins_aliases.json catalog.
         "when": when,
         "neighbor_count": neighbor_count,
+        "chance": chance,
         "becomes": becomes,
         "fallback": fallback,
         "symbol": symbol,

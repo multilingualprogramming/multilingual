@@ -41,6 +41,8 @@ from multilingualprogramming.codegen import (
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 EN_SOURCE = EXAMPLES / "diffusion.multi"
 FR_SOURCE = EXAMPLES / "diffusion.fr.multi"
+GRAY_SCOTT_EN = EXAMPLES / "gray_scott.multi"
+GRAY_SCOTT_FR = EXAMPLES / "gray_scott.fr.multi"
 
 FIELD = "u"
 
@@ -200,6 +202,110 @@ class ContinuousMultiTestSuite(unittest.TestCase):
     def test_english_and_french_lower_to_identical_core(self):
         en = _build(EN_SOURCE, language="en")
         fr = _build(FR_SOURCE, language="fr")
+        en.pop("source")
+        fr.pop("source")
+        self.assertEqual(en, fr)
+
+
+def _single_cell(rule, dt=1.0, **fields):
+    """A 1x1 isolated lattice carrying `fields`, integrated by `rule`."""
+    return process_core.build_process_core(
+        state={"loci": [{"locus": [0, 0], **fields}]},
+        topology=process_core.lattice_topology(1, 1),
+        rule=rule,
+        schedule=process_core.continuous_schedule(dt),
+    )
+
+
+class NonlinearRateTestSuite(unittest.TestCase):
+    """The rate rule reaches nonlinear dynamics: constant + product terms."""
+
+    def test_constant_source_term(self):
+        # du/dt = 0.5 (a pure source, no field dependence): u climbs linearly.
+        core = _single_cell(process_core.rate_rule({"u": {"constant": 0.5}}), u=0.0)
+        values = [process_core.field_cells(f, "u")[0][2] for f in process_core.run(core, 3)]
+        self.assertEqual(values, [0.0, 0.5, 1.0, 1.5])
+
+    def test_product_monomial_over_own_fields(self):
+        # du/dt = -1 * u * v * v ; at u=2, v=3 the rate is -18, so one unit step
+        # takes u from 2 to -16. Factors repeat to raise a power (v squared).
+        rule = process_core.rate_rule(
+            {"u": {"products": [{"coeff": -1.0, "factors": ["u", "v", "v"]}]}}
+        )
+        core = _single_cell(rule, u=2.0, v=3.0)
+        step1 = process_core.run(core, 1)[1]
+        self.assertEqual(process_core.field_cells(step1, "u")[0][2], -16.0)
+
+    def test_product_coeff_defaults_to_one(self):
+        # A monomial with no explicit coeff multiplies by 1.0: du/dt = u*u.
+        rule = process_core.rate_rule({"u": {"products": [{"factors": ["u", "u"]}]}})
+        core = _single_cell(rule, u=3.0)
+        step1 = process_core.run(core, 1)[1]
+        self.assertEqual(process_core.field_cells(step1, "u")[0][2], 3.0 + 9.0)
+
+    def test_terms_compose_in_fixed_order(self):
+        # self + constant + product all contribute: du/dt = 2u + 10 + (3 * u*u).
+        # At u=1: 2 + 10 + 3 = 15, so u -> 16.
+        rule = process_core.rate_rule(
+            {"u": {"self": {"u": 2.0}, "constant": 10.0,
+                   "products": [{"coeff": 3.0, "factors": ["u", "u"]}]}}
+        )
+        core = _single_cell(rule, u=1.0)
+        step1 = process_core.run(core, 1)[1]
+        self.assertEqual(process_core.field_cells(step1, "u")[0][2], 16.0)
+
+    def test_linear_rule_unchanged_by_the_extension(self):
+        # A rule with neither constant nor products must integrate exactly as a
+        # bare linear rate rule always has (pure decay du/dt = -0.5u).
+        core = _single_cell(process_core.rate_rule({"u": {"self": {"u": -0.5}}}), u=1.0)
+        values = [process_core.field_cells(f, "u")[0][2] for f in process_core.run(core, 3)]
+        self.assertEqual(values, [1.0, 0.5, 0.25, 0.125])
+
+
+class GrayScottTestSuite(unittest.TestCase):
+    """The nonlinear Gray-Scott program, authored end to end in .multi."""
+
+    def test_builds_a_nonlinear_continuous_core(self):
+        core = _build(GRAY_SCOTT_EN)
+        self.assertEqual(core["kind"], "semantic-core-v1")
+        self.assertEqual(core["schedule"]["kind"], process_core.SCHEDULE_CONTINUOUS)
+        self.assertEqual(core["rule"]["kind"], process_core.RULE_RATE)
+        rates = core["rule"]["rates"]
+        # The new nonlinear pieces are present as data.
+        self.assertIn("products", rates["u"])
+        self.assertIn("products", rates["v"])
+        self.assertEqual(rates["u"]["constant"], 0.04)
+        self.assertEqual(rates["u"]["products"][0]["factors"], ["u", "v", "v"])
+
+    def test_is_tier_one_continuous_dynamics(self):
+        # Nonlinearity does not change the axis: fixed-population continuous
+        # dynamics is Tier 1 whether the rate is linear or not.
+        self.assertEqual(caps.expressiveness_tier(_build(GRAY_SCOTT_EN)), 1)
+
+    def test_autocatalysis_ignites_and_stays_bounded(self):
+        # From a small central V seed the reaction takes hold (total V grows)
+        # while the field stays bounded -- the qualitative Gray-Scott signature.
+        trajectory = process_core.run(_build(GRAY_SCOTT_EN), 120)
+
+        def total_v(frame):
+            return sum(val for _, _, val in process_core.field_cells(frame, "v"))
+
+        self.assertGreater(total_v(trajectory[120]), total_v(trajectory[0]))
+        for frame in trajectory:
+            for _, _, val in process_core.field_cells(frame, "v"):
+                self.assertTrue(-0.01 <= val <= 1.5, f"v out of range: {val}")
+
+    def test_step_is_deterministic_and_pure(self):
+        core = _build(GRAY_SCOTT_EN)
+        before = json.dumps(core)
+        a = json.dumps([process_core.field_cells(f, "v") for f in process_core.run(core, 8)])
+        b = json.dumps([process_core.field_cells(f, "v") for f in process_core.run(core, 8)])
+        self.assertEqual(a, b)
+        self.assertEqual(json.dumps(core), before)
+
+    def test_english_and_french_lower_to_identical_core(self):
+        en = _build(GRAY_SCOTT_EN, language="en")
+        fr = _build(GRAY_SCOTT_FR, language="fr")
         en.pop("source")
         fr.pop("source")
         self.assertEqual(en, fr)

@@ -6,7 +6,151 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-06-14
+
 ### Added
+
+- **`__ml_list_alloc(n)` host→wasm list allocator.** The runtime exposed
+  `__ml_str_alloc` (host→wasm string bytes) and `__ml_list_count` /
+  `__ml_list_item` (read-only wasm→host), but there was **no way for a JS host to
+  pass a numeric array *into* a list-parameter function** — callers had to
+  repurpose `__ml_str_alloc` and hand-write the list layout. `__ml_list_alloc(n)`
+  is the missing dual: it reserves a header f64 (count) plus `n` f64 items, writes
+  the count, and returns the 8-aligned base as the list ABI pointer. The host
+  fills items through a zero-copy `Float64Array` view at `base+8` and passes the
+  pointer straight to a list-parameter export. Regression:
+  `test_ml_list_alloc_host_to_wasm_array`.
+
+### Changed
+
+- **Heap allocations are now 8-aligned.** `$ml_alloc` rounds the bump cursor up to
+  8 bytes before carving a fresh block, so every allocation (and therefore every
+  list header/items region) is 8-aligned. Previously a `__ml_str_alloc(len)` of a
+  non-`(8k−4)` length could leave the cursor odd, which forced JS hosts to read
+  returned lists with `DataView` instead of zero-copy `Float64Array` views. Now
+  both directions are zero-copy-safe. Class-recycled blocks stay aligned since they
+  originate from the aligned bump. Regression:
+  `test_ml_alloc_returns_8_aligned_after_str_alloc`.
+
+### Docs
+
+- **`math.log` accuracy corrected.** Earlier notes conservatively cited ~1e-6; the
+  implementation actually measures **~2e-10** max absolute/relative error across
+  `log(0.5)` → `log(1e10)` (verified via wasmtime vs CPython `math.log`).
+- **Rounding semantics clarified.** `round(x)` lowers to `f64.nearest`, i.e.
+  **round-half-to-even** (Python / IEEE-754 default) — `round(2.5) == 2`. This
+  differs from JavaScript's `Math.round`, which is round-half-up toward +∞
+  (`Math.round(2.5) === 3`). Code porting JS `Math.round` should use
+  `trunc(x + 0.5)` (bit-identical to `Math.round` for finite values), **not**
+  `round`. No new builtin is added: a second JS-flavoured round would be
+  ambiguous next to the Python-semantics `round`.
+
+## [0.8.1] - 2026-06-13
+
+### Added
+
+#### Stochastic rewriting — the `chance` clause predicate
+- **A rewrite clause can now fire probabilistically, via a new `chance(p, salt)`
+  predicate** alongside `when` and `neighbor_count`. This adds the one ingredient
+  the deterministic rewrite/rate rules lacked — randomness — so stochastic
+  programs (Eden growth, percolation, noisy cellular automata) are expressible
+  for the first time. A clause carrying `chance(p)` matches only a fraction `p`
+  of the time.
+- **The randomness is deterministic and byte-identical across runtimes.** There
+  is no PRNG state and no seed plumbing: a roll is a pure hash of
+  `(locus, step, salt)` (`_hash01`, a MurmurHash3-style 32-bit mix built from
+  exact `& 0xFFFFFFFF` / `Math.imul` arithmetic so CPython and the JS port agree
+  to the bit). A stochastic trajectory is therefore a reproducible function of
+  the manifest, and two clauses decorrelate via different `salt`. The step index
+  is threaded through `step`/`run` to the predicate so randomness varies over
+  time; a deterministic rule ignores it and steps exactly as before.
+- **Mirrored in the JS port** (`docs/browser/process-dynamics/process_core.js`):
+  `hash01` + the `chance` branch in `clauseMatches`, with `stepIndex` threaded
+  through every rewrite stepper. `tests/process_core_js_test.py` grows an Eden
+  cluster under Node and asserts it matches Python cell-for-cell across the run.
+- **Eden-growth example, authored in `.multi` (en + fr).**
+  `examples/eden_growth.{multi,fr.multi}` grow a stochastic accretion cluster
+  with a rough fractal boundary from a single seed — the first *stochastic*
+  program on any axis. New `tests/process_stochastic_test.py` covers the hash
+  (range, purity, uniformity, per-input sensitivity), the predicate's gating
+  (`p=0` never fires, `p=1` always, `~p` on average, salt decorrelation), and
+  the example (monotone growth, determinism, Tier 2, en≡fr).
+
+#### Nonlinear rate rules — reaction-diffusion on the continuous axis
+- **`rate_rule` gains a `constant` source/sink and `products` (nonlinear
+  monomials) term.** A field's time-derivative was previously a *linear*
+  combination of the locus's own fields (`self`) and the mean over its
+  neighbours (`neighbor_mean`) — enough for diffusion and decay, but not for
+  any reaction. A rate now sums four optional contributions in a fixed order:
+  `self`, `neighbor_mean`, a scalar `constant`, and `products` — a list of
+  monomials `{"coeff": c, "factors": [f, ...]}` each contributing
+  `c · own[f0] · own[f1] · …` (factors repeat to raise a power). This reaches
+  the nonlinear continuous systems the linear slice could not express:
+  Gray-Scott, Lotka-Volterra predator-prey, FitzHugh-Nagumo. The terms are
+  pure data — the engine still names no system. A rule that omits `constant`
+  and `products` integrates **byte-for-byte** as before (they are appended only
+  when present, so no existing manifest drifts).
+- **Bit-identical across runtimes.** The new terms are mirrored in the JS port
+  (`docs/browser/process-dynamics/process_core.js`), folding the monomial in
+  the same factor order so the Python and JS continuous steppers stay
+  byte-identical. `tests/process_core_js_test.py` runs Gray-Scott under Node and
+  asserts both reagent fields agree float-for-float across the trajectory.
+- **Gray-Scott example, authored in `.multi` (en + fr).**
+  `examples/gray_scott.{multi,fr.multi}` express the canonical pattern-forming
+  reaction `U + 2V -> 3V` end-to-end through the language — the first
+  *nonlinear* program on the continuous axis. Both lower to a byte-identical
+  core; new engine tests in `tests/process_continuous_test.py` cover the
+  constant term, product monomials, term composition order, and the
+  autocatalysis igniting while the field stays bounded (still Tier 1).
+
+## [0.8.0] - 2026-06-13
+
+### Added
+
+#### Polymodal v1 — process calculus (dynamics over the semantic core)
+- **`semantic-core-v1` = ⟨State, Topology, Rule, Schedule⟩ with one rewrite
+  meta-primitive.** Where v0 described a static scene, v1 describes how a
+  scene *evolves*. The stepper is modality-free and has bit-identical Python
+  and JS implementations. `semantic-core-v0` remains frozen; a v0→v1
+  migration projects any v0 core into a Tier-0 v1 core that round-trips the
+  original entities exactly (`process_migration.py`,
+  `process_static_projection.py`).
+- **Process programs are authored in `.multi`, not Python.** A program
+  defines a `process` variable and is compiled with the new
+  `multilingual process-build` CLI — the v1 layer is a first-class citizen
+  of the multilingual language rather than a set of host scripts. Builtin
+  aliases for the process vocabulary ship in all 16 languages.
+- **Rule surface syntax is a free-function combinator DSL.**
+  `when` / `neighbor_count` / `becomes` / `fallback` / `symbol` / `clause` /
+  `rewrite` lower to `rewrite_rule` (`RULE_REWRITE`). A second rule kind,
+  `rate_rule` (`RULE_RATE`), carries derivatives-as-data for continuous
+  dynamics.
+- **Three topologies and three schedules.** Topologies: implicit grid
+  (spatial), open-population, and `graph_topology` (arbitrary node/edge
+  loci via a generalized `_locus_key`). Schedules: synchronous,
+  `asynchronous_schedule` (sequential in-place, identity-on-no-match), and
+  `continuous_schedule(dt)` which integrates `rate_rule`s with an explicit
+  Euler step (`next = field + dt·rate`). The continuous path uses a naive
+  left-fold sum so CPython and JS stay bit-identical (the compensated-`sum`
+  path diverged). This completes the schedule axis.
+- **Tier 0–4 capability classifier.** `tierOf` / `TIER_NAMES` (Python and JS)
+  grade a process by expressive power. Tier is orthogonal to invertibility:
+  the SIR `network_epidemic` core classifies as Tier 4 yet
+  `process_graph_projection.py` round-trips every node exactly. The tier
+  line is shown on all five browser dynamics pages.
+- **Example process programs (en + fr), each end-to-end through the v1
+  path with a value-aware projection and a browser page.** Conway's Game of
+  Life (`game_of_life.multi`), Lindenmayer L-systems
+  (`lindenmayer.multi`, generative sequence rewriting), a cyclic-dominance
+  ecosystem (`ecosystem.multi`, heterogeneous state + async schedule), a
+  network SIR epidemic (`network_epidemic.multi`, graph topology), and heat
+  diffusion (`diffusion.multi`, continuous-time, mass-conserved). Browser
+  runtimes: `docs/browser/process-dynamics/` Life, L-system, ecosystem,
+  graph, and diffusion pages.
+- **A checked-in golden `semantic-core` fixture** plus value-aware field,
+  sequence, and graph projections (`process_field_projection.py`,
+  `process_sequence_projection.py`, `process_graph_projection.py`) and
+  per-projection capability contracts (`process_capabilities.py`).
 
 #### Polymodal computation — five peer modalities, relations, capture
 - **Five peer modality projections of the same semantic core.** The
@@ -101,7 +245,7 @@ The format is inspired by Keep a Changelog, and this project follows SemVer.
   non-integer exponent outside `{0, 0.5, 1, -0.5}`. Now falls back to
   `exp(b · ln(a))` for `base > 0` ; negative base with non-integer exp still
   returns NaN (no real value). Precision is bounded by `math.exp`/`math.log`
-  (~1e-6 with the 2026-05-22 log fix and the new exp range reduction below).
+  (`math.log` measures ~2e-10; see its entry below).
   Regression: `test_pow_f64_general_real_exponents`.
 
 - **`math.exp` range reduction.** Previously a 10-term Taylor applied
@@ -172,8 +316,9 @@ typed-IR pass :
   `log(10)` returned ~2.255 instead of 2.302585 (~2% error for arguments far from 1). Now uses
   IEEE-754 bit manipulation (`i64.reinterpret_f64`) to split `x = m·2^e`, reduces `m` further to
   `[sqrt(0.5), sqrt(2))`, and computes `log(m) + e·log(2)`. The atanh argument stays in
-  `[-0.172, 0.172]` so the 5-term series converges to ~2.2e-8. Verified to ~1e-6 accuracy across
-  `log(0.5)` → `log(1e10)`.
+  `[-0.172, 0.172]` so the 5-term series converges to ~2.2e-8. Verified to **~2e-10** max
+  absolute/relative error across `log(0.5)` → `log(1e10)` (measured via wasmtime against
+  CPython `math.log`; earlier notes conservatively cited ~1e-6).
 
 #### WAT/WASM backend — list-return propagation
 - **User functions returning lists are now tracked at the call site.** A function whose body

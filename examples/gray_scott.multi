@@ -1,0 +1,73 @@
+# Gray-Scott reaction-diffusion as a semantic-core-v1 polymodal program,
+# authored entirely in the Multilingual language -- no Python. Build with:
+#
+#     python -m multilingualprogramming process-build examples/gray_scott.multi
+#
+# This is the first *nonlinear* continuous program. Heat diffusion (the first
+# example on the continuous axis) is linear: each field's rate is a linear
+# combination of its own value and the mean over its neighbours. Gray-Scott adds
+# the term diffusion alone cannot express -- an autocatalytic reaction U + 2V ->
+# 3V, a *product* of fields (u*v*v). Two chemicals on a toroidal lattice:
+#
+#     du/dt = Du*(mean_nbr(u) - u) - u*v^2 + F*(1 - u)
+#     dv/dt = Dv*(mean_nbr(v) - v) + u*v^2 - (F + k)*v
+#
+# V consumes U autocatalytically (the -u*v^2 / +u*v^2 pair), U is fed from a
+# reservoir at rate F, V drains at rate F+k. With Du > Dv this is the canonical
+# pattern-forming system: spots that grow, split and replicate (mitosis-like),
+# the textbook demonstration of morphogenesis from a uniform field.
+#
+# The engine in `process_core` knows no chemistry: the rate is data. The new
+# pieces beyond diffusion are the `constant` source/sink (the feed F) and the
+# `products` monomials (the reaction u*v^2). The manifest keys ("self",
+# "neighbor_mean", "constant", "products", "coeff", "factors", "u", "v") stay
+# English -- they are schema names, language-neutral data.
+
+# The Gray-Scott rate rule. The linear `self`/`neighbor_mean` terms carry
+# diffusion and decay; `constant` carries the feed; `products` carries the
+# nonlinear reaction. Algebra (mean-stencil Laplacian = mean_nbr - self):
+#   du/dt = Du*mean_nbr(u) - (Du + F)*u + F      - 1*u*v*v
+#   dv/dt = Dv*mean_nbr(v) - (Dv + F + k)*v      + 1*u*v*v
+def gray_scott_rule():
+    let feed = 0.04
+    let kill = 0.06
+    let du = 0.16
+    let dv = 0.08
+    return rate_rule({
+        "u": {
+            "self": {"u": -du - feed},
+            "neighbor_mean": {"u": du},
+            "constant": feed,
+            "products": [{"coeff": -1.0, "factors": ["u", "v", "v"]}]
+        },
+        "v": {
+            "self": {"v": -dv - feed - kill},
+            "neighbor_mean": {"v": dv},
+            "products": [{"coeff": 1.0, "factors": ["u", "v", "v"]}]
+        }
+    })
+
+# Whether a coordinate is inside the central seed square. A deterministic
+# coordinate test (no RNG) so Python and JS agree to the bit.
+def seeded(x, y, cx, cy):
+    return cx - 3 <= x and x <= cx + 3 and cy - 3 <= y and y <= cy + 3
+
+# A toroidal lattice flooded with substrate U (u = 1, v = 0) and seeded with a
+# small central square where V is present (u = 0.5, v = 0.25). From that single
+# perturbation the autocatalysis ignites and the pattern spreads outward.
+let width = 32
+let height = 32
+let cx = width // 2
+let cy = height // 2
+let loci = [{"locus": [x, y], "u": 0.5 if seeded(x, y, cx, cy) else 1.0, "v": 0.25 if seeded(x, y, cx, cy) else 0.0} for x in range(width) for y in range(height)]
+let state = {"loci": loci}
+
+# Assemble the four modality-free axes: a toroidal lattice with the von-Neumann-4
+# stencil, integrated by the nonlinear Gray-Scott rate rule under a continuous-dt
+# schedule (one explicit-Euler step per frame).
+let process = build_process_core(
+    state,
+    lattice_topology(width, height, True, "von-neumann4"),
+    gray_scott_rule(),
+    continuous_schedule(1.0)
+)

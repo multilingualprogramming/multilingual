@@ -61,6 +61,16 @@ DIFFUSION_RUNTIME_JS = PROCESS_DIR / "diffusion_runtime.js"
 DIFFUSION_MANIFEST = PROCESS_DIR / "program.diffusion.v1.json"
 DIFFUSION_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.diffusion.v1.json"
 DIFFUSION_SOURCE = ROOT / "examples" / "diffusion.multi"
+GRAY_SCOTT_SOURCE = ROOT / "examples" / "gray_scott.multi"
+EDEN_SOURCE = ROOT / "examples" / "eden_growth.multi"
+GRAY_SCOTT_HTML = PROCESS_DIR / "gray_scott.html"
+GRAY_SCOTT_RUNTIME_JS = PROCESS_DIR / "gray_scott_runtime.js"
+GRAY_SCOTT_DEMO_MANIFEST = PROCESS_DIR / "program.gray_scott.v1.json"
+GRAY_SCOTT_DEMO_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.gray_scott.v1.json"
+EDEN_HTML = PROCESS_DIR / "eden.html"
+EDEN_RUNTIME_JS = PROCESS_DIR / "eden_runtime.js"
+EDEN_DEMO_MANIFEST = PROCESS_DIR / "program.eden.v1.json"
+EDEN_DEMO_MANIFEST_SOURCE = "docs/browser/process-dynamics/program.eden.v1.json"
 
 NODE = shutil.which("node")
 STEPS = 16
@@ -116,6 +126,21 @@ process.stdout.write(JSON.stringify(trajectory.map((f) => fieldCells(f, 'u'))));
 """
 
 
+# The nonlinear continuous path reads both reagent fields (u and v) out of every
+# frame. Gray-Scott's rate has a product term (u*v*v) and a constant feed, so
+# this is the sharpest float check of all: the reaction couples the two fields
+# every step, and any divergence in how the ports fold the monomial compounds.
+_GRAY_SCOTT_DRIVER = """\
+import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+const [, , corePath, manifestPath, steps] = process.argv;
+const { run, fieldCells } = await import(pathToFileURL(corePath).href);
+const core = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+const trajectory = run(core, Number(steps));
+process.stdout.write(JSON.stringify(trajectory.map((f) => [fieldCells(f, 'u'), fieldCells(f, 'v')])));
+"""
+
+
 # The graph path reads each node's value out of every frame (via the shared
 # nodeCells) -- otherwise identical (the one shared `run` drives it too).
 _NODE_DRIVER = """\
@@ -160,6 +185,10 @@ def _js_nodes(manifest_path: Path, steps: int):
 
 def _js_diffusion(manifest_path: Path, steps: int):
     return _run_driver(_DIFFUSION_DRIVER, manifest_path, steps)
+
+
+def _js_gray_scott(manifest_path: Path, steps: int):
+    return _run_driver(_GRAY_SCOTT_DRIVER, manifest_path, steps)
 
 
 def _py_trajectory(core: dict, steps: int) -> list[list[list[int]]]:
@@ -275,6 +304,39 @@ class ManifestStabilityTestSuite(unittest.TestCase):
         # Continuous per-cell value: loci carry a float field, not a boolean.
         self.assertIn("u", on_disk["state"]["loci"][0])
 
+    def test_checked_in_gray_scott_manifest_matches_multi_build(self):
+        regenerated = process_program.execute_process(
+            GRAY_SCOTT_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=GRAY_SCOTT_DEMO_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(GRAY_SCOTT_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_gray_scott_manifest_is_nonlinear_continuous(self):
+        on_disk = json.loads(GRAY_SCOTT_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["schedule"]["kind"], "continuous-dt")
+        self.assertEqual(on_disk["rule"]["kind"], "rate")
+        # The nonlinear reaction term is present as data.
+        self.assertIn("products", on_disk["rule"]["rates"]["u"])
+        self.assertIn("v", on_disk["state"]["loci"][0])
+
+    def test_checked_in_eden_manifest_matches_multi_build(self):
+        regenerated = process_program.execute_process(
+            EDEN_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=EDEN_DEMO_MANIFEST_SOURCE,
+        )
+        on_disk = json.loads(EDEN_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, regenerated)
+
+    def test_eden_manifest_is_stochastic_synchronous(self):
+        on_disk = json.loads(EDEN_DEMO_MANIFEST.read_text(encoding="utf-8"))
+        self.assertEqual(on_disk["topology"]["kind"], "lattice")
+        self.assertEqual(on_disk["schedule"]["kind"], "synchronous")
+        # The stochastic predicate is present as data on the growth clause.
+        self.assertIn("chance", on_disk["rule"]["clauses"][0]["match"])
+
 
 class JsStepperSourceTestSuite(unittest.TestCase):
     """Structural guards mirroring the repo's other JS peers."""
@@ -320,6 +382,24 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         # rather than rolling its own integrator.
         source = CORE_JS.read_text(encoding="utf-8")
         for symbol in ("SCHEDULE_CONTINUOUS", "RULE_RATE"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
+    def test_core_js_ports_the_stochastic_predicate(self):
+        # The stochastic `chance` predicate and its deterministic hash must exist
+        # in the browser engine too, so stochastic programs (Eden growth,
+        # percolation, noisy CA) roll identically in JS and Python rather than a
+        # runtime inventing its own RNG.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("function hash01", "match.chance", "Math.imul"):
+            self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
+
+    def test_core_js_ports_the_nonlinear_rate_terms(self):
+        # The nonlinear rate shape (a constant source/sink and product
+        # monomials) must exist in the browser engine too, so reaction-diffusion
+        # systems like Gray-Scott integrate with the one shared stepper rather
+        # than a runtime rolling its own reaction term.
+        source = CORE_JS.read_text(encoding="utf-8")
+        for symbol in ("terms.constant", "terms.products", "monomial.factors"):
             self.assertIn(symbol, source, f"process_core.js missing {symbol!r}")
 
     def test_core_js_defines_no_specific_system(self):
@@ -417,6 +497,32 @@ class JsStepperSourceTestSuite(unittest.TestCase):
         html = DIFFUSION_HTML.read_text(encoding="utf-8")
         self.assertIn('type="module"', html)
         self.assertIn("./diffusion_runtime.js", html)
+
+    def test_gray_scott_runtime_uses_shared_stepper(self):
+        source = GRAY_SCOTT_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("SCHEDULE_CONTINUOUS", source)
+        self.assertIn("./program.gray_scott.v1.json", source)
+        self.assertIn("tierOf", source)
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_gray_scott_page_loads_runtime_as_module(self):
+        html = GRAY_SCOTT_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./gray_scott_runtime.js", html)
+
+    def test_eden_runtime_uses_shared_stepper(self):
+        source = EDEN_RUNTIME_JS.read_text(encoding="utf-8")
+        self.assertIn('from "./process_core.js"', source)
+        self.assertIn("SCHEDULE_SYNCHRONOUS", source)
+        self.assertIn("./program.eden.v1.json", source)
+        self.assertIn("tierOf", source)
+        self.assertNotIn("function step", source)  # no private stepper
+
+    def test_eden_page_loads_runtime_as_module(self):
+        html = EDEN_HTML.read_text(encoding="utf-8")
+        self.assertIn('type="module"', html)
+        self.assertIn("./eden_runtime.js", html)
 
 
 @unittest.skipUnless(NODE, "node is not installed")
@@ -546,6 +652,56 @@ class JsPythonAgreementTestSuite(unittest.TestCase):
         self.assertEqual(js, py)
         # And the field genuinely diffused (the continuous step is not a no-op).
         self.assertNotEqual(js[0], js[-1])
+
+    def test_nonlinear_gray_scott_trajectory_agrees(self):
+        # The nonlinear continuous axis: a Gray-Scott reaction-diffusion field
+        # authored in .multi must integrate identically in JS and Python, float
+        # for float, across both coupled reagent fields. The rate carries a
+        # product term (u*v*v) and a constant feed, so this proves the ports
+        # fold the new nonlinear monomial in the same order to the same bits --
+        # the sharpest cross-runtime float check, the reaction firing each step.
+        core = process_program.execute_process(
+            GRAY_SCOTT_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(GRAY_SCOTT_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "gray_scott.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_gray_scott(path, STEPS)
+        py = [
+            [
+                [list(cell) for cell in process_core.field_cells(frame, "u")],
+                [list(cell) for cell in process_core.field_cells(frame, "v")],
+            ]
+            for frame in process_core.run(core, STEPS)
+        ]
+        self.assertEqual(len(js), STEPS + 1)
+        self.assertEqual(js, py)
+        # And the reaction genuinely fired (v changed where it was seeded).
+        self.assertNotEqual(js[0][1], js[-1][1])
+
+    def test_stochastic_eden_trajectory_agrees(self):
+        # The stochastic axis: a probabilistic Eden-growth cluster authored in
+        # .multi must grow identically in JS and Python, cell for cell, across
+        # the whole trajectory. The growth is gated by the `chance` predicate, so
+        # this proves the two runtimes compute the same deterministic hash and
+        # roll the same cells -- the sharpest test of the new stochastic path
+        # (one diverging bit in the 32-bit hash would fork the cluster).
+        core = process_program.execute_process(
+            EDEN_SOURCE.read_text(encoding="utf-8"),
+            language="en",
+            source_path=str(EDEN_SOURCE),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "eden.v1.json"
+            path.write_text(json.dumps(core), encoding="utf-8")
+            js = _js_trajectory(path, STEPS)
+        py = _py_trajectory(core, STEPS)
+        self.assertEqual(len(js), STEPS + 1)
+        self.assertEqual(js, py)
+        # And the cluster genuinely grew (the stochastic step is not a no-op).
+        self.assertGreater(len(js[-1]), len(js[0]))
 
 
 if __name__ == "__main__":
